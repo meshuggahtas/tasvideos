@@ -3,8 +3,8 @@ ENABLE_LINTERS:
   - SQL_SQLFLUFF      # SQL
   - SQL_SQL_LINT      # SQL
   # GitHub Actions and YAML
-  - ACTION_ACTIONLINT
-  - YAML_YAMLLINT
+#  - ACTION_ACTIONLINT
+#  - YAML_YAMLLINT
   # Clones and Duplicates
   - COPYPASTE_JSCPS
   # Shell/Bash
