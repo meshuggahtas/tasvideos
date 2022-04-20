@@ -32,27 +32,32 @@ public class TwitterDistributorV2 : IPostDistributor
 		_logger = logger;
 
 		_tokenStorageFileName = Path.Combine(Path.GetTempPath(), "twitter.json");
-
-		// Try to get Twitter token information from the local file.
-		if (File.Exists(_tokenStorageFileName))
-		{
-			RetrieveTokenInformation();
-		}
-
-		// If the local file doesn't exist, or if there was no data to parse, use the OneTimeRefreshToken and hope.
-		if (string.IsNullOrWhiteSpace(_twitterTokenDetails.RefreshToken))
-		{
-			_twitterTokenDetails.RefreshToken = _settings.OneTimeRefreshToken;
-		}
 	}
 
 	public IEnumerable<PostType> Types => new[] { PostType.Announcement };
 
-	public bool IsEnabled() => _settings.IsEnabled() && !string.IsNullOrWhiteSpace(_twitterTokenDetails.AccessToken);
-
-	public void RetrieveTokenInformation()
+	public async Task<bool> IsEnabled()
 	{
-		string tokenText = File.ReadAllText(_tokenStorageFileName);
+		if (!_settings.IsEnabled())
+		{
+			return false;
+		}
+
+		if (string.IsNullOrWhiteSpace(_twitterTokenDetails.AccessToken))
+		{
+			// Try to get Twitter token information from the local file.
+			if (File.Exists(_tokenStorageFileName))
+			{
+				await RetrieveTokenInformation();
+			}
+		}
+
+		return !string.IsNullOrWhiteSpace(_twitterTokenDetails.AccessToken);
+	}
+
+	public async Task RetrieveTokenInformation()
+	{
+		string tokenText = await File.ReadAllTextAsync(_tokenStorageFileName);
 
 		if (!string.IsNullOrWhiteSpace(tokenText))
 		{
@@ -73,15 +78,12 @@ public class TwitterDistributorV2 : IPostDistributor
 	{
 		await RefreshTokens();
 
-		if (!IsEnabled())
+		if (!await IsEnabled())
 		{
 			return;
 		}
 
-		_twitterClient.DefaultRequestHeaders.Authorization =
-			new System.Net.Http.Headers.AuthenticationHeaderValue(
-				"Bearer",
-				_twitterTokenDetails.AccessToken);
+		_twitterClient.SetBearerToken(_twitterTokenDetails.AccessToken);
 
 		var tweetData = new
 		{
@@ -96,7 +98,7 @@ public class TwitterDistributorV2 : IPostDistributor
 		}
 	}
 
-	public async Task RefreshTokens()
+	private async Task RefreshTokens()
 	{
 		if (string.IsNullOrWhiteSpace(_twitterTokenDetails.AccessToken) ||
 			DateTime.UtcNow > _twitterTokenDetails.AccessTokenExpiry)
@@ -105,7 +107,7 @@ public class TwitterDistributorV2 : IPostDistributor
 		}
 	}
 
-	public async Task RequestTokensFromTwitter(bool useOneTimeRefreshToken = false)
+	private async Task RequestTokensFromTwitter(bool useOneTimeRefreshToken = false)
 	{
 		bool retVal = false;
 
@@ -120,7 +122,7 @@ public class TwitterDistributorV2 : IPostDistributor
 		}
 	}
 
-	public async Task<bool> RequestTokensFromTwitter (string refreshToken)
+	private async Task<bool> RequestTokensFromTwitter (string refreshToken)
 	{
 		bool retVal = false;
 
@@ -138,8 +140,7 @@ public class TwitterDistributorV2 : IPostDistributor
 		};
 
 		string basicAuthHeader = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_settings.ClientId}:{_settings.ClientSecret}"));
-
-		_accessTokenClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", basicAuthHeader);
+		_accessTokenClient.SetBasicAuth(basicAuthHeader);
 
 		var response = await _accessTokenClient.PostAsync("", new FormUrlEncodedContent(formData));
 
