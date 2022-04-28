@@ -21,7 +21,7 @@ public static class ServiceCollectionExtensions
 
 		services
 			.AddCacheService(settings.CacheSettings)
-			.AddExternalMediaPublishing(isDevelopment, settings);
+			.AddExternalMediaPublishing(isDevelopment);
 
 		// HTTP Client
 		services
@@ -71,6 +71,7 @@ public static class ServiceCollectionExtensions
 		services.AddScoped<IClassService, ClassService>();
 		services.AddScoped<IMovieFormatDeprecator, MovieFormatDeprecator>();
 		services.AddScoped<IForumService, ForumService>();
+		services.AddScoped<IGameSystemService, GameSystemService>();
 
 		services.AddScoped<IJwtAuthenticator, JwtAuthenticator>();
 
@@ -120,7 +121,7 @@ public static class ServiceCollectionExtensions
 		return services;
 	}
 
-	private static IServiceCollection AddExternalMediaPublishing(this IServiceCollection services, bool isDevelopment, AppSettings settings)
+	private static IServiceCollection AddExternalMediaPublishing(this IServiceCollection services, bool isDevelopment)
 	{
 		if (isDevelopment)
 		{
