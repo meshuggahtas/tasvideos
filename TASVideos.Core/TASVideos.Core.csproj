@@ -8,7 +8,7 @@
 		<PackageReference Include="MailKit" Version="3.0.0" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.1" />
 		<PackageReference Include="StackExchange.Redis" Version="2.2.50" />
-		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.15.0" />
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.34.0" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\TASVideos.Common\TASVideos.Common.csproj" />
