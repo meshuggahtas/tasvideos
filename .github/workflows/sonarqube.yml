@@ -1,4 +1,4 @@
-            - name: SonarQube Scanner Action
+  - name: SonarQube Scanner Action
   # You may pin to the exact commit or the version.
   # uses: philips-software/sonar-scanner-action@ba918f14038c9814067500eb960c9eb66698bf85
   uses: philips-software/sonar-scanner-action@v1.5.1
