@@ -1,0 +1,32 @@
+            - name: SonarQube Scanner Action
+  # You may pin to the exact commit or the version.
+  # uses: philips-software/sonar-scanner-action@ba918f14038c9814067500eb960c9eb66698bf85
+  uses: philips-software/sonar-scanner-action@v1.5.1
+  with:
+    # Sonar Project name
+    projectName: 
+    # Sonar Project Key
+    projectKey: 
+    # Project Base Directory
+    baseDir: # optional
+    # Sonar Login Token
+    token: 
+    # Sonar Server url
+    url: 
+    # SCM provider
+    scmProvider: # optional, default is git
+    # Encoding of the source files
+    sourceEncoding: # optional, default is UTF-8
+    # Decorate a pull request. PR, branch and base are extracted from the pull request event
+    enablePullRequestDecoration: # optional
+    # Generate sonar configuration, scanner will not be invoked. Sonar parameters are available as output
+    onlyConfig: # optional
+    # Flags if your SonarQube instance is Community edition. Skips setting PRs/branches and defaults to master
+    isCommunityEdition: # optional
+    # Run the quality gate associated to this repo in SonarQube
+    runQualityGate: # optional
+    # Number of seconds until build is failed for not passing quailty gate. Defaulted to 300 by SonarQube
+    qualityGateTimeout: # optional
+    # Organization in case of using sonarcloud
+    organization: # optional
+          
