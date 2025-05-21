@@ -19,12 +19,61 @@ namespace TASVideos.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "6.0.1")
+                .HasAnnotation("ProductVersion", "8.0.6")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
-            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("TASVideos.Data.AutoHistory.AutoHistoryEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Changed")
+                        .HasColumnType("citext")
+                        .HasColumnName("changed");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RowId")
+                        .IsRequired()
+                        .HasColumnType("citext")
+                        .HasColumnName("row_id");
+
+                    b.Property<string>("TableName")
+                        .IsRequired()
+                        .HasColumnType("citext")
+                        .HasColumnName("table_name");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_auto_history");
+
+                    b.HasIndex("RowId")
+                        .HasDatabaseName("ix_auto_history_row_id");
+
+                    b.HasIndex("TableName")
+                        .HasDatabaseName("ix_auto_history_table_name");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_auto_history_user_id");
+
+                    b.ToTable("auto_history", (string)null);
+                });
 
             modelBuilder.Entity("TASVideos.Data.Entity.Awards.Award", b =>
                 {
@@ -37,13 +86,11 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasMaxLength(50)
                         .HasColumnType("citext")
                         .HasColumnName("description");
 
                     b.Property<string>("ShortName")
                         .IsRequired()
-                        .HasMaxLength(25)
                         .HasColumnType("citext")
                         .HasColumnName("short_name");
 
@@ -53,6 +100,10 @@ namespace TASVideos.Data.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_awards");
+
+                    b.HasIndex("ShortName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_awards_short_name");
 
                     b.ToTable("awards", (string)null);
                 });
@@ -136,10 +187,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<bool>("Deprecated")
                         .HasColumnType("boolean")
                         .HasColumnName("deprecated");
@@ -152,10 +199,6 @@ namespace TASVideos.Data.Migrations
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
 
                     b.HasKey("Id")
                         .HasName("pk_deprecated_movie_formats");
@@ -170,39 +213,22 @@ namespace TASVideos.Data.Migrations
             modelBuilder.Entity("TASVideos.Data.Entity.Flag", b =>
                 {
                     b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
-                        .HasColumnName("id")
-                        .HasAnnotation("DatabaseGenerated", DatabaseGeneratedOption.None);
+                        .HasColumnName("id");
 
-                    b.Property<DateTime>("CreateTimestamp")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("create_timestamp");
-
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("IconPath")
-                        .HasMaxLength(48)
                         .HasColumnType("citext")
                         .HasColumnName("icon_path");
 
-                    b.Property<DateTime>("LastUpdateTimestamp")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
                     b.Property<string>("LinkPath")
-                        .HasMaxLength(48)
                         .HasColumnType("citext")
                         .HasColumnName("link_path");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(32)
                         .HasColumnType("citext")
                         .HasColumnName("name");
 
@@ -212,9 +238,12 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasMaxLength(24)
                         .HasColumnType("citext")
                         .HasColumnName("token");
+
+                    b.Property<double>("Weight")
+                        .HasColumnType("double precision")
+                        .HasColumnName("weight");
 
                     b.HasKey("Id")
                         .HasName("pk_flags");
@@ -235,6 +264,10 @@ namespace TASVideos.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("CanCreateTopics")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_create_topics");
+
                     b.Property<int>("CategoryId")
                         .HasColumnType("integer")
                         .HasColumnName("category_id");
@@ -243,12 +276,7 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<string>("Description")
-                        .HasMaxLength(1000)
                         .HasColumnType("citext")
                         .HasColumnName("description");
 
@@ -256,13 +284,8 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
 
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(50)
                         .HasColumnType("citext")
                         .HasColumnName("name");
 
@@ -276,7 +299,6 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("ShortName")
                         .IsRequired()
-                        .HasMaxLength(10)
                         .HasColumnType("citext")
                         .HasColumnName("short_name");
 
@@ -302,12 +324,7 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<string>("Description")
-                        .HasMaxLength(1000)
                         .HasColumnType("citext")
                         .HasColumnName("description");
 
@@ -315,17 +332,12 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
 
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
                     b.Property<int>("Ordinal")
                         .HasColumnType("integer")
                         .HasColumnName("ordinal");
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(30)
                         .HasColumnType("citext")
                         .HasColumnName("title");
 
@@ -352,17 +364,9 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
 
                     b.Property<bool>("MultiSelect")
                         .HasColumnType("boolean")
@@ -370,7 +374,6 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Question")
                         .IsRequired()
-                        .HasMaxLength(500)
                         .HasColumnType("citext")
                         .HasColumnName("question");
 
@@ -397,17 +400,9 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
 
                     b.Property<int>("Ordinal")
                         .HasColumnType("integer")
@@ -419,7 +414,6 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Text")
                         .IsRequired()
-                        .HasMaxLength(250)
                         .HasColumnType("citext")
                         .HasColumnName("text");
 
@@ -446,7 +440,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnName("create_timestamp");
 
                     b.Property<string>("IpAddress")
-                        .HasMaxLength(50)
                         .HasColumnType("citext")
                         .HasColumnName("ip_address");
 
@@ -483,10 +476,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<bool>("EnableBbCode")
                         .HasColumnType("boolean")
                         .HasColumnName("enable_bb_code");
@@ -500,7 +489,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnName("forum_id");
 
                     b.Property<string>("IpAddress")
-                        .HasMaxLength(50)
                         .HasColumnType("citext")
                         .HasColumnName("ip_address");
 
@@ -508,9 +496,9 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
 
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
+                    b.Property<DateTime?>("PostEditedTimestamp")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("post_edited_timestamp");
 
                     b.Property<int>("PosterId")
                         .HasColumnType("integer")
@@ -529,7 +517,6 @@ namespace TASVideos.Data.Migrations
                         .HasAnnotation("Npgsql:TsVectorProperties", new[] { "Text" });
 
                     b.Property<string>("Subject")
-                        .HasMaxLength(500)
                         .HasColumnType("citext")
                         .HasColumnName("subject");
 
@@ -556,12 +543,6 @@ namespace TASVideos.Data.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
 
-                    b.HasIndex("Text")
-                        .HasDatabaseName("ix_forum_posts_text");
-
-                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Text"), "gin");
-                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Text"), new[] { "gin_trgm_ops" });
-
                     b.HasIndex("TopicId")
                         .HasDatabaseName("ix_forum_posts_topic_id");
 
@@ -581,13 +562,13 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<int>("ForumId")
                         .HasColumnType("integer")
                         .HasColumnName("forum_id");
+
+                    b.Property<int?>("GameId")
+                        .HasColumnType("integer")
+                        .HasColumnName("game_id");
 
                     b.Property<bool>("IsLocked")
                         .HasColumnType("boolean")
@@ -596,10 +577,6 @@ namespace TASVideos.Data.Migrations
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
 
                     b.Property<int?>("PollId")
                         .HasColumnType("integer")
@@ -615,7 +592,6 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(500)
                         .HasColumnType("citext")
                         .HasColumnName("title");
 
@@ -628,6 +604,9 @@ namespace TASVideos.Data.Migrations
 
                     b.HasIndex("ForumId")
                         .HasDatabaseName("ix_forum_topics_forum_id");
+
+                    b.HasIndex("GameId")
+                        .HasDatabaseName("ix_forum_topics_game_id");
 
                     b.HasIndex("PollId")
                         .IsUnique()
@@ -676,68 +655,40 @@ namespace TASVideos.Data.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Abbreviation")
-                        .HasMaxLength(8)
                         .HasColumnType("citext")
                         .HasColumnName("abbreviation");
+
+                    b.Property<string>("Aliases")
+                        .HasColumnType("citext")
+                        .HasColumnName("aliases");
 
                     b.Property<DateTime>("CreateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<string>("DisplayName")
                         .IsRequired()
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("display_name");
 
                     b.Property<string>("GameResourcesPage")
-                        .HasMaxLength(300)
                         .HasColumnType("citext")
                         .HasColumnName("game_resources_page");
-
-                    b.Property<string>("GoodName")
-                        .IsRequired()
-                        .HasMaxLength(250)
-                        .HasColumnType("citext")
-                        .HasColumnName("good_name");
 
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
 
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
                     b.Property<string>("ScreenshotUrl")
-                        .HasMaxLength(250)
                         .HasColumnType("citext")
                         .HasColumnName("screenshot_url");
-
-                    b.Property<string>("SearchKey")
-                        .HasMaxLength(64)
-                        .HasColumnType("citext")
-                        .HasColumnName("search_key");
-
-                    b.Property<int>("SystemId")
-                        .HasColumnType("integer")
-                        .HasColumnName("system_id");
-
-                    b.Property<string>("YoutubeTags")
-                        .IsRequired()
-                        .HasMaxLength(250)
-                        .HasColumnType("citext")
-                        .HasColumnName("youtube_tags");
 
                     b.HasKey("Id")
                         .HasName("pk_games");
 
-                    b.HasIndex("SystemId")
-                        .HasDatabaseName("ix_games_system_id");
+                    b.HasIndex("Abbreviation")
+                        .IsUnique()
+                        .HasDatabaseName("ix_games_abbreviation");
 
                     b.ToTable("games", (string)null);
                 });
@@ -786,6 +737,33 @@ namespace TASVideos.Data.Migrations
                     b.ToTable("game_genres", (string)null);
                 });
 
+            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameGoal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("citext")
+                        .HasColumnName("display_name");
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("integer")
+                        .HasColumnName("game_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_game_goals");
+
+                    b.HasIndex("GameId")
+                        .HasDatabaseName("ix_game_goals_game_id");
+
+                    b.ToTable("game_goals", (string)null);
+                });
+
             modelBuilder.Entity("TASVideos.Data.Entity.Game.GameGroup", b =>
                 {
                     b.Property<int>("Id")
@@ -795,203 +773,31 @@ namespace TASVideos.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Abbreviation")
+                        .HasColumnType("citext")
+                        .HasColumnName("abbreviation");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("citext")
+                        .HasColumnName("description");
+
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(255)
                         .HasColumnType("citext")
                         .HasColumnName("name");
 
-                    b.Property<string>("SearchKey")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("citext")
-                        .HasColumnName("search_key");
-
                     b.HasKey("Id")
                         .HasName("pk_game_groups");
+
+                    b.HasIndex("Abbreviation")
+                        .IsUnique()
+                        .HasDatabaseName("ix_game_groups_abbreviation");
 
                     b.HasIndex("Name")
                         .IsUnique()
                         .HasDatabaseName("ix_game_groups_name");
 
                     b.ToTable("game_groups", (string)null);
-                });
-
-            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameRamAddress", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<long>("Address")
-                        .HasColumnType("bigint")
-                        .HasColumnName("address");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("citext")
-                        .HasColumnName("description");
-
-                    b.Property<int>("Endian")
-                        .HasColumnType("integer")
-                        .HasColumnName("endian");
-
-                    b.Property<int?>("GameId")
-                        .HasColumnType("integer")
-                        .HasColumnName("game_id");
-
-                    b.Property<int>("GameRamAddressDomainId")
-                        .HasColumnType("integer")
-                        .HasColumnName("game_ram_address_domain_id");
-
-                    b.Property<string>("LegacyGameName")
-                        .HasMaxLength(255)
-                        .HasColumnType("citext")
-                        .HasColumnName("legacy_game_name");
-
-                    b.Property<int>("LegacySetId")
-                        .HasColumnType("integer")
-                        .HasColumnName("legacy_set_id");
-
-                    b.Property<int>("Signed")
-                        .HasColumnType("integer")
-                        .HasColumnName("signed");
-
-                    b.Property<int>("SystemId")
-                        .HasColumnType("integer")
-                        .HasColumnName("system_id");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("integer")
-                        .HasColumnName("type");
-
-                    b.HasKey("Id")
-                        .HasName("pk_game_ram_addresses");
-
-                    b.HasIndex("GameId")
-                        .HasDatabaseName("ix_game_ram_addresses_game_id");
-
-                    b.HasIndex("GameRamAddressDomainId")
-                        .HasDatabaseName("ix_game_ram_addresses_game_ram_address_domain_id");
-
-                    b.HasIndex("SystemId")
-                        .HasDatabaseName("ix_game_ram_addresses_system_id");
-
-                    b.ToTable("game_ram_addresses", (string)null);
-                });
-
-            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameRamAddressDomain", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("GameSystemId")
-                        .HasColumnType("integer")
-                        .HasColumnName("game_system_id");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("citext")
-                        .HasColumnName("name");
-
-                    b.HasKey("Id")
-                        .HasName("pk_game_ram_address_domains");
-
-                    b.HasIndex("GameSystemId")
-                        .HasDatabaseName("ix_game_ram_address_domains_game_system_id");
-
-                    b.ToTable("game_ram_address_domains", (string)null);
-                });
-
-            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameRom", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreateTimestamp")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("create_timestamp");
-
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
-                    b.Property<int>("GameId")
-                        .HasColumnType("integer")
-                        .HasColumnName("game_id");
-
-                    b.Property<DateTime>("LastUpdateTimestamp")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
-                    b.Property<string>("Md5")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("citext")
-                        .HasColumnName("md5");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("citext")
-                        .HasColumnName("name");
-
-                    b.Property<string>("Region")
-                        .HasMaxLength(50)
-                        .HasColumnType("citext")
-                        .HasColumnName("region");
-
-                    b.Property<string>("Sha1")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("citext")
-                        .HasColumnName("sha1");
-
-                    b.Property<int?>("SystemId")
-                        .HasColumnType("integer")
-                        .HasColumnName("system_id");
-
-                    b.Property<string>("TitleOverride")
-                        .HasMaxLength(255)
-                        .HasColumnType("citext")
-                        .HasColumnName("title_override");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("integer")
-                        .HasColumnName("type");
-
-                    b.Property<string>("Version")
-                        .HasMaxLength(50)
-                        .HasColumnType("citext")
-                        .HasColumnName("version");
-
-                    b.HasKey("Id")
-                        .HasName("pk_game_roms");
-
-                    b.HasIndex("GameId")
-                        .HasDatabaseName("ix_game_roms_game_id");
-
-                    b.HasIndex("SystemId")
-                        .HasDatabaseName("ix_game_roms_system_id");
-
-                    b.ToTable("game_roms", (string)null);
                 });
 
             modelBuilder.Entity("TASVideos.Data.Entity.Game.GameSystem", b =>
@@ -1003,7 +809,6 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Code")
                         .IsRequired()
-                        .HasMaxLength(8)
                         .HasColumnType("citext")
                         .HasColumnName("code");
 
@@ -1011,23 +816,14 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<string>("DisplayName")
                         .IsRequired()
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("display_name");
 
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
 
                     b.HasKey("Id")
                         .HasName("pk_game_systems");
@@ -1052,10 +848,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<double>("FrameRate")
                         .HasColumnType("double precision")
                         .HasColumnName("frame_rate");
@@ -1067,10 +859,6 @@ namespace TASVideos.Data.Migrations
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
 
                     b.Property<bool>("Obsolete")
                         .ValueGeneratedOnAdd()
@@ -1084,7 +872,6 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("RegionCode")
                         .IsRequired()
-                        .HasMaxLength(8)
                         .HasColumnType("citext")
                         .HasColumnName("region_code");
 
@@ -1097,16 +884,91 @@ namespace TASVideos.Data.Migrations
                     b.ToTable("game_system_frame_rates", (string)null);
                 });
 
+            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreateTimestamp")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("create_timestamp");
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("integer")
+                        .HasColumnName("game_id");
+
+                    b.Property<DateTime>("LastUpdateTimestamp")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("last_update_timestamp");
+
+                    b.Property<string>("Md5")
+                        .HasColumnType("citext")
+                        .HasColumnName("md5");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("citext")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("citext")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("Region")
+                        .HasColumnType("citext")
+                        .HasColumnName("region");
+
+                    b.Property<string>("Sha1")
+                        .HasColumnType("citext")
+                        .HasColumnName("sha1");
+
+                    b.Property<string>("SourceDb")
+                        .HasColumnType("citext")
+                        .HasColumnName("source_db");
+
+                    b.Property<int>("SystemId")
+                        .HasColumnType("integer")
+                        .HasColumnName("system_id");
+
+                    b.Property<string>("TitleOverride")
+                        .HasColumnType("citext")
+                        .HasColumnName("title_override");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer")
+                        .HasColumnName("type");
+
+                    b.Property<string>("Version")
+                        .HasColumnType("citext")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_game_versions");
+
+                    b.HasIndex("GameId")
+                        .HasDatabaseName("ix_game_versions_game_id");
+
+                    b.HasIndex("SystemId")
+                        .HasDatabaseName("ix_game_versions_system_id");
+
+                    b.ToTable("game_versions", (string)null);
+                });
+
             modelBuilder.Entity("TASVideos.Data.Entity.Game.Genre", b =>
                 {
                     b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
-                        .HasColumnName("id")
-                        .HasAnnotation("DatabaseGenerated", DatabaseGeneratedOption.None);
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
-                        .HasMaxLength(20)
                         .HasColumnType("citext")
                         .HasColumnName("display_name");
 
@@ -1129,21 +991,12 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
 
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
                     b.Property<string>("Mask")
                         .IsRequired()
-                        .HasMaxLength(40)
                         .HasColumnType("citext")
                         .HasColumnName("mask");
 
@@ -1168,7 +1021,6 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Body")
                         .IsRequired()
-                        .HasMaxLength(1024)
                         .HasColumnType("citext")
                         .HasColumnName("body");
 
@@ -1176,13 +1028,8 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<string>("Group")
                         .IsRequired()
-                        .HasMaxLength(255)
                         .HasColumnType("citext")
                         .HasColumnName("group");
 
@@ -1190,31 +1037,23 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
 
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
                     b.Property<string>("Link")
                         .IsRequired()
-                        .HasMaxLength(255)
                         .HasColumnType("citext")
                         .HasColumnName("link");
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(512)
                         .HasColumnType("citext")
                         .HasColumnName("title");
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("type");
 
                     b.Property<string>("User")
                         .IsRequired()
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("user");
 
@@ -1237,10 +1076,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<bool>("DeletedForFromUser")
                         .HasColumnType("boolean")
                         .HasColumnName("deleted_for_from_user");
@@ -1261,18 +1096,9 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("from_user_id");
 
-                    b.Property<string>("IpAddress")
-                        .HasMaxLength(50)
-                        .HasColumnType("citext")
-                        .HasColumnName("ip_address");
-
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
 
                     b.Property<DateTime?>("ReadOn")
                         .HasColumnType("timestamp without time zone")
@@ -1287,7 +1113,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnName("saved_for_to_user");
 
                     b.Property<string>("Subject")
-                        .HasMaxLength(500)
                         .HasColumnType("citext")
                         .HasColumnName("subject");
 
@@ -1322,25 +1147,14 @@ namespace TASVideos.Data.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AdditionalAuthors")
-                        .HasMaxLength(200)
                         .HasColumnType("citext")
                         .HasColumnName("additional_authors");
-
-                    b.Property<string>("Branch")
-                        .HasMaxLength(50)
-                        .HasColumnType("citext")
-                        .HasColumnName("branch");
 
                     b.Property<DateTime>("CreateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<string>("EmulatorVersion")
-                        .HasMaxLength(50)
                         .HasColumnType("citext")
                         .HasColumnName("emulator_version");
 
@@ -1348,17 +1162,21 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("frames");
 
+                    b.Property<int?>("GameGoalId")
+                        .HasColumnType("integer")
+                        .HasColumnName("game_goal_id");
+
                     b.Property<int>("GameId")
                         .HasColumnType("integer")
                         .HasColumnName("game_id");
 
+                    b.Property<int>("GameVersionId")
+                        .HasColumnType("integer")
+                        .HasColumnName("game_version_id");
+
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
 
                     b.Property<byte[]>("MovieFile")
                         .IsRequired()
@@ -1382,10 +1200,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("rerecord_count");
 
-                    b.Property<int>("RomId")
-                        .HasColumnType("integer")
-                        .HasColumnName("rom_id");
-
                     b.Property<int>("SubmissionId")
                         .HasColumnType("integer")
                         .HasColumnName("submission_id");
@@ -1403,24 +1217,27 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("citext")
                         .HasColumnName("title");
 
-                    b.Property<int?>("WikiContentId")
-                        .HasColumnType("integer")
-                        .HasColumnName("wiki_content_id");
-
                     b.HasKey("Id")
                         .HasName("pk_publications");
 
+                    b.HasIndex("GameGoalId")
+                        .HasDatabaseName("ix_publications_game_goal_id");
+
                     b.HasIndex("GameId")
                         .HasDatabaseName("ix_publications_game_id");
+
+                    b.HasIndex("GameVersionId")
+                        .HasDatabaseName("ix_publications_game_version_id");
+
+                    b.HasIndex("MovieFileName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_publications_movie_file_name");
 
                     b.HasIndex("ObsoletedById")
                         .HasDatabaseName("ix_publications_obsoleted_by_id");
 
                     b.HasIndex("PublicationClassId")
                         .HasDatabaseName("ix_publications_publication_class_id");
-
-                    b.HasIndex("RomId")
-                        .HasDatabaseName("ix_publications_rom_id");
 
                     b.HasIndex("SubmissionId")
                         .IsUnique()
@@ -1431,9 +1248,6 @@ namespace TASVideos.Data.Migrations
 
                     b.HasIndex("SystemId")
                         .HasDatabaseName("ix_publications_system_id");
-
-                    b.HasIndex("WikiContentId")
-                        .HasDatabaseName("ix_publications_wiki_content_id");
 
                     b.ToTable("publications", (string)null);
                 });
@@ -1469,25 +1283,18 @@ namespace TASVideos.Data.Migrations
                         .HasAnnotation("DatabaseGenerated", DatabaseGeneratedOption.None);
 
                     b.Property<string>("IconPath")
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("icon_path");
 
                     b.Property<string>("Link")
                         .IsRequired()
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("link");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(20)
                         .HasColumnType("citext")
                         .HasColumnName("name");
-
-                    b.Property<double>("Weight")
-                        .HasColumnType("double precision")
-                        .HasColumnName("weight");
 
                     b.HasKey("Id")
                         .HasName("pk_publication_classes");
@@ -1512,12 +1319,7 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<string>("Description")
-                        .HasMaxLength(250)
                         .HasColumnType("citext")
                         .HasColumnName("description");
 
@@ -1529,13 +1331,8 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
 
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
                     b.Property<string>("Path")
                         .IsRequired()
-                        .HasMaxLength(250)
                         .HasColumnType("citext")
                         .HasColumnName("path");
 
@@ -1626,23 +1423,19 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("publication_id");
 
-                    b.Property<int>("Type")
-                        .HasColumnType("integer")
-                        .HasColumnName("type");
-
                     b.Property<double>("Value")
                         .HasColumnType("double precision")
                         .HasColumnName("value");
 
-                    b.HasKey("UserId", "PublicationId", "Type")
+                    b.HasKey("UserId", "PublicationId")
                         .HasName("pk_publication_ratings");
 
                     b.HasIndex("PublicationId")
                         .HasDatabaseName("ix_publication_ratings_publication_id");
 
-                    b.HasIndex("UserId", "PublicationId", "Type")
+                    b.HasIndex("UserId", "PublicationId")
                         .IsUnique()
-                        .HasDatabaseName("ix_publication_ratings_user_id_publication_id_type");
+                        .HasDatabaseName("ix_publication_ratings_user_id_publication_id");
 
                     b.ToTable("publication_ratings", (string)null);
                 });
@@ -1682,22 +1475,13 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<string>("DisplayName")
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("display_name");
 
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
 
                     b.Property<int>("PublicationId")
                         .HasColumnType("integer")
@@ -1709,7 +1493,6 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Url")
                         .IsRequired()
-                        .HasMaxLength(500)
                         .HasColumnType("citext")
                         .HasColumnName("url");
 
@@ -1750,13 +1533,8 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasMaxLength(300)
                         .HasColumnType("citext")
                         .HasColumnName("description");
 
@@ -1768,11 +1546,8 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
 
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
                     b.Property<string>("Name")
+                        .IsRequired()
                         .HasColumnType("citext")
                         .HasColumnName("name");
 
@@ -1827,11 +1602,10 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Link")
                         .IsRequired()
-                        .HasMaxLength(300)
                         .HasColumnType("citext")
                         .HasColumnName("link");
 
-                    b.Property<int?>("RoleId")
+                    b.Property<int>("RoleId")
                         .HasColumnType("integer")
                         .HasColumnName("role_id");
 
@@ -1874,12 +1648,18 @@ namespace TASVideos.Data.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AdditionalAuthors")
-                        .HasMaxLength(200)
                         .HasColumnType("citext")
                         .HasColumnName("additional_authors");
 
+                    b.Property<string>("AdditionalSyncNotes")
+                        .HasColumnType("citext")
+                        .HasColumnName("additional_sync_notes");
+
+                    b.Property<string>("Annotations")
+                        .HasColumnType("citext")
+                        .HasColumnName("annotations");
+
                     b.Property<string>("Branch")
-                        .HasMaxLength(50)
                         .HasColumnType("citext")
                         .HasColumnName("branch");
 
@@ -1887,17 +1667,15 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
+                    b.Property<long?>("CycleCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cycle_count");
 
                     b.Property<string>("EmulatorVersion")
-                        .HasMaxLength(50)
                         .HasColumnType("citext")
                         .HasColumnName("emulator_version");
 
                     b.Property<string>("EncodeEmbedLink")
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("encode_embed_link");
 
@@ -1905,23 +1683,33 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("frames");
 
+                    b.Property<int?>("GameGoalId")
+                        .HasColumnType("integer")
+                        .HasColumnName("game_goal_id");
+
                     b.Property<int?>("GameId")
                         .HasColumnType("integer")
                         .HasColumnName("game_id");
 
                     b.Property<string>("GameName")
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("game_name");
 
-                    b.Property<string>("GameVersion")
-                        .HasMaxLength(100)
+                    b.Property<int?>("GameVersionId")
+                        .HasColumnType("integer")
+                        .HasColumnName("game_version_id");
+
+                    b.Property<string>("Hash")
                         .HasColumnType("citext")
-                        .HasColumnName("game_version");
+                        .HasColumnName("hash");
+
+                    b.Property<string>("HashType")
+                        .HasColumnType("citext")
+                        .HasColumnName("hash_type");
 
                     b.Property<decimal>("ImportedTime")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(16,4)")
+                        .HasColumnType("decimal(16, 4)")
                         .HasDefaultValue(0m)
                         .HasColumnName("imported_time");
 
@@ -1937,18 +1725,9 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
 
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
-                    b.Property<string>("LegacyAlerts")
-                        .HasMaxLength(4096)
-                        .HasColumnType("citext")
-                        .HasColumnName("legacy_alerts");
-
                     b.Property<decimal>("LegacyTime")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(16,4)")
+                        .HasColumnType("decimal(16, 4)")
                         .HasDefaultValue(0m)
                         .HasColumnName("legacy_time");
 
@@ -1977,12 +1756,7 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("rerecord_count");
 
-                    b.Property<int?>("RomId")
-                        .HasColumnType("integer")
-                        .HasColumnName("rom_id");
-
                     b.Property<string>("RomName")
-                        .HasMaxLength(250)
                         .HasColumnType("citext")
                         .HasColumnName("rom_name");
 
@@ -1990,9 +1764,21 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("status");
 
-                    b.Property<int?>("SubmitterId")
+                    b.Property<string>("SubmittedGameVersion")
+                        .HasColumnType("citext")
+                        .HasColumnName("submitted_game_version");
+
+                    b.Property<int>("SubmitterId")
                         .HasColumnType("integer")
                         .HasColumnName("submitter_id");
+
+                    b.Property<int?>("SyncedByUserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("synced_by_user_id");
+
+                    b.Property<DateTime?>("SyncedOn")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("synced_on");
 
                     b.Property<int?>("SystemFrameRateId")
                         .HasColumnType("integer")
@@ -2011,15 +1797,21 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("topic_id");
 
-                    b.Property<int?>("WikiContentId")
-                        .HasColumnType("integer")
-                        .HasColumnName("wiki_content_id");
+                    b.Property<string>("Warnings")
+                        .HasColumnType("citext")
+                        .HasColumnName("warnings");
 
                     b.HasKey("Id")
                         .HasName("pk_submissions");
 
+                    b.HasIndex("GameGoalId")
+                        .HasDatabaseName("ix_submissions_game_goal_id");
+
                     b.HasIndex("GameId")
                         .HasDatabaseName("ix_submissions_game_id");
+
+                    b.HasIndex("GameVersionId")
+                        .HasDatabaseName("ix_submissions_game_version_id");
 
                     b.HasIndex("IntendedClassId")
                         .HasDatabaseName("ix_submissions_intended_class_id");
@@ -2033,23 +1825,20 @@ namespace TASVideos.Data.Migrations
                     b.HasIndex("RejectionReasonId")
                         .HasDatabaseName("ix_submissions_rejection_reason_id");
 
-                    b.HasIndex("RomId")
-                        .HasDatabaseName("ix_submissions_rom_id");
-
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_submissions_status");
 
                     b.HasIndex("SubmitterId")
                         .HasDatabaseName("ix_submissions_submitter_id");
 
+                    b.HasIndex("SyncedByUserId")
+                        .HasDatabaseName("ix_submissions_synced_by_user_id");
+
                     b.HasIndex("SystemFrameRateId")
                         .HasDatabaseName("ix_submissions_system_frame_rate_id");
 
                     b.HasIndex("SystemId")
                         .HasDatabaseName("ix_submissions_system_id");
-
-                    b.HasIndex("WikiContentId")
-                        .HasDatabaseName("ix_submissions_wiki_content_id");
 
                     b.ToTable("submissions", (string)null);
                 });
@@ -2080,13 +1869,14 @@ namespace TASVideos.Data.Migrations
             modelBuilder.Entity("TASVideos.Data.Entity.SubmissionRejectionReason", b =>
                 {
                     b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
-                        .HasColumnName("id")
-                        .HasAnnotation("DatabaseGenerated", DatabaseGeneratedOption.None);
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("display_name");
 
@@ -2113,17 +1903,9 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -2153,13 +1935,11 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Code")
                         .IsRequired()
-                        .HasMaxLength(25)
                         .HasColumnType("citext")
                         .HasColumnName("code");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
-                        .HasMaxLength(50)
                         .HasColumnType("citext")
                         .HasColumnName("display_name");
 
@@ -2186,10 +1966,17 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("access_failed_count");
 
+                    b.Property<int?>("AutoWatchTopic")
+                        .HasColumnType("integer")
+                        .HasColumnName("auto_watch_topic");
+
                     b.Property<string>("Avatar")
-                        .HasMaxLength(250)
                         .HasColumnType("citext")
                         .HasColumnName("avatar");
+
+                    b.Property<DateTime?>("BannedUntil")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("banned_until");
 
                     b.Property<string>("ConcurrencyStamp")
                         .HasColumnType("citext")
@@ -2199,11 +1986,16 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
+                    b.Property<int>("DateFormat")
+                        .HasColumnType("integer")
+                        .HasColumnName("date_format");
+
+                    b.Property<int>("DecimalFormat")
+                        .HasColumnType("integer")
+                        .HasColumnName("decimal_format");
 
                     b.Property<string>("Email")
+                        .IsRequired()
                         .HasColumnType("citext")
                         .HasColumnName("email");
 
@@ -2216,7 +2008,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnName("email_on_private_message");
 
                     b.Property<string>("From")
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("from");
 
@@ -2228,10 +2019,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
 
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean")
                         .HasColumnName("lockout_enabled");
@@ -2240,16 +2027,21 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("lockout_end");
 
+                    b.Property<string>("ModeratorComments")
+                        .HasColumnType("citext")
+                        .HasColumnName("moderator_comments");
+
                     b.Property<string>("MoodAvatarUrlBase")
-                        .HasMaxLength(250)
                         .HasColumnType("citext")
                         .HasColumnName("mood_avatar_url_base");
 
                     b.Property<string>("NormalizedEmail")
+                        .IsRequired()
                         .HasColumnType("citext")
                         .HasColumnName("normalized_email");
 
                     b.Property<string>("NormalizedUserName")
+                        .IsRequired()
                         .HasColumnType("citext")
                         .HasColumnName("normalized_user_name");
 
@@ -2278,13 +2070,15 @@ namespace TASVideos.Data.Migrations
                         .HasColumnName("security_stamp");
 
                     b.Property<string>("Signature")
-                        .HasMaxLength(1000)
                         .HasColumnType("citext")
                         .HasColumnName("signature");
 
+                    b.Property<int>("TimeFormat")
+                        .HasColumnType("integer")
+                        .HasColumnName("time_format");
+
                     b.Property<string>("TimeZoneId")
                         .IsRequired()
-                        .HasMaxLength(250)
                         .HasColumnType("citext")
                         .HasColumnName("time_zone_id");
 
@@ -2297,6 +2091,7 @@ namespace TASVideos.Data.Migrations
                         .HasColumnName("use_ratings");
 
                     b.Property<string>("UserName")
+                        .IsRequired()
                         .HasColumnType("citext")
                         .HasColumnName("user_name");
 
@@ -2353,21 +2148,12 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
 
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
-
                     b.Property<string>("RegexPattern")
                         .IsRequired()
-                        .HasMaxLength(100)
                         .HasColumnType("citext")
                         .HasColumnName("regex_pattern");
 
@@ -2387,6 +2173,10 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("id")
                         .HasAnnotation("DatabaseGenerated", DatabaseGeneratedOption.None);
+
+                    b.Property<string>("Annotations")
+                        .HasColumnType("citext")
+                        .HasColumnName("annotations");
 
                     b.Property<int>("AuthorId")
                         .HasColumnType("integer")
@@ -2415,7 +2205,6 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("FileName")
                         .IsRequired()
-                        .HasMaxLength(255)
                         .HasColumnType("citext")
                         .HasColumnName("file_name");
 
@@ -2432,7 +2221,7 @@ namespace TASVideos.Data.Migrations
                         .HasColumnName("hidden");
 
                     b.Property<decimal>("Length")
-                        .HasColumnType("numeric(10,3)")
+                        .HasColumnType("decimal(10, 3)")
                         .HasColumnName("length");
 
                     b.Property<int>("LogicalLength")
@@ -2453,27 +2242,17 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(255)
                         .HasColumnType("citext")
                         .HasColumnName("title");
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasMaxLength(16)
                         .HasColumnType("citext")
                         .HasColumnName("type");
 
                     b.Property<DateTime>("UploadTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("upload_timestamp");
-
-                    b.Property<int>("Views")
-                        .HasColumnType("integer")
-                        .HasColumnName("views");
-
-                    b.Property<string>("Warnings")
-                        .HasColumnType("citext")
-                        .HasColumnName("warnings");
 
                     b.HasKey("Id")
                         .HasName("pk_user_files");
@@ -2507,7 +2286,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnName("creation_time_stamp");
 
                     b.Property<string>("Ip")
-                        .HasMaxLength(255)
                         .HasColumnType("citext")
                         .HasColumnName("ip");
 
@@ -2519,11 +2297,6 @@ namespace TASVideos.Data.Migrations
                         .IsRequired()
                         .HasColumnType("citext")
                         .HasColumnName("text");
-
-                    b.Property<string>("Title")
-                        .HasMaxLength(255)
-                        .HasColumnType("citext")
-                        .HasColumnName("title");
 
                     b.Property<long>("UserFileId")
                         .HasColumnType("bigint")
@@ -2677,10 +2450,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("create_timestamp");
 
-                    b.Property<string>("CreateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("create_user_name");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
@@ -2688,10 +2457,6 @@ namespace TASVideos.Data.Migrations
                     b.Property<DateTime>("LastUpdateTimestamp")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("last_update_timestamp");
-
-                    b.Property<string>("LastUpdateUserName")
-                        .HasColumnType("citext")
-                        .HasColumnName("last_update_user_name");
 
                     b.Property<string>("Markup")
                         .IsRequired()
@@ -2704,7 +2469,6 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("PageName")
                         .IsRequired()
-                        .HasMaxLength(250)
                         .HasColumnType("citext")
                         .HasColumnName("page_name");
 
@@ -2713,7 +2477,6 @@ namespace TASVideos.Data.Migrations
                         .HasColumnName("revision");
 
                     b.Property<string>("RevisionMessage")
-                        .HasMaxLength(1000)
                         .HasColumnType("citext")
                         .HasColumnName("revision_message");
 
@@ -2733,12 +2496,6 @@ namespace TASVideos.Data.Migrations
 
                     b.HasIndex("ChildId")
                         .HasDatabaseName("ix_wiki_pages_child_id");
-
-                    b.HasIndex("Markup")
-                        .HasDatabaseName("ix_wiki_pages_markup");
-
-                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Markup"), "gin");
-                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Markup"), new[] { "gin_trgm_ops" });
 
                     b.HasIndex("SearchVector")
                         .HasDatabaseName("ix_wiki_pages_search_vector");
@@ -2763,19 +2520,16 @@ namespace TASVideos.Data.Migrations
 
                     b.Property<string>("Excerpt")
                         .IsRequired()
-                        .HasMaxLength(1000)
                         .HasColumnType("citext")
                         .HasColumnName("excerpt");
 
                     b.Property<string>("Referral")
                         .IsRequired()
-                        .HasMaxLength(1000)
                         .HasColumnType("citext")
                         .HasColumnName("referral");
 
                     b.Property<string>("Referrer")
                         .IsRequired()
-                        .HasMaxLength(250)
                         .HasColumnType("citext")
                         .HasColumnName("referrer");
 
@@ -2909,6 +2663,11 @@ namespace TASVideos.Data.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_forum_topics_forums_forum_id");
 
+                    b.HasOne("TASVideos.Data.Entity.Game.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .HasConstraintName("fk_forum_topics_games_game_id");
+
                     b.HasOne("TASVideos.Data.Entity.Forum.ForumPoll", "Poll")
                         .WithOne("Topic")
                         .HasForeignKey("TASVideos.Data.Entity.Forum.ForumTopic", "PollId")
@@ -2924,9 +2683,11 @@ namespace TASVideos.Data.Migrations
                     b.HasOne("TASVideos.Data.Entity.Submission", "Submission")
                         .WithOne("Topic")
                         .HasForeignKey("TASVideos.Data.Entity.Forum.ForumTopic", "SubmissionId")
-                        .HasConstraintName("fk_forum_topics_submissions_submission_id1");
+                        .HasConstraintName("fk_forum_topics_submissions_submission_id");
 
                     b.Navigation("Forum");
+
+                    b.Navigation("Game");
 
                     b.Navigation("Poll");
 
@@ -2954,18 +2715,6 @@ namespace TASVideos.Data.Migrations
                     b.Navigation("ForumTopic");
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("TASVideos.Data.Entity.Game.Game", b =>
-                {
-                    b.HasOne("TASVideos.Data.Entity.Game.GameSystem", "System")
-                        .WithMany("Games")
-                        .HasForeignKey("SystemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_games_game_systems_system_id");
-
-                    b.Navigation("System");
                 });
 
             modelBuilder.Entity("TASVideos.Data.Entity.Game.GameGameGroup", b =>
@@ -3010,61 +2759,16 @@ namespace TASVideos.Data.Migrations
                     b.Navigation("Genre");
                 });
 
-            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameRamAddress", b =>
+            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameGoal", b =>
                 {
                     b.HasOne("TASVideos.Data.Entity.Game.Game", "Game")
-                        .WithMany()
-                        .HasForeignKey("GameId")
-                        .HasConstraintName("fk_game_ram_addresses_games_game_id");
-
-                    b.HasOne("TASVideos.Data.Entity.Game.GameRamAddressDomain", "GameRamAddressDomain")
-                        .WithMany()
-                        .HasForeignKey("GameRamAddressDomainId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_game_ram_addresses_game_ram_address_domains_game_ram_addres");
-
-                    b.HasOne("TASVideos.Data.Entity.Game.GameSystem", "System")
-                        .WithMany()
-                        .HasForeignKey("SystemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_game_ram_addresses_game_systems_system_id");
-
-                    b.Navigation("Game");
-
-                    b.Navigation("GameRamAddressDomain");
-
-                    b.Navigation("System");
-                });
-
-            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameRamAddressDomain", b =>
-                {
-                    b.HasOne("TASVideos.Data.Entity.Game.GameSystem", "System")
-                        .WithMany()
-                        .HasForeignKey("GameSystemId")
-                        .HasConstraintName("fk_game_ram_address_domains_game_systems_game_system_id");
-
-                    b.Navigation("System");
-                });
-
-            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameRom", b =>
-                {
-                    b.HasOne("TASVideos.Data.Entity.Game.Game", "Game")
-                        .WithMany("Roms")
+                        .WithMany("GameGoals")
                         .HasForeignKey("GameId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_game_roms_games_game_id");
-
-                    b.HasOne("TASVideos.Data.Entity.Game.GameSystem", "System")
-                        .WithMany("GameRoms")
-                        .HasForeignKey("SystemId")
-                        .HasConstraintName("fk_game_roms_game_systems_system_id");
+                        .HasConstraintName("fk_game_goals_games_game_id");
 
                     b.Navigation("Game");
-
-                    b.Navigation("System");
                 });
 
             modelBuilder.Entity("TASVideos.Data.Entity.Game.GameSystemFrameRate", b =>
@@ -3075,6 +2779,27 @@ namespace TASVideos.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_game_system_frame_rates_game_systems_game_system_id");
+
+                    b.Navigation("System");
+                });
+
+            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameVersion", b =>
+                {
+                    b.HasOne("TASVideos.Data.Entity.Game.Game", "Game")
+                        .WithMany("GameVersions")
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_game_versions_games_game_id");
+
+                    b.HasOne("TASVideos.Data.Entity.Game.GameSystem", "System")
+                        .WithMany("GameVersions")
+                        .HasForeignKey("SystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_game_versions_game_systems_system_id");
+
+                    b.Navigation("Game");
 
                     b.Navigation("System");
                 });
@@ -3102,12 +2827,24 @@ namespace TASVideos.Data.Migrations
 
             modelBuilder.Entity("TASVideos.Data.Entity.Publication", b =>
                 {
+                    b.HasOne("TASVideos.Data.Entity.Game.GameGoal", "GameGoal")
+                        .WithMany("Publications")
+                        .HasForeignKey("GameGoalId")
+                        .HasConstraintName("fk_publications_game_goals_game_goal_id");
+
                     b.HasOne("TASVideos.Data.Entity.Game.Game", "Game")
                         .WithMany("Publications")
                         .HasForeignKey("GameId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_publications_games_game_id");
+
+                    b.HasOne("TASVideos.Data.Entity.Game.GameVersion", "GameVersion")
+                        .WithMany("Publications")
+                        .HasForeignKey("GameVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_publications_game_versions_game_version_id");
 
                     b.HasOne("TASVideos.Data.Entity.Publication", "ObsoletedBy")
                         .WithMany("ObsoletedMovies")
@@ -3122,13 +2859,6 @@ namespace TASVideos.Data.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_publications_publication_classes_publication_class_id");
 
-                    b.HasOne("TASVideos.Data.Entity.Game.GameRom", "Rom")
-                        .WithMany("Publications")
-                        .HasForeignKey("RomId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_publications_game_roms_rom_id");
-
                     b.HasOne("TASVideos.Data.Entity.Submission", "Submission")
                         .WithOne("Publication")
                         .HasForeignKey("TASVideos.Data.Entity.Publication", "SubmissionId")
@@ -3137,7 +2867,7 @@ namespace TASVideos.Data.Migrations
                         .HasConstraintName("fk_publications_submissions_submission_id");
 
                     b.HasOne("TASVideos.Data.Entity.Game.GameSystemFrameRate", "SystemFrameRate")
-                        .WithMany()
+                        .WithMany("Publications")
                         .HasForeignKey("SystemFrameRateId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
@@ -3150,26 +2880,21 @@ namespace TASVideos.Data.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_publications_game_systems_system_id");
 
-                    b.HasOne("TASVideos.Data.Entity.WikiPage", "WikiContent")
-                        .WithMany()
-                        .HasForeignKey("WikiContentId")
-                        .HasConstraintName("fk_publications_wiki_pages_wiki_content_id");
-
                     b.Navigation("Game");
+
+                    b.Navigation("GameGoal");
+
+                    b.Navigation("GameVersion");
 
                     b.Navigation("ObsoletedBy");
 
                     b.Navigation("PublicationClass");
-
-                    b.Navigation("Rom");
 
                     b.Navigation("Submission");
 
                     b.Navigation("System");
 
                     b.Navigation("SystemFrameRate");
-
-                    b.Navigation("WikiContent");
                 });
 
             modelBuilder.Entity("TASVideos.Data.Entity.PublicationAuthor", b =>
@@ -3306,6 +3031,8 @@ namespace TASVideos.Data.Migrations
                     b.HasOne("TASVideos.Data.Entity.Role", "Role")
                         .WithMany("RoleLinks")
                         .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
                         .HasConstraintName("fk_role_links_roles_role_id");
 
                     b.Navigation("Role");
@@ -3325,10 +3052,20 @@ namespace TASVideos.Data.Migrations
 
             modelBuilder.Entity("TASVideos.Data.Entity.Submission", b =>
                 {
+                    b.HasOne("TASVideos.Data.Entity.Game.GameGoal", "GameGoal")
+                        .WithMany("Submissions")
+                        .HasForeignKey("GameGoalId")
+                        .HasConstraintName("fk_submissions_game_goals_game_goal_id");
+
                     b.HasOne("TASVideos.Data.Entity.Game.Game", "Game")
                         .WithMany("Submissions")
                         .HasForeignKey("GameId")
                         .HasConstraintName("fk_submissions_games_game_id");
+
+                    b.HasOne("TASVideos.Data.Entity.Game.GameVersion", "GameVersion")
+                        .WithMany("Submissions")
+                        .HasForeignKey("GameVersionId")
+                        .HasConstraintName("fk_submissions_game_versions_game_version_id");
 
                     b.HasOne("TASVideos.Data.Entity.PublicationClass", "IntendedClass")
                         .WithMany()
@@ -3346,22 +3083,24 @@ namespace TASVideos.Data.Migrations
                         .HasConstraintName("fk_submissions_users_publisher_id");
 
                     b.HasOne("TASVideos.Data.Entity.SubmissionRejectionReason", "RejectionReason")
-                        .WithMany()
+                        .WithMany("Submissions")
                         .HasForeignKey("RejectionReasonId")
                         .HasConstraintName("fk_submissions_submission_rejection_reasons_rejection_reason_id");
-
-                    b.HasOne("TASVideos.Data.Entity.Game.GameRom", "Rom")
-                        .WithMany("Submissions")
-                        .HasForeignKey("RomId")
-                        .HasConstraintName("fk_submissions_game_roms_rom_id");
 
                     b.HasOne("TASVideos.Data.Entity.User", "Submitter")
                         .WithMany()
                         .HasForeignKey("SubmitterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
                         .HasConstraintName("fk_submissions_users_submitter_id");
 
-                    b.HasOne("TASVideos.Data.Entity.Game.GameSystemFrameRate", "SystemFrameRate")
+                    b.HasOne("TASVideos.Data.Entity.User", "SyncedByUser")
                         .WithMany()
+                        .HasForeignKey("SyncedByUserId")
+                        .HasConstraintName("fk_submissions_users_synced_by_user_id");
+
+                    b.HasOne("TASVideos.Data.Entity.Game.GameSystemFrameRate", "SystemFrameRate")
+                        .WithMany("Submissions")
                         .HasForeignKey("SystemFrameRateId")
                         .HasConstraintName("fk_submissions_game_system_frame_rates_system_frame_rate_id");
 
@@ -3370,12 +3109,11 @@ namespace TASVideos.Data.Migrations
                         .HasForeignKey("SystemId")
                         .HasConstraintName("fk_submissions_game_systems_system_id");
 
-                    b.HasOne("TASVideos.Data.Entity.WikiPage", "WikiContent")
-                        .WithMany()
-                        .HasForeignKey("WikiContentId")
-                        .HasConstraintName("fk_submissions_wiki_pages_wiki_content_id");
-
                     b.Navigation("Game");
+
+                    b.Navigation("GameGoal");
+
+                    b.Navigation("GameVersion");
 
                     b.Navigation("IntendedClass");
 
@@ -3385,15 +3123,13 @@ namespace TASVideos.Data.Migrations
 
                     b.Navigation("RejectionReason");
 
-                    b.Navigation("Rom");
-
                     b.Navigation("Submitter");
+
+                    b.Navigation("SyncedByUser");
 
                     b.Navigation("System");
 
                     b.Navigation("SystemFrameRate");
-
-                    b.Navigation("WikiContent");
                 });
 
             modelBuilder.Entity("TASVideos.Data.Entity.SubmissionAuthor", b =>
@@ -3573,15 +3309,24 @@ namespace TASVideos.Data.Migrations
                 {
                     b.Navigation("GameGenres");
 
+                    b.Navigation("GameGoals");
+
                     b.Navigation("GameGroups");
 
-                    b.Navigation("Publications");
+                    b.Navigation("GameVersions");
 
-                    b.Navigation("Roms");
+                    b.Navigation("Publications");
 
                     b.Navigation("Submissions");
 
                     b.Navigation("UserFiles");
+                });
+
+            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameGoal", b =>
+                {
+                    b.Navigation("Publications");
+
+                    b.Navigation("Submissions");
                 });
 
             modelBuilder.Entity("TASVideos.Data.Entity.Game.GameGroup", b =>
@@ -3589,24 +3334,29 @@ namespace TASVideos.Data.Migrations
                     b.Navigation("Games");
                 });
 
-            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameRom", b =>
-                {
-                    b.Navigation("Publications");
-
-                    b.Navigation("Submissions");
-                });
-
             modelBuilder.Entity("TASVideos.Data.Entity.Game.GameSystem", b =>
                 {
-                    b.Navigation("GameRoms");
-
-                    b.Navigation("Games");
+                    b.Navigation("GameVersions");
 
                     b.Navigation("Publications");
 
                     b.Navigation("Submissions");
 
                     b.Navigation("SystemFrameRates");
+                });
+
+            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameSystemFrameRate", b =>
+                {
+                    b.Navigation("Publications");
+
+                    b.Navigation("Submissions");
+                });
+
+            modelBuilder.Entity("TASVideos.Data.Entity.Game.GameVersion", b =>
+                {
+                    b.Navigation("Publications");
+
+                    b.Navigation("Submissions");
                 });
 
             modelBuilder.Entity("TASVideos.Data.Entity.Game.Genre", b =>
@@ -3653,6 +3403,11 @@ namespace TASVideos.Data.Migrations
                     b.Navigation("SubmissionAuthors");
 
                     b.Navigation("Topic");
+                });
+
+            modelBuilder.Entity("TASVideos.Data.Entity.SubmissionRejectionReason", b =>
+                {
+                    b.Navigation("Submissions");
                 });
 
             modelBuilder.Entity("TASVideos.Data.Entity.Tag", b =>

@@ -1,25 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Forum;
-using TASVideos.Pages.Forum.Topics.Models;
+﻿using TASVideos.Data.Entity.Forum;
 
 namespace TASVideos.Pages.Forum.Topics;
 
 [RequirePermission(PermissionTo.CreateForumPolls)]
-public class AddEditPollModel : BaseForumModel
+public class AddEditPollModel(ApplicationDbContext db, IForumService forumService) : BaseForumModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly IForumService _forumService;
-
-	public AddEditPollModel(ApplicationDbContext db, IForumService forumService)
-	{
-		_db = db;
-		_forumService = forumService;
-	}
-
 	[FromRoute]
 	public int TopicId { get; set; }
 
@@ -27,22 +12,17 @@ public class AddEditPollModel : BaseForumModel
 
 	public int? PollId { get; set; }
 
-	public bool AnyVotes { get; set; }
-
 	[BindProperty]
-	public PollCreateModel Poll { get; set; } = new();
+	public PollCreate Poll { get; set; } = new();
 
 	public async Task<IActionResult> OnGet()
 	{
-		var seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
-
-		var topic = await _db.ForumTopics
+		var topic = await db.ForumTopics
 			.Include(t => t.Poll)
 			.ThenInclude(p => p!.PollOptions)
 			.ThenInclude(o => o.Votes)
-			.ExcludeRestricted(seeRestricted)
-			.Where(t => t.Id == TopicId)
-			.SingleOrDefaultAsync();
+			.ExcludeRestricted(UserCanSeeRestricted)
+			.SingleOrDefaultAsync(t => t.Id == TopicId);
 
 		if (topic is null)
 		{
@@ -53,9 +33,7 @@ public class AddEditPollModel : BaseForumModel
 
 		if (topic.Poll is not null)
 		{
-			AnyVotes = topic.Poll.PollOptions.SelectMany(o => o.Votes).Any();
-
-			Poll = new PollCreateModel
+			Poll = new PollCreate
 			{
 				MultiSelect = topic.Poll.MultiSelect,
 				Question = topic.Poll.Question,
@@ -65,7 +43,8 @@ public class AddEditPollModel : BaseForumModel
 				PollOptions = topic.Poll.PollOptions
 					.OrderBy(o => o.Ordinal)
 					.Select(o => o.Text)
-					.ToList()
+					.ToList(),
+				HasVotes = topic.Poll.PollOptions.SelectMany(o => o.Votes).Any()
 			};
 
 			PollId = topic.PollId;
@@ -76,24 +55,27 @@ public class AddEditPollModel : BaseForumModel
 
 	public async Task<IActionResult> OnPost()
 	{
+		if (string.IsNullOrEmpty(Poll.Question))
+		{
+			ModelState.AddModelError($"{nameof(Poll)}.{nameof(Poll.Question)}", "The Question field is required.");
+		}
+
+		if (!Poll.OptionsAreValid)
+		{
+			ModelState.AddModelError($"{nameof(Poll)}.{nameof(Poll.PollOptions)}", "Enter at least 2 options. Each option must be a string with a maximum length of 250.");
+			return Page();
+		}
+
 		if (!ModelState.IsValid)
 		{
 			return Page();
 		}
 
-		if (!Poll.OptionsAreValid)
-		{
-			ModelState.AddModelError($"{nameof(Poll.PollOptions)}", "Invalid poll options");
-			return Page();
-		}
-
-		var seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
-
-		var topic = await _db.ForumTopics
+		var topic = await db.ForumTopics
 			.Include(t => t.Poll)
 			.ThenInclude(p => p!.PollOptions)
 			.ThenInclude(o => o.Votes)
-			.ExcludeRestricted(seeRestricted)
+			.ExcludeRestricted(UserCanSeeRestricted)
 			.Where(t => t.Id == TopicId)
 			.SingleOrDefaultAsync();
 
@@ -104,13 +86,12 @@ public class AddEditPollModel : BaseForumModel
 
 		if (topic.Poll is not null)
 		{
-			AnyVotes = topic.Poll.PollOptions.SelectMany(o => o.Votes).Any();
-
 			topic.Poll.CloseDate = Poll.DaysOpen.HasValue
 				? DateTime.UtcNow.AddDays(Poll.DaysOpen.Value)
 				: null;
 
-			if (!AnyVotes)
+			var hasVotes = topic.Poll.PollOptions.SelectMany(o => o.Votes).Any();
+			if (!hasVotes)
 			{
 				topic.Poll.MultiSelect = Poll.MultiSelect;
 				topic.Poll.Question = Poll.Question ?? "";
@@ -123,15 +104,43 @@ public class AddEditPollModel : BaseForumModel
 					}));
 			}
 
-			await ConcurrentSave(_db, "Poll edited", "Unable to clear existing poll");
+			SetMessage(await db.TrySaveChanges(), "Poll edited", "Unable to clear existing poll");
 		}
 		else
 		{
-			await _forumService.CreatePoll(
+			await forumService.CreatePoll(
 				topic,
-				new PollCreateDto(Poll.Question, Poll.DaysOpen, Poll.MultiSelect, Poll.PollOptions));
+				new Core.Services.PollCreate(Poll.Question, Poll.DaysOpen, Poll.MultiSelect, Poll.PollOptions));
 		}
 
 		return RedirectToPage("Index", new { Id = TopicId });
+	}
+
+	public class PollCreate
+	{
+		[StringLength(200, MinimumLength = 8)]
+		public string? Question { get; init; }
+
+		[Range(0, 365)]
+		public int? DaysOpen { get; init; }
+
+		public bool MultiSelect { get; init; }
+
+		public List<string> PollOptions { get; init; } = ["", ""];
+
+		public bool IsValid =>
+			!string.IsNullOrWhiteSpace(Question)
+			&& Question.Length <= 200
+			&& OptionsAreValid;
+
+		public bool OptionsAreValid =>
+			PollOptions.Count(o => !string.IsNullOrWhiteSpace(o)) > 1
+			&& PollOptions.All(o => o.Length <= 250);
+
+		public bool HasAnyField => !string.IsNullOrWhiteSpace(Question)
+			|| DaysOpen.HasValue
+			|| PollOptions.Any(o => !string.IsNullOrWhiteSpace(o));
+
+		public bool HasVotes { get; set; }
 	}
 }

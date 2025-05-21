@@ -4,12 +4,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\TASVideos.Data\TASVideos.Data.csproj" />
 		<ProjectReference Include="..\..\TASVideos.ForumEngine\TASVideos.ForumEngine.csproj" />
 	</ItemGroup>
 
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<TargetFramework>net6.0</TargetFramework>
+		<TargetFramework>net8.0</TargetFramework>
 	</PropertyGroup>
 </Project>

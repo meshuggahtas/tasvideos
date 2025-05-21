@@ -11,21 +11,13 @@ public static class Util
 		try
 		{
 			var results = NewParser.Parse(content);
-			return JsonSerializer.Serialize(results, new JsonSerializerOptions
-			{
-				WriteIndented = true
-			});
+			return JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true });
 		}
 		catch (NewParser.SyntaxException e)
 		{
 			return JsonSerializer.Serialize(
-				new
-				{
-					Error = e.Message
-				}, new JsonSerializerOptions
-				{
-					WriteIndented = true
-				});
+				new { Error = e.Message },
+				new JsonSerializerOptions { WriteIndented = true });
 		}
 	}
 
@@ -80,6 +72,30 @@ public static class Util
 		}
 	}
 
+	public static async Task RenderMetaDescriptionAsync(string content, StringBuilder sb, IWriterHelper h)
+	{
+		List<INode> results;
+		try
+		{
+			results = NewParser.Parse(content);
+		}
+		catch (NewParser.SyntaxException e)
+		{
+			results = Builtins.MakeErrorPage(content, e);
+		}
+
+		var ctx = new WriterContext(h);
+		foreach (var r in results)
+		{
+			if (sb.Length >= SiteGlobalConstants.MetaDescriptionLength)
+			{
+				break;
+			}
+
+			await r.WriteMetaDescriptionAsync(sb, ctx);
+		}
+	}
+
 	/// <summary>
 	/// Returns all the referrals to other site pages that exist in the given wiki markup.
 	/// </summary>
@@ -89,7 +105,7 @@ public static class Util
 		{
 			if (string.IsNullOrWhiteSpace(content))
 			{
-				return Enumerable.Empty<InternalLinkInfo>();
+				return [];
 			}
 
 			var parsed = NewParser.Parse(content);
@@ -101,7 +117,7 @@ public static class Util
 		}
 		catch (NewParser.SyntaxException)
 		{
-			return Enumerable.Empty<InternalLinkInfo>();
+			return [];
 		}
 	}
 }

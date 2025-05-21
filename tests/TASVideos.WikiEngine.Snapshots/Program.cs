@@ -5,7 +5,9 @@ using TASVideos.Data.Entity;
 using TASVideos.WikiEngine;
 using TASVideos.WikiEngine.AST;
 
-//namespace TASVideos.WikiEngine.Snapshots;
+#if false
+namespace TASVideos.WikiEngine.Snapshots;
+#endif
 
 /*
 	1. Clone https://github.com/nattthebear/TASVideosWikiSnaps.git to somewhere
@@ -35,7 +37,7 @@ if (string.IsNullOrWhiteSpace(settings?.ConnectionString) || string.IsNullOrWhit
 }
 
 var serviceProvider = new ServiceCollection()
-	.AddTasvideosData(settings.ConnectionString)
+	.AddTasvideosData(true, settings.ConnectionString)
 	.BuildServiceProvider();
 
 var context = serviceProvider.GetRequiredService<ApplicationDbContext>();
@@ -53,7 +55,7 @@ string? filter = null;
 
 var query = context.WikiPages
 	.ThatAreNotDeleted()
-	.WithNoChildren();
+	.ThatAreCurrent();
 if (filter != null)
 {
 	query = query.Where(wp => wp.PageName.Contains(filter));
@@ -94,7 +96,9 @@ foreach (var wp in toProcess)
 	var revision = wantUpdate ? wp.Revision : existingRevision != -1 ? existingRevision : wp.Revision;
 
 	if (existingRevision == revision && !force)
+	{
 		continue;
+	}
 
 	var markup = context.WikiPages
 		.Where(p => p.Revision == revision && p.PageName == wp.PageName)

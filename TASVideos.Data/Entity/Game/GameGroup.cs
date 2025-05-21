@@ -1,16 +1,17 @@
-﻿namespace TASVideos.Data.Entity.Game;
+﻿using TASVideos.Data.AutoHistory;
 
+namespace TASVideos.Data.Entity.Game;
+
+[IncludeInAutoHistory]
 public class GameGroup
 {
 	public int Id { get; set; }
 
-	[Required]
-	[StringLength(255)]
 	public string Name { get; set; } = "";
 
-	[Required]
-	[StringLength(255)]
-	public string SearchKey { get; set; } = "";
+	public string? Abbreviation { get; set; }
 
-	public ICollection<GameGameGroup> Games { get; set; } = new HashSet<GameGameGroup>();
+	public string? Description { get; set; }
+
+	public ICollection<GameGameGroup> Games { get; init; } = [];
 }

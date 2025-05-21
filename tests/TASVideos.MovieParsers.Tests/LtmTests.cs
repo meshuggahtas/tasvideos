@@ -1,30 +1,43 @@
-﻿namespace TASVideos.MovieParsers.Tests;
+﻿using TASVideos.Extensions;
+
+namespace TASVideos.MovieParsers.Tests;
 
 [TestClass]
 [TestCategory("LtmParsers")]
 public class LtmTests : BaseParserTests
 {
-	private readonly Ltm _ltmParser;
+	private readonly Ltm _ltmParser = new();
 
-	public override string ResourcesPath { get; } = "TASVideos.MovieParsers.Tests.LtmSampleFiles.";
-
-	public LtmTests()
-	{
-		_ltmParser = new Ltm();
-	}
+	protected override string ResourcesPath => "TASVideos.MovieParsers.Tests.LtmSampleFiles.";
 
 	[TestMethod]
-	[DataRow("linux.ltm", SystemCodes.Linux)]
+	[DataRow("arcade.ltm", SystemCodes.Arcade)]
+	[DataRow("dos.ltm", SystemCodes.Dos)]
 	[DataRow("flash.ltm", SystemCodes.Flash)]
 	[DataRow("flash-extrachars-linuxfallback.ltm", SystemCodes.Linux)]
+	[DataRow("linux.ltm", SystemCodes.Linux)]
+	[DataRow("macos.ltm", SystemCodes.MacOs)]
+	[DataRow("pc98.ltm", SystemCodes.Pc98)]
+	[DataRow("pico8.ltm", SystemCodes.Pico8)]
+	[DataRow("ruffle.ltm", SystemCodes.Flash)]
+	[DataRow("ruffle-windows-override.ltm", SystemCodes.Windows)]
 	[DataRow("unknown-linuxfallback.ltm", SystemCodes.Linux)]
 	[DataRow("windows.ltm", SystemCodes.Windows)]
-	[DataRow("dos.ltm", SystemCodes.Dos)]
 	public async Task SystemId(string filename, string expectedSystemCode)
 	{
 		var actual = await _ltmParser.Parse(Embedded(filename), EmbeddedLength(filename));
 		Assert.IsNotNull(actual);
 		Assert.AreEqual(expectedSystemCode, actual.SystemCode);
+	}
+
+	[TestMethod]
+	public async Task Annotations()
+	{
+		var result = await _ltmParser.Parse(Embedded("annotations.ltm"), EmbeddedLength("annotations.ltm"));
+		Assert.IsTrue(result.Success);
+		Assert.IsFalse(string.IsNullOrWhiteSpace(result.Annotations));
+		var lines = result.Annotations.SplitWithEmpty("\n");
+		Assert.AreEqual(2, lines.Length);
 	}
 
 	[TestMethod]
@@ -76,7 +89,6 @@ public class LtmTests : BaseParserTests
 		Assert.IsTrue(result.Success);
 		Assert.AreEqual(Ltm.DefaultFrameRate, result.FrameRateOverride);
 		AssertNoErrors(result);
-		Assert.IsNotNull(result.Warnings);
 		Assert.AreEqual(1, result.Warnings.Count());
 	}
 
@@ -111,5 +123,35 @@ public class LtmTests : BaseParserTests
 		Assert.AreEqual(SystemCodes.Linux, result.SystemCode);
 		Assert.AreEqual(30.002721239119342, result.FrameRateOverride);
 		AssertNoWarningsOrErrors(result);
+	}
+
+	[TestMethod]
+	public async Task Hash()
+	{
+		var result = await _ltmParser.Parse(Embedded("hash.ltm"), EmbeddedLength("hash.ltm"));
+		Assert.AreEqual(1, result.Hashes.Count);
+		Assert.AreEqual(HashType.Md5, result.Hashes.First().Key);
+		Assert.AreEqual("7d66e47fdc0807927c40ce1491c68ad3", result.Hashes.First().Value);
+	}
+
+	[TestMethod]
+	public async Task NoHash()
+	{
+		var result = await _ltmParser.Parse(Embedded("no-hash.ltm"), EmbeddedLength("no-hash.ltm"));
+		Assert.AreEqual(0, result.Hashes.Count);
+	}
+
+	[TestMethod]
+	public async Task MissingHash()
+	{
+		var result = await _ltmParser.Parse(Embedded("missing-hash.ltm"), EmbeddedLength("missing-hash.ltm"));
+		Assert.AreEqual(0, result.Hashes.Count);
+	}
+
+	[TestMethod]
+	public async Task InvalidHash()
+	{
+		var result = await _ltmParser.Parse(Embedded("invalid-hash.ltm"), EmbeddedLength("invalid-hash.ltm"));
+		Assert.AreEqual(0, result.Hashes.Count);
 	}
 }

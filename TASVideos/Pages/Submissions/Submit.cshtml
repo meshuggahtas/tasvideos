@@ -1,131 +1,128 @@
 ﻿@page
-@using TASVideos.Data.Helpers
 @model SubmitModel
 @{
-	ViewData["Title"] = "Submit Movie";
-	// ReSharper disable once UnusedVariable
+	ViewData.SetTitle("Submit Movie");
+	ViewData.UseClientFileCompression();
 	var notSupportedError = ViewData.ModelState.Values.Any(v => v.Errors.Any(e => e.ErrorMessage.Contains("not currently supported"))); // TODO: a less brittle check
 	var parseErrors = !notSupportedError && ViewData.ModelState.Keys.Any(e => e == "Parser");
 }
+
 <info-alert dismissible="true">
-	@await Component.RenderWiki("System/SubmitMovieHeader")
+	@await Html.RenderWiki(SystemWiki.SubmitMovieHeader)
 </info-alert>
-<hr />
-<div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
 <warning-alert dismissible="true" condition="notSupportedError">
-	@await Component.RenderWiki("System/SupportedMovieTypes")
+	@await Html.RenderWiki(SystemWiki.SupportedMovieTypes)
 </warning-alert>
 <danger-alert dismissible="true" condition="parseErrors">
-	@await Component.RenderWiki("System/SubmissionZipFailure")
+	@await Html.RenderWiki(SystemWiki.SubmissionZipFailure)
 </danger-alert>
-<form method="post" enctype="multipart/form-data">
+<span id="backup-submission-determinator" class="d-none">@Model.BackupSubmissionDeterminator</span>
+<form client-side-validation="true" method="post" enctype="multipart/form-data">
 	<row>
 		<column lg="6">
-			<form-group>
-				<label asp-for="Create.MovieFile" class="form-control-label"></label>
-				<input type="file" asp-for="Create.MovieFile" class="form-control" />
-				<div>@Html.DescriptionFor(m => m.Create.MovieFile)</div>
-				<span asp-validation-for="Create.MovieFile" class="text-danger"></span>
-			</form-group>
+			<fieldset>
+				<label asp-for="MovieFile"></label>
+				<input asp-for="MovieFile" data-id="movie-file" />
+				<span asp-validation-for="MovieFile"></span>
+				<div data-id="nozip-reminder" class="alert alert-warning d-none">Note: You no longer need to zip your movie file. You can select your original movie file and your browser will automatically compress it before uploading.</div>
+			</fieldset>
 		</column>
 		<column lg="6">
-			<form-group>
-				<label asp-for="Create.Authors" class="form-control-label"></label>
-				<string-list asp-for="Create.Authors" />
-				<span asp-validation-for="Create.Authors" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Create.AdditionalAuthors" class="form-control-label"></label>
-				<input asp-for="Create.AdditionalAuthors" class="form-control" />
-				<div>@Html.DescriptionFor(m => m.Create.AdditionalAuthors)</div>
-				<span asp-validation-for="Create.AdditionalAuthors" class="text-danger"></span>
-			</form-group>
+			<fieldset>
+				<label asp-for="Authors">Author(s)</label>
+				<string-list asp-for="Authors" />
+				<span asp-validation-for="Authors"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="ExternalAuthors"></label>
+				<input asp-for="ExternalAuthors" />
+				<div>Only authors not registered for TASVideos should be listed here. If multiple authors, separate the names with a comma.</div>
+				<span asp-validation-for="ExternalAuthors"></span>
+			</fieldset>
 		</column>
 	</row>
 	<row>
 		<column lg="6">
-			<form-group>
-				<label asp-for="Create.GameVersion" class="form-control-label"></label>
-				<select asp-for="Create.GameVersion" asp-items="@SubmissionHelper.GameVersionOptions" class="form-control"></select>
-				<span asp-validation-for="Create.GameVersion" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Create.GameName" class="form-control-label"></label>
-				<input asp-for="Create.GameName" class="form-control" placeholder="@Html.DescriptionFor(m => m.Create.GameName)" />
-				<span asp-validation-for="Create.GameName" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Create.Emulator" class="form-control-label"></label>
-				<input asp-for="Create.Emulator" spellcheck="false" class="form-control" placeholder="@Html.DescriptionFor(m => m.Create.Emulator)" />
-				<span asp-validation-for="Create.Emulator" class="text-danger"></span>
-			</form-group>
+			<fieldset>
+				<label asp-for="GameVersion"></label>
+				<input asp-for="GameVersion" placeholder="USA v1.0" />
+				<span asp-validation-for="GameVersion"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="GameName"></label>
+				<input asp-for="GameName" placeholder="Example: Mega Man 2" />
+				<span asp-validation-for="GameName"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Emulator">Emulator and version</label>
+				<input asp-for="Emulator" spellcheck="false" placeholder="Example: BizHawk 2.8.0" />
+				<span asp-validation-for="Emulator"></span>
+			</fieldset>
 		</column>
 		<column lg="6">
-			<form-group>
-				<label asp-for="Create.Branch" class="form-control-label"></label>
-				<input asp-for="Create.Branch" class="form-control" placeholder="@Html.DescriptionFor(m => m.Create.Branch)" />
-				<span asp-validation-for="Create.Branch" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Create.RomName" class="form-control-label"></label>
-				<input asp-for="Create.RomName" class="form-control" placeholder="@Html.DescriptionFor(m => m.Create.RomName)" />
-				<span asp-validation-for="Create.RomName" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Create.EncodeEmbedLink" class="form-control-label"></label>
-				<input asp-for="Create.EncodeEmbedLink" class="form-control" placeholder="@Html.DescriptionFor(m => m.Create.EncodeEmbedLink)" />
-				<span asp-validation-for="Create.EncodeEmbedLink" class="text-danger"></span>
-			</form-group>
+			<fieldset>
+				<label asp-for="GoalName"></label>
+				<input asp-for="GoalName" placeholder="Example: 100% or princess only; any% can usually be omitted" />
+				<span asp-validation-for="GoalName"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="RomName">ROM filename</label>
+				<input asp-for="RomName" placeholder="Example: Mega Man II (U) [!].nes" />
+				<span asp-validation-for="RomName"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="EncodeEmbeddedLink"></label>
+				<input asp-for="EncodeEmbeddedLink" placeholder="https://www.youtube.com/embed/0mregEW6kVU" />
+				<div>Embedded link to a video of your movie. Must be YouTube or niconico.</div>
+				<span asp-validation-for="EncodeEmbeddedLink"></span>
+			</fieldset>
 		</column>
 	</row>
 	<fullrow>
-		<form-group>
-			<label asp-for="Create.Markup" class="form-control-label"></label>
+		<fieldset>
+			<label asp-for="Markup">Comments and explanations</label>
 			<span>
-				@await Component.RenderWiki("System/SubmissionImportant")
+				@await Html.RenderWiki(SystemWiki.SubmissionImportant)
 			</span>
-			<textarea asp-for="Create.Markup" rows="12" class="form-control wiki-edit"></textarea>
-			<span asp-validation-for="Create.Markup" class="text-danger"></span>
+			<wiki-edit-helper></wiki-edit-helper>
+			<wiki-textarea asp-for="Markup" rows="12" backup-content="true" data-backup-key="backup-submission"></wiki-textarea>
+			<span asp-validation-for="Markup"></span>
+			<fullrow id="backup-restore" class="d-none mt-2">
+				<button id="backup-restore-button" type="button" class="btn btn-secondary">Restore Text</button>
+				<label class="text-body-tertiary">from <span id="backup-time"></span></label>
+			</fullrow>
 			<div>
 				<button id="prefill-btn" type="button" class="btn btn-secondary mt-2">Prefill comments</button>
 			</div>
-		</form-group>
+		</fieldset>
 	</fullrow>
-	<hr />
-	<fullrow class="text-center">
-		<button id="preview-button" type="button" class="btn btn-secondary"><i class="fa fa-eye"></i> Preview</button>
-		<submit-button id="submit-btn" class="btn btn-primary border border-warning @(Model.Create.Markup.Length > 0 ? "" : "d-none")">Submit</submit-button>
-		<br />
-		<br />
-		<div id="submit-blurb" class="text-center alert-info d-none" role="alert">
-			<div>@await Component.RenderWiki("System/SubmissionWarning")</div>
-			<label class="small alert-info">
-				@await Component.RenderWiki("System/WikiEditNote")
-			</label>
+	<row class="text-center justify-content-center mb-1 fs-6">
+		<div class="col-auto">
+			<div class="form-check">
+				<input asp-for="AgreeToInstructions" class="form-check-input" />
+				<label asp-for="AgreeToInstructions" class="form-check-label">I have read and followed the TASVideos <a href="/SubmissionInstructions">Submission Instructions</a>.</label>
+				<br />
+				<span asp-validation-for="AgreeToInstructions"></span>
+			</div>
 		</div>
-	</fullrow>
+	</row>
+	<row class="text-center justify-content-center mb-3 fs-6">
+		<div class="col-auto">
+			<div class="form-check">
+				<input asp-for="AgreeToLicense" class="form-check-input" />
+				<label asp-for="AgreeToLicense" class="form-check-label">I agree to publishing this content under the <a href="https://creativecommons.org/licenses/by/2.0/">Creative Commons Attribution 2.0</a> license.</label>
+				<br />
+				<span asp-validation-for="AgreeToLicense"></span>
+			</div>
+		</div>
+	</row>
+	<form-button-bar>
+		<preview-button></preview-button>
+		<submit-button id="submit-btn">Submit</submit-button>
+	</form-button-bar>
 </form>
-
-<partial name="_PreviewWindow" model="@((Html.IdFor(m => m.Create.Markup), "/Wiki/Preview"))" />
+<wiki-preview></wiki-preview>
 @section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-	<script>
-		document.getElementById('prefill-btn').onclick = function () {
-			const markup = document.getElementById('@Html.IdFor(m => m.Create.Markup)').value;
-			if (markup) {
-				return;
-			}
-
-			fetch("/Submissions/Submit?handler=PrefillText")
-				.then(handleFetchErrors)
-				.then(r => r.json())
-				.then(data => {
-					document.getElementById('@Html.IdFor(m => m.Create.Markup)').value = data.text;
-				});
-		};
-		document.getElementById('preview-button').addEventListener('click', function () {
-			document.getElementById('submit-btn').classList.remove('d-none');
-			document.getElementById('submit-blurb').classList.remove('d-none');
-		});
-	</script>
+	<script src="/js/submit.js"></script>
+	<script src="/js/compress-file.js"></script>
 }

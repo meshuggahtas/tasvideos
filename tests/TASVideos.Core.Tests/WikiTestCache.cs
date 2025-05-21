@@ -1,6 +1,6 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
-using TASVideos.Core.Services;
+using TASVideos.Core.Services.Wiki;
 using TASVideos.Data.Entity;
 
 namespace TASVideos.Core.Tests;
@@ -12,20 +12,18 @@ internal class WikiTestCache : ICacheService
 		ReferenceHandler = ReferenceHandler.IgnoreCycles
 	};
 
-	private readonly Dictionary<string, string> _cache = new();
+	private readonly Dictionary<string, string> _cache = [];
 
 	public void AddPage(WikiPage page)
 	{
-		Set($"{CacheKeys.CurrentWikiCache}-{page.PageName.ToLower()}", page);
+		Set($"{CacheKeys.CurrentWikiCache}-{page.PageName.ToLower()}", page.ToWikiResult());
 	}
 
-	public List<WikiPage> PageCache()
+	public List<WikiResult> PageCache()
 	{
-		List<WikiPage> pages = _cache
-				.Select(kvp => JsonSerializer.Deserialize<WikiPage>(kvp.Value)!)
-				.ToList();
-
-		return pages;
+		return _cache
+			.Select(kvp => JsonSerializer.Deserialize<WikiResult>(kvp.Value)!)
+			.ToList();
 	}
 
 	public void Remove(string key)
@@ -33,11 +31,11 @@ internal class WikiTestCache : ICacheService
 		_cache.Remove(key);
 	}
 
-	public void Set(string key, object? data, int? cacheTime = null)
+	public void Set<T>(string key, T data, TimeSpan? cacheTime = null)
 	{
-		if (data is not WikiPage)
+		if (data is not WikiResult)
 		{
-			throw new InvalidOperationException($"data must be of type {nameof(WikiPage)}");
+			throw new InvalidOperationException($"data must be of type {nameof(WikiResult)}");
 		}
 
 		var serialized = JsonSerializer.Serialize(data, SerializerSettings);

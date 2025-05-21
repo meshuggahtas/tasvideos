@@ -1,0 +1,70 @@
+﻿@page "{id}/{handler?}/{systemId?}"
+@model EditFramerateModel
+@{
+	ViewData.SetTitle(
+		$"Editing Framerate: {Model.FrameRate.SystemCode} {Model.FrameRate.RegionCode} {Model.FrameRate.FrameRate}");
+}
+
+<top-button-bar>
+	<span condition = "Model.InUse">This entry cannot be deleted because it is in use</span>
+	<delete-button condition="!Model.InUse" asp-href="/Systems/EditFramerate/@(Model.Id)/Delete/@Model.FrameRate.SystemId"></delete-button>
+</top-button-bar>
+<div condition="Model.PublicationEntries.Any()">
+	<h4>Publications using this framerate</h4>
+	<ul>
+		@foreach (var pub in Model.PublicationEntries)
+		{
+			<li>
+				<pub-link id="@pub.Id">@pub.Title</pub-link>
+			</li>
+		}
+	</ul>
+</div>
+
+<div condition="Model.SubmissionEntries.Any()">
+	<h4>Submissions using this framerate</h4>
+	<ul>
+		@foreach (var sub in Model.SubmissionEntries)
+		{
+			<li>
+				<sub-link id="@sub.Id">@sub.Title</sub-link>
+			</li>
+		}
+	</ul>
+</div>
+
+<form method="post">
+	<input type="hidden" asp-for="FrameRate.SystemId" />
+	<input type="hidden" asp-for="FrameRate.SystemCode" />
+	<row>
+		<column lg="6">
+			<fieldset>
+				<label asp-for="FrameRate.FrameRate"></label>
+				<input asp-for="FrameRate.FrameRate" />
+				<span asp-validation-for="FrameRate"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="FrameRate.RegionCode"></label>
+				<input asp-for="FrameRate.RegionCode" />
+				<span asp-validation-for="FrameRate.RegionCode"></span>
+			</fieldset>
+			<fieldset>
+				<label>Indicates that the framerate is provisional for now and not intended to be an accurate value</label>
+				<div class="form-check">
+					<label asp-for="FrameRate.Preliminary" class="form-check-label"></label>
+					<input asp-for="FrameRate.Preliminary" type="checkbox" class="form-check-input"/>
+				</div>
+			</fieldset>
+			<fieldset>
+				<div class="form-check">
+					<label asp-for="FrameRate.Obsolete" class="form-check-label"></label>
+					<input asp-for="FrameRate.Obsolete" type="checkbox" class="form-check-input"/>
+				</div>
+			</fieldset>
+		</column>
+	</row>
+	<form-button-bar>
+		<submit-button></submit-button>
+		<cancel-link asp-page="Edit" asp-route-id="@Model.FrameRate.SystemId"></cancel-link>
+	</form-button-bar>
+</form>

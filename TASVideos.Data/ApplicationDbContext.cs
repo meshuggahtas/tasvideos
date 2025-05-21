@@ -1,20 +1,13 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Awards;
-using TASVideos.Data.Entity.Forum;
-using TASVideos.Data.Entity.Game;
+using TASVideos.Data.AutoHistory;
 
 namespace TASVideos.Data;
 
 public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim, UserRole, UserLogin, RoleClaim, UserToken>
 {
 	private readonly IHttpContextAccessor? _httpContext;
-
-	internal const string SystemUser = "admin@tasvideos.org";
 
 	public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
 		: base(options)
@@ -26,6 +19,8 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 	{
 		_httpContext = httpContextAccessor;
 	}
+
+	public DbSet<AutoHistoryEntry> AutoHistory { get; set; } = null!;
 
 	public DbSet<RolePermission> RolePermission { get; set; } = null!;
 	public DbSet<WikiPage> WikiPages { get; set; } = null!;
@@ -60,11 +55,10 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 	public DbSet<Genre> Genres { get; set; } = null!;
 	public DbSet<GameSystem> GameSystems { get; set; } = null!;
 	public DbSet<GameSystemFrameRate> GameSystemFrameRates { get; set; } = null!;
-	public DbSet<GameRom> GameRoms { get; set; } = null!;
+	public DbSet<GameVersion> GameVersions { get; set; } = null!;
 	public DbSet<GameGroup> GameGroups { get; set; } = null!;
 	public DbSet<GameGameGroup> GameGameGroups { get; set; } = null!;
-	public DbSet<GameRamAddressDomain> GameRamAddressDomains { get; set; } = null!;
-	public DbSet<GameRamAddress> GameRamAddresses { get; set; } = null!;
+	public DbSet<GameGoal> GameGoals { get; set; } = null!;
 
 	// Forum tables
 	public DbSet<ForumCategory> ForumCategories { get; set; } = null!;
@@ -96,32 +90,88 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 		PerformTrackingUpdates();
 
 		ChangeTracker.AutoDetectChangesEnabled = false;
+
+		// remember added entries,
+		// before EF Core is assigning valid Ids (it does on save changes,
+		// when ids equal zero) and setting their state to
+		// Unchanged (it does on every save changes)
+		var addedEntities = ChangeTracker
+								.Entries()
+								.Where(e => e.State == EntityState.Added)
+								.ToArray();
+
+		this.EnsureAutoHistory(() => new AutoHistoryEntry
+		{
+			UserId = _httpContext?.HttpContext?.User.GetUserId() ?? -1
+		});
 		var result = base.SaveChanges(acceptAllChangesOnSuccess);
+
+		// after "SaveChanges" added entities now have gotten valid ids (if it was necessary)
+		// and the history for them can be ensured and be saved with another "SaveChanges"
+		this.EnsureAddedHistory(
+			() => new AutoHistoryEntry
+			{
+				UserId = _httpContext?.HttpContext?.User.GetUserId() ?? -1
+			},
+			addedEntities);
+		result += base.SaveChanges(acceptAllChangesOnSuccess);
+
 		ChangeTracker.AutoDetectChangesEnabled = true;
 
 		return result;
 	}
 
-	public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+	public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
 	{
 		PerformTrackingUpdates();
-		return base.SaveChangesAsync(cancellationToken);
+
+		// remember added entries,
+		// before EF Core is assigning valid Ids (it does on save changes,
+		// when ids equal zero) and setting their state to
+		// Unchanged (it does on every save changes)
+		var addedEntities = ChangeTracker
+								.Entries()
+								.Where(e => e.State == EntityState.Added)
+								.ToArray();
+
+		this.EnsureAutoHistory(() => new AutoHistoryEntry
+		{
+			UserId = _httpContext?.HttpContext?.User.GetUserId() ?? -1
+		});
+		var result = await base.SaveChangesAsync(cancellationToken);
+
+		// after "SaveChanges" added entities now have gotten valid ids (if it was necessary)
+		// and the history for them can be ensured and be saved with another "SaveChanges"
+		this.EnsureAddedHistory(
+			() => new AutoHistoryEntry
+			{
+				UserId = _httpContext?.HttpContext?.User.GetUserId() ?? -1
+			},
+			addedEntities);
+		result += await base.SaveChangesAsync(CancellationToken.None);
+
+		return result;
 	}
 
 	/// <summary>
-	/// Attempts to save changes, but if a <see cref="DbUpdateConcurrencyException"/> occurs,
+	/// Attempts to save changes, but if a <see cref="DbUpdateConcurrencyException"/> or a <see cref="DbUpdateException"/> occurs,
 	/// it will be caught no changes will be saved.  Only to be used if discarding the data is
 	/// an acceptable handling.
 	/// </summary>
-	public async Task<int> TrySaveChangesAsync(CancellationToken cancellationToken = default)
+	public async Task<SaveResult> TrySaveChanges(CancellationToken cancellationToken = default)
 	{
 		try
 		{
-			return await SaveChangesAsync(cancellationToken);
+			await SaveChangesAsync(cancellationToken);
+			return SaveResult.Success;
 		}
 		catch (DbUpdateConcurrencyException)
 		{
-			return 0;
+			return SaveResult.ConcurrencyFailure;
+		}
+		catch (DbUpdateException)
+		{
+			return SaveResult.UpdateFailure;
 		}
 	}
 
@@ -138,8 +188,12 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 			}
 
 			builder.HasPostgresExtension("citext");
-			builder.HasPostgresExtension("pg_trgm");
 		}
+
+		builder.Entity<Award>(entity =>
+		{
+			entity.HasIndex(e => e.ShortName).IsUnique();
+		});
 
 		builder.Entity<User>(entity =>
 		{
@@ -217,13 +271,10 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 
 			if (Database.IsNpgsql())
 			{
-				entity.HasIndex(e => e.Markup)
-					.HasMethod("gin")
-					.HasOperators("gin_trgm_ops");
 				entity
 					.HasGeneratedTsVectorColumn(
 						p => p.SearchVector,
-						"english",  // Text search config
+						"english", // Text search config
 						p => new { p.PageName, p.Markup })
 					.HasIndex(p => p.SearchVector)
 					.HasMethod("GIN");
@@ -270,13 +321,15 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 				.WithMany(s => s.Publications)
 				.OnDelete(DeleteBehavior.Restrict);
 
-			entity.HasOne(p => p.Rom)
+			entity.HasOne(p => p.GameVersion)
 				.WithMany(r => r.Publications)
 				.OnDelete(DeleteBehavior.Restrict);
 
 			entity.HasMany(p => p.ObsoletedMovies)
 				.WithOne(p => p.ObsoletedBy!)
 				.OnDelete(DeleteBehavior.Restrict);
+
+			entity.HasIndex(e => e.MovieFileName).IsUnique();
 		});
 
 		builder.Entity<GameGenre>(entity =>
@@ -285,19 +338,8 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 			entity.HasIndex(e => e.GameId);
 		});
 
-		builder.Entity<Genre>(entity =>
-		{
-			entity.Property(e => e.Id)
-				.ValueGeneratedNever()
-				.HasAnnotation("DatabaseGenerated", DatabaseGeneratedOption.None);
-		});
-
 		builder.Entity<Flag>(entity =>
 		{
-			entity.Property(e => e.Id)
-				.ValueGeneratedNever()
-				.HasAnnotation("DatabaseGenerated", DatabaseGeneratedOption.None);
-
 			entity.HasIndex(e => e.Token).IsUnique();
 		});
 
@@ -315,9 +357,9 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 
 		builder.Entity<PublicationRating>(entity =>
 		{
-			entity.HasKey(e => new { e.UserId, e.PublicationId, e.Type });
+			entity.HasKey(e => new { e.UserId, e.PublicationId });
 			entity.HasIndex(e => e.PublicationId);
-			entity.HasIndex(e => new { e.UserId, e.PublicationId, e.Type })
+			entity.HasIndex(e => new { e.UserId, e.PublicationId })
 				.IsUnique();
 		});
 
@@ -369,10 +411,6 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 
 		builder.Entity<SubmissionRejectionReason>(entity =>
 		{
-			entity.Property(e => e.Id)
-				.ValueGeneratedNever()
-				.HasAnnotation("DatabaseGenerated", DatabaseGeneratedOption.None);
-
 			entity.HasIndex(e => e.DisplayName).IsUnique();
 		});
 
@@ -384,21 +422,23 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 
 		builder.Entity<GameGroup>(entity =>
 		{
-			entity.HasIndex(e => e.Name)
-				.IsUnique();
+			entity.HasIndex(e => e.Name).IsUnique();
+			entity.HasIndex(e => e.Abbreviation).IsUnique();
+		});
+
+		builder.Entity<Game>(entity =>
+		{
+			entity.HasIndex(e => e.Abbreviation).IsUnique();
 		});
 
 		builder.Entity<ForumPost>(entity =>
 		{
 			if (Database.IsNpgsql())
 			{
-				entity.HasIndex(e => e.Text)
-					.HasMethod("gin")
-					.HasOperators("gin_trgm_ops");
 				entity
 					.HasGeneratedTsVectorColumn(
 						p => p.SearchVector,
-						"english",  // Text search config
+						"english", // Text search config
 						p => p.Text)
 					.HasIndex(p => p.SearchVector)
 					.HasMethod("GIN");
@@ -434,6 +474,13 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 		{
 			entity.HasIndex(e => e.FileExtension).IsUnique();
 		});
+
+		builder.Entity<AutoHistoryEntry>(entity =>
+		{
+			entity.HasIndex(e => e.RowId);
+			entity.HasIndex(e => e.TableName);
+			entity.HasIndex(e => e.UserId);
+		});
 	}
 
 	private void PerformTrackingUpdates()
@@ -451,19 +498,9 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 					trackable.CreateTimestamp = DateTime.UtcNow;
 				}
 
-				if (string.IsNullOrWhiteSpace(trackable.CreateUserName))
-				{
-					trackable.CreateUserName = GetUser();
-				}
-
 				if (trackable.LastUpdateTimestamp.Year == 1)
 				{
 					trackable.LastUpdateTimestamp = trackable.CreateTimestamp;
-				}
-
-				if (string.IsNullOrWhiteSpace(trackable.LastUpdateUserName))
-				{
-					trackable.LastUpdateUserName = GetUser();
 				}
 			}
 		}
@@ -477,16 +514,9 @@ public class ApplicationDbContext : IdentityDbContext<User, Role, int, UserClaim
 				{
 					trackable.LastUpdateTimestamp = DateTime.UtcNow;
 				}
-
-				if (!IsModified(entry, nameof(ITrackable.LastUpdateUserName)))
-				{
-					trackable.LastUpdateUserName = GetUser();
-				}
 			}
 		}
 	}
-
-	private string GetUser() => _httpContext?.HttpContext?.User.Identity?.Name ?? SystemUser;
 
 	private static bool IsModified(EntityEntry entry, string propertyName)
 		=> entry.Properties

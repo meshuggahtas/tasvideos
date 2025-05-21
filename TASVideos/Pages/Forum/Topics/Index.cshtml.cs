@@ -1,47 +1,20 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
+﻿using TASVideos.Core.Services.Wiki;
 using TASVideos.Data.Entity.Forum;
-using TASVideos.Pages.Forum.Posts.Models;
-using TASVideos.Pages.Forum.Topics.Models;
 
 namespace TASVideos.Pages.Forum.Topics;
 
 [AllowAnonymous]
 [RequireCurrentPermissions]
-public class IndexModel : BaseForumModel
+public class IndexModel(
+	ApplicationDbContext db,
+	IExternalMediaPublisher publisher,
+	IAwards awards,
+	IForumService forumService,
+	IPointsService pointsService,
+	ITopicWatcher topicWatcher,
+	IWikiPages wikiPages)
+	: BaseForumModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly IAwards _awards;
-	private readonly IForumService _forumService;
-	private readonly IPointsService _pointsService;
-	private readonly ITopicWatcher _topicWatcher;
-	private readonly IWikiPages _wikiPages;
-
-	public IndexModel(
-		ApplicationDbContext db,
-		ExternalMediaPublisher publisher,
-		IAwards awards,
-		IForumService forumService,
-		IPointsService pointsService,
-		ITopicWatcher topicWatcher,
-		IWikiPages wikiPages)
-	{
-		_db = db;
-		_publisher = publisher;
-		_awards = awards;
-		_forumService = forumService;
-		_pointsService = pointsService;
-		_topicWatcher = topicWatcher;
-		_wikiPages = wikiPages;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
@@ -51,15 +24,16 @@ public class IndexModel : BaseForumModel
 	[FromQuery]
 	public bool ViewPollResults { get; set; } = false;
 
-	public ForumTopicModel Topic { get; set; } = new();
+	public TopicDisplay Topic { get; set; } = new();
 
-	public WikiPage? WikiPage { get; set; }
+	public IWikiPage? WikiPage { get; set; }
 
 	public string? EncodeEmbedLink { get; set; }
+	public int? PublicationId { get; set; }
 
-	public ForumPostEntry? HighlightedPost { get; set; }
+	public PostEntry? HighlightedPost { get; set; }
 
-	public bool SaveActivity { get; set; } = false;
+	public bool SaveActivity { get; set; }
 
 	public async Task<IActionResult> OnGet()
 	{
@@ -67,30 +41,42 @@ public class IndexModel : BaseForumModel
 			? User.GetUserId()
 			: null;
 
-		bool seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
-		var topic = await _db.ForumTopics
-			.ExcludeRestricted(seeRestricted)
-			.Select(t => new ForumTopicModel
+		var topic = await db.ForumTopics
+			.ExcludeRestricted(UserCanSeeRestricted)
+			.Select(t => new TopicDisplay
 			{
 				Id = t.Id,
 				IsWatching = userId.HasValue && t.ForumTopicWatches.Any(ft => ft.UserId == userId.Value),
 				Title = t.Title,
-				Type = t.Type,
+				Restricted = t.Forum!.Restricted,
 				ForumId = t.ForumId,
 				ForumName = t.Forum!.Name,
 				IsLocked = t.IsLocked,
 				LastPostId = t.ForumPosts.Any() ? t.ForumPosts.Max(p => p.Id) : -1,
 				SubmissionId = t.SubmissionId,
+				GameId = t.GameId,
+				GameName = t.Game != null ? t.Game.DisplayName : null,
+				CategoryId = t.Forum!.CategoryId,
 				Poll = t.PollId.HasValue
-					? new ForumTopicModel.PollModel
+					? new TopicDisplay.PollModel
 					{
 						PollId = t.PollId.Value,
 						Question = t.Poll!.Question,
 						CloseDate = t.Poll!.CloseDate,
 						MultiSelect = t.Poll!.MultiSelect,
-						ViewPollResults = ViewPollResults,
+						ViewPollResults = ViewPollResults
 					}
-					: null
+					: null,
+				TopicCreator = new PostEntry()
+				{
+					PosterName = t.Poster!.UserName,
+					PosterAvatar = t.Poster!.Avatar,
+					PosterMoodUrlBase = t.Poster!.MoodAvatarUrlBase,
+					PosterMood = t.ForumPosts.OrderBy(p => p.CreateTimestamp).First().PosterMood,
+					Text = t.ForumPosts.OrderBy(p => p.CreateTimestamp).First().Text,
+					EnableBbCode = t.ForumPosts.OrderBy(p => p.CreateTimestamp).First().EnableBbCode,
+					EnableHtml = t.ForumPosts.OrderBy(p => p.CreateTimestamp).First().EnableHtml,
+				}
 			})
 			.SingleOrDefaultAsync(t => t.Id == Id);
 
@@ -102,19 +88,26 @@ public class IndexModel : BaseForumModel
 		Topic = topic;
 		if (Topic.SubmissionId.HasValue)
 		{
-			WikiPage = await _wikiPages.Page(LinkConstants.SubmissionWikiPage + Topic.SubmissionId.Value);
-			EncodeEmbedLink = await _db.Submissions
+			WikiPage = await wikiPages.Page(LinkConstants.SubmissionWikiPage + Topic.SubmissionId.Value);
+			var sub = await db.Submissions
 				.Where(s => s.Id == Topic.SubmissionId.Value)
-				.Select(s => s.EncodeEmbedLink)
+				.Select(s => new { s.EncodeEmbedLink, PublicationId = s.Publication != null ? s.Publication.Id : (int?)null })
 				.SingleOrDefaultAsync();
+
+			if (sub is not null)
+			{
+				EncodeEmbedLink = sub.EncodeEmbedLink;
+				PublicationId = sub.PublicationId;
+			}
 		}
 
-		Topic.Posts = await _db.ForumPosts
+		Topic.Posts = await db.ForumPosts
 			.ForTopic(Id)
-			.Select(p => new ForumPostEntry
+			.Select(p => new PostEntry
 			{
 				Id = p.Id,
 				TopicId = Id,
+				Restricted = topic.Restricted,
 				EnableHtml = p.EnableHtml,
 				EnableBbCode = p.EnableBbCode,
 				PosterId = p.PosterId,
@@ -127,13 +120,18 @@ public class IndexModel : BaseForumModel
 				PosterLocation = p.Poster.From,
 				PosterRoles = p.Poster.UserRoles
 					.Where(ur => !ur.Role!.IsDefault)
+
+					// TODO: these violate separation of concerns, the code should not be aware of the specifics of what roles exist, as those can be any value a user chooses
 					.Where(ur => ur.Role!.Name != "Published Author")
+					.Where(ur => ur.Role!.Name != "Experienced Forum User")
 					.Select(ur => ur.Role!.Name)
 					.ToList(),
 				PosterJoined = p.Poster.CreateTimestamp,
 				PosterPostCount = p.Poster.Posts.Count,
 				PosterMood = p.PosterMood,
+				PosterIsBanned = p.Poster.BannedUntil.HasValue && p.Poster.BannedUntil > DateTime.UtcNow,
 				Text = p.Text,
+				PostEditedTimestamp = p.PostEditedTimestamp,
 				Subject = p.Subject,
 				Signature = p.Poster.Signature,
 				IsLastPost = p.Id == Topic.LastPostId
@@ -143,27 +141,22 @@ public class IndexModel : BaseForumModel
 
 		foreach (var post in Topic.Posts)
 		{
-			post.Awards = await _awards.ForUser(post.PosterId);
-			var (points, rank) = await _pointsService.PlayerPoints(post.PosterId);
+			post.Awards = await awards.ForUser(post.PosterId);
+			var (points, rank) = await pointsService.PlayerPoints(post.PosterId);
 			post.PosterPlayerPoints = points;
-			if (!string.IsNullOrWhiteSpace(rank))
-			{
-				post.PosterRoles.Add(rank);
-			}
+			post.PosterPlayerRank = rank;
 		}
 
 		if (Topic.Poll is not null)
 		{
-			Topic.Poll.Options = await _db.ForumPollOptions
+			Topic.Poll.Options = await db.ForumPollOptions
 				.ForPoll(Topic.Poll.PollId)
-				.Select(o => new ForumTopicModel.PollModel.PollOptionModel
-				{
-					Text = o.Text,
-					Ordinal = o.Ordinal,
-					Voters = o.Votes
+				.Select(o => new TopicDisplay.PollOption(
+					o.Text,
+					o.Ordinal,
+					o.Votes
 						.Select(v => v.UserId)
-						.ToList()
-				})
+						.ToList()))
 				.ToListAsync();
 		}
 
@@ -178,20 +171,20 @@ public class IndexModel : BaseForumModel
 
 		foreach (var post in Topic.Posts)
 		{
-			post.IsEditable = User.Has(PermissionTo.EditForumPosts)
-				|| (userId.HasValue && post.PosterId == userId.Value);
+			var isOwnPost = post.PosterId == userId;
+			var isOpenTopic = !topic.IsLocked;
+			post.IsEditable = User.Has(PermissionTo.EditUsersForumPosts)
+				|| (isOwnPost && User.Has(PermissionTo.EditForumPosts) && isOpenTopic);
 			post.IsDeletable = User.Has(PermissionTo.DeleteForumPosts)
-				|| (userId.HasValue && post.PosterId == userId && post.IsLastPost);
+				|| (isOwnPost && isOpenTopic && post.IsLastPost);
 		}
 
 		if (userId.HasValue)
 		{
-			await _topicWatcher.MarkSeen(Id, userId.Value);
+			await topicWatcher.MarkSeen(Id, userId.Value);
 		}
 
-		var hasActivity = (await _forumService.GetTopicsWithActivity(Topic.ForumId))?.ContainsKey(Id) ?? false;
-		var onLastPage = Topic.Posts.CurrentPage == Topic.Posts.LastPage();
-		SaveActivity = hasActivity && onLastPage;
+		SaveActivity = (await forumService.GetPostActivityOfSubforum(Topic.ForumId)).ContainsKey(Id);
 
 		return Page();
 	}
@@ -203,7 +196,7 @@ public class IndexModel : BaseForumModel
 			return AccessDenied();
 		}
 
-		var pollOptions = await _db.ForumPollOptions
+		var pollOptions = await db.ForumPollOptions
 			.Include(o => o.Poll)
 			.Include(o => o.Votes)
 			.ForPoll(pollId)
@@ -248,7 +241,7 @@ public class IndexModel : BaseForumModel
 					CreateTimestamp = nowTimestamp,
 					IpAddress = IpAddress
 				});
-				await _db.SaveChangesAsync();
+				await db.SaveChangesAsync();
 			}
 		}
 
@@ -257,10 +250,9 @@ public class IndexModel : BaseForumModel
 
 	public async Task<IActionResult> OnPostLock(string topicTitle, bool locked)
 	{
-		var seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
-		var topic = await _db.ForumTopics
+		var topic = await db.ForumTopics
 			.Include(t => t.Forum)
-			.ExcludeRestricted(seeRestricted)
+			.ExcludeRestricted(UserCanSeeRestricted)
 			.SingleOrDefaultAsync(t => t.Id == Id);
 		if (topic is null)
 		{
@@ -272,12 +264,13 @@ public class IndexModel : BaseForumModel
 			topic.IsLocked = locked;
 
 			var lockedState = locked ? "LOCKED" : "UNLOCKED";
-			var result = await ConcurrentSave(_db, $"Topic set to locked {lockedState}", $"Unable to set status of {lockedState}");
-			if (result)
+			var result = await db.TrySaveChanges();
+			SetMessage(result, $"Topic {topicTitle} set to locked {lockedState}", $"Unable to set {topicTitle} to status of {lockedState}");
+			if (result.IsSuccess())
 			{
-				await _publisher.SendForum(
+				await publisher.SendForum(
 					topic.Forum!.Restricted,
-					$"Topic {lockedState} by {User.Name()}",
+					$"[Topic]({{0}}) {lockedState} by {User.Name()}",
 					$"{topic.Forum.ShortName}: {topic.Title}",
 					$"Forum/Topics/{Id}");
 			}
@@ -293,7 +286,7 @@ public class IndexModel : BaseForumModel
 			return AccessDenied();
 		}
 
-		await _topicWatcher.WatchTopic(Id, User.GetUserId(), User.Has(PermissionTo.SeeRestrictedForums));
+		await topicWatcher.WatchTopic(Id, User.GetUserId(), User.Has(PermissionTo.SeeRestrictedForums));
 		return RedirectToTopic();
 	}
 
@@ -304,12 +297,111 @@ public class IndexModel : BaseForumModel
 			return AccessDenied();
 		}
 
-		await _topicWatcher.UnwatchTopic(Id, User.GetUserId());
+		await topicWatcher.UnwatchTopic(Id, User.GetUserId());
 		return RedirectToTopic();
 	}
 
-	private IActionResult RedirectToTopic()
+	private RedirectToPageResult RedirectToTopic() => RedirectToPage("Index", new { Id });
+
+	[PagingDefaults(PageSize = ForumConstants.PostsPerPage, Sort = $"{nameof(PostEntry.CreateTimestamp)}")]
+	public class TopicRequest : PagingModel
 	{
-		return RedirectToPage("Index", new { Id });
+		public int? Highlight { get; set; }
+	}
+
+	public class TopicDisplay
+	{
+		public int Id { get; init; }
+		public int LastPostId { get; init; }
+		public bool Restricted { get; init; }
+		public bool IsWatching { get; init; }
+		public bool IsLocked { get; init; }
+		public string Title { get; init; } = "";
+		public int ForumId { get; init; }
+		public string ForumName { get; init; } = "";
+		public int? SubmissionId { get; init; }
+		public PageOf<PostEntry, TopicRequest> Posts { get; set; } = new([], new());
+		public PollModel? Poll { get; init; }
+		public int? GameId { get; init; }
+		public string? GameName { get; init; }
+		public int CategoryId { get; init; }
+		public PostEntry? TopicCreator { get; init; }
+
+		public class PollModel
+		{
+			public int PollId { get; init; }
+			public string Question { get; init; } = "";
+			public DateTime? CloseDate { get; init; }
+			public bool MultiSelect { get; init; }
+			public bool ViewPollResults { get; init; }
+			public List<PollOption> Options { get; set; } = [];
+		}
+
+		public record PollOption(string Text, int Ordinal, List<int> Voters);
+	}
+
+	public class PostEntry
+	{
+		public int Id { get; init; }
+		public int TopicId { get; init; }
+		public bool Highlight { get; set; }
+		public bool Restricted { get; init; }
+		public int PosterId { get; init; }
+		public string PosterName { get; set; } = "";
+		public string? PosterAvatar { get; set; }
+		public string? PosterLocation { get; set; }
+		public int PosterPostCount { get; set; }
+		public bool PosterIsBanned { get; set; }
+		public double PosterPlayerPoints { get; set; }
+		public DateTime PosterJoined { get; set; }
+		public string? PosterMoodUrlBase { get; set; }
+		public ForumPostMood PosterMood { get; init; }
+		public PreferredPronounTypes PosterPronouns { get; set; }
+		public IList<string> PosterRoles { get; set; } = [];
+		public string? PosterPlayerRank { get; set; }
+		public string Text { get; init; } = "";
+		public DateTime? PostEditedTimestamp { get; init; }
+		public string? Subject { get; init; }
+		public string? Signature { get; set; }
+
+		public ICollection<AwardAssignmentSummary> Awards { get; set; } = [];
+
+		public bool EnableHtml { get; init; }
+		public bool EnableBbCode { get; init; }
+
+		[Sortable]
+		public DateTime CreateTimestamp { get; init; }
+		public DateTime LastUpdateTimestamp { get; init; }
+
+		public bool IsLastPost { get; init; }
+		public bool IsEditable { get; set; }
+		public bool IsDeletable { get; set; }
+
+		public string? GetCurrentAvatar()
+		{
+			if (PosterMood != ForumPostMood.None && !string.IsNullOrWhiteSpace(PosterMoodUrlBase))
+			{
+				return PosterMoodUrlBase.Replace("$", ((int)PosterMood).ToString());
+			}
+
+			return PosterAvatar;
+		}
+
+		public string CalculatedRoles
+		{
+			get
+			{
+				if (PosterIsBanned)
+				{
+					return "Banned User";
+				}
+
+				return string.Join(", ", PosterRoles
+					.OrderBy(s => s)
+					.Append(PosterPlayerRank)
+					.Where(s => !string.IsNullOrEmpty(s))
+					.Select(s => s!.Replace(' ', '\u00A0')));
+			}
+		}
 	}
 }

@@ -1,7 +1,5 @@
 ﻿using System.Net;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using TASVideos.Core.Services;
 
 namespace TASVideos.Pages;
 
@@ -10,6 +8,12 @@ public class IpBanCheckAttribute : Attribute, IAsyncPageFilter
 {
 	public async Task OnPageHandlerExecutionAsync(PageHandlerExecutingContext context, PageHandlerExecutionDelegate next)
 	{
+		if (context.HttpContext.Request.Method == "GET")
+		{
+			await next.Invoke();
+			return;
+		}
+
 		var banService = context.HttpContext.RequestServices.GetRequiredService<IIpBanService>();
 
 		var ip = context.HttpContext.ActualIpAddress();
@@ -32,7 +36,7 @@ public class IpBanCheckAttribute : Attribute, IAsyncPageFilter
 		await Task.CompletedTask;
 	}
 
-	protected void Denied(PageHandlerExecutingContext context)
+	private static void Denied(PageHandlerExecutingContext context)
 	{
 		if (context.HttpContext.Request.IsAjaxRequest())
 		{

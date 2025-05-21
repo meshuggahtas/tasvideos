@@ -1,35 +1,32 @@
-﻿using TASVideos.Core.Services;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using TASVideos.Core.Services.Email;
 using TASVideos.Core.Settings;
-using TASVideos.Data.Entity;
 using TASVideos.Data.Entity.Forum;
 
 namespace TASVideos.Core.Tests.Services;
 
 [TestClass]
-public class TopicWatcherTests
+public class TopicWatcherTests : TestDbBase
 {
-	private readonly Mock<IEmailService> _mockEmailService;
-	private readonly TestDbContext _db;
+	private readonly IEmailService _mockEmailService;
 
-	private readonly ITopicWatcher _topicWatcher;
+	private readonly TopicWatcher _topicWatcher;
 
 	public TopicWatcherTests()
 	{
-		_db = TestDbContext.Create();
-		_mockEmailService = new Mock<IEmailService>();
+		_mockEmailService = Substitute.For<IEmailService>();
 		var settings = new AppSettings
 		{
 			BaseUrl = "http://example.com"
 		};
 
-		_topicWatcher = new TopicWatcher(_mockEmailService.Object, _db, settings);
+		_topicWatcher = new TopicWatcher(_mockEmailService, _db, settings, new NullLogger<TopicWatcher>());
 	}
 
 	[TestMethod]
 	public async Task UserWatches_EmptyList_WhenUserDoesNotExist()
 	{
-		var actual = await _topicWatcher.UserWatches(int.MaxValue);
+		var actual = await _topicWatcher.UserWatches(int.MaxValue, new PagingModel());
 
 		Assert.IsNotNull(actual);
 		Assert.AreEqual(0, actual.Count());
@@ -38,103 +35,91 @@ public class TopicWatcherTests
 	[TestMethod]
 	public async Task UserWatches_ReturnsUserWatches()
 	{
-		int user1Id = 1;
-		int user2Id = 2;
-		int topic1Id = 1;
-		int topic2Id = 2;
-		_db.Users.Add(new User { Id = user1Id });
-		_db.Users.Add(new User { Id = user2Id });
-		var forum = new Forum { Id = 1 };
-		_db.ForumTopics.Add(new ForumTopic { Id = topic1Id, ForumId = forum.Id, Forum = forum });
-		_db.ForumTopics.Add(new ForumTopic { Id = topic2Id, ForumId = forum.Id, Forum = forum });
-		_db.ForumTopicWatches.Add(new ForumTopicWatch { ForumTopicId = topic1Id, UserId = user1Id });
-		_db.ForumTopicWatches.Add(new ForumTopicWatch { ForumTopicId = topic2Id, UserId = user1Id });
-		_db.ForumTopicWatches.Add(new ForumTopicWatch { ForumTopicId = 1, UserId = user2Id });
-		_db.ForumTopicWatches.Add(new ForumTopicWatch { ForumTopicId = 1 + 1, UserId = user2Id });
+		const int user1Id = 1;
+		const int user2Id = 2;
+		_db.AddUser(user1Id, "_");
+		_db.AddUser(user2Id, "__");
+		var topic1 = _db.AddTopic().Entity;
+		var topic2 = _db.AddTopic().Entity;
+		await _db.SaveChangesAsync();
+		_db.ForumPosts.Add(new ForumPost { Topic = topic1, Forum = topic1.Forum, PosterId = user1Id });
+		_db.ForumPosts.Add(new ForumPost { Topic = topic2, Forum = topic2.Forum, PosterId = user2Id });
+		_db.ForumTopicWatches.Add(new ForumTopicWatch { ForumTopic = topic1, UserId = user1Id });
+		_db.ForumTopicWatches.Add(new ForumTopicWatch { ForumTopic = topic2, UserId = user1Id });
+		_db.ForumTopicWatches.Add(new ForumTopicWatch { ForumTopic = topic1, UserId = user2Id });
+		_db.ForumTopicWatches.Add(new ForumTopicWatch { ForumTopic = topic2, UserId = user2Id });
 		await _db.SaveChangesAsync();
 
-		var actual = await _topicWatcher.UserWatches(user1Id);
+		var actual = await _topicWatcher.UserWatches(user1Id, new PagingModel());
 
 		Assert.IsNotNull(actual);
 
 		var list = actual.ToList();
 		Assert.AreEqual(2, list.Count);
-		Assert.AreEqual(1, list.Count(l => l.TopicId == topic1Id));
-		Assert.AreEqual(1, list.Count(l => l.TopicId == topic2Id));
+		Assert.AreEqual(1, list.Count(l => l.TopicId == topic1.Id));
+		Assert.AreEqual(1, list.Count(l => l.TopicId == topic2.Id));
 	}
 
 	[TestMethod]
 	public async Task NotifyNewPost_DoesNotNotifyPoster()
 	{
-		_db.Users.Add(new User { Id = 1 });
-		_db.ForumTopics.Add(new ForumTopic { Id = 1 });
+		const int userId = 1;
+		_db.AddUser(userId, "_");
+		var topic = _db.AddTopic().Entity;
+		await _db.SaveChangesAsync();
 		_db.ForumTopicWatches.Add(new ForumTopicWatch
 		{
-			ForumTopicId = 1,
-			UserId = 1,
+			ForumTopicId = topic.Id,
+			UserId = userId,
 			IsNotified = false
 		});
 		await _db.SaveChangesAsync();
-		_mockEmailService
-			.Setup(m => m.TopicReplyNotification(It.IsAny<IEnumerable<string>>(), It.IsAny<TopicReplyNotificationTemplate>()));
 
-		await _topicWatcher.NotifyNewPost(new TopicNotification(0, 1, "", 1));
+		await _topicWatcher.NotifyNewPost(0, topic.Id, "", userId);
 
-		_mockEmailService.Verify(
-			v => v.TopicReplyNotification(It.IsAny<IEnumerable<string>>(), It.IsAny<TopicReplyNotificationTemplate>()),
-			Times.Never);
+		await _mockEmailService.DidNotReceive().TopicReplyNotification(Arg.Any<IEnumerable<string>>(), Arg.Any<TopicReplyNotificationTemplate>());
 	}
 
 	[TestMethod]
 	public async Task NotifyNewPost_NotifiesOtherUsers()
 	{
-		int watcher = 1;
-		int poster = 2;
-		string posterEmail = "a@b.com";
-		_db.Users.Add(new User { Id = watcher, Email = posterEmail });
-		_db.ForumTopics.Add(new ForumTopic { Id = 1 });
+		const int watcher = 1;
+		const int poster = 2;
+		const string posterEmail = "a@b.com";
+		_db.AddUser(watcher, posterEmail);
+		var topic = _db.AddTopic().Entity;
+		await _db.SaveChangesAsync();
 		_db.ForumTopicWatches.Add(new ForumTopicWatch
 		{
-			ForumTopicId = 1,
+			ForumTopicId = topic.Id,
 			UserId = watcher,
 			IsNotified = false
 		});
 		await _db.SaveChangesAsync();
 
-		var recipients = new List<string> { posterEmail }.AsEnumerable();
-		var template = new TopicReplyNotificationTemplate(0, 0, "", "");
-		_mockEmailService
-			.Setup(m => m.TopicReplyNotification(recipients, template));
+		await _topicWatcher.NotifyNewPost(0, topic.Id, "", poster);
 
-		await _topicWatcher.NotifyNewPost(new TopicNotification(0, 1, "", poster));
-
-		_mockEmailService.Verify(
-			v => v.TopicReplyNotification(It.IsAny<IEnumerable<string>>(), It.IsAny<TopicReplyNotificationTemplate>()),
-			Times.Once);
+		await _mockEmailService.Received(1).TopicReplyNotification(Arg.Any<IEnumerable<string>>(), Arg.Any<TopicReplyNotificationTemplate>());
 	}
 
 	[TestMethod]
 	public async Task NotifyNewPost_WhenNotified_IsNotified_IsFalse()
 	{
-		int watcher = 1;
-		int poster = 2;
-		string posterEmail = "a@b.com";
-		_db.Users.Add(new User { Id = watcher, Email = posterEmail });
-		_db.ForumTopics.Add(new ForumTopic { Id = 1 });
+		const int watcher = 1;
+		const int poster = 2;
+		const string posterEmail = "a@b.com";
+		_db.AddUser(watcher, posterEmail);
+		var topic = _db.AddTopic().Entity;
+		await _db.SaveChangesAsync();
 		_db.ForumTopicWatches.Add(new ForumTopicWatch
 		{
-			ForumTopicId = 1,
+			ForumTopicId = topic.Id,
 			UserId = watcher,
 			IsNotified = false
 		});
 		await _db.SaveChangesAsync();
 
-		var recipients = new List<string> { posterEmail }.AsEnumerable();
-		var template = new TopicReplyNotificationTemplate(0, 0, "", "");
-		_mockEmailService
-			.Setup(m => m.TopicReplyNotification(recipients, template));
-
-		await _topicWatcher.NotifyNewPost(new TopicNotification(0, 1, "", poster));
+		await _topicWatcher.NotifyNewPost(0, topic.Id, "", poster);
 
 		Assert.IsTrue(_db.ForumTopicWatches.All(w => w.IsNotified));
 	}
@@ -142,19 +127,19 @@ public class TopicWatcherTests
 	[TestMethod]
 	public async Task MarkSeen_IsNotifiedFalse()
 	{
-		int userId = 1;
-		int topicId = 1;
-		_db.Users.Add(new User { Id = userId });
-		_db.ForumTopics.Add(new ForumTopic { Id = topicId });
+		const int userId = 1;
+		_db.AddUser(userId, "_");
+		var topic = _db.AddTopic().Entity;
 		_db.ForumTopicWatches.Add(new ForumTopicWatch
 		{
 			UserId = userId,
-			ForumTopicId = topicId,
+			ForumTopic = topic,
 			IsNotified = true
 		});
 		await _db.SaveChangesAsync();
 
-		await _topicWatcher.MarkSeen(topicId, userId);
+		await _topicWatcher.MarkSeen(topic.Id, userId);
+		_db.ChangeTracker.Clear();
 
 		Assert.AreEqual(1, _db.ForumTopicWatches.Count());
 		Assert.IsFalse(_db.ForumTopicWatches.Single().IsNotified);
@@ -163,44 +148,42 @@ public class TopicWatcherTests
 	[TestMethod]
 	public async Task WatchTopic_AddsWatch_IfNoneExist()
 	{
-		int userId = 1;
-		int topicId = 1;
-		_db.Users.Add(new User { Id = userId });
-		_db.ForumTopics.Add(new ForumTopic { Id = topicId });
+		const int userId = 1;
+		_db.AddUser(userId, "_");
+		var topic = _db.AddTopic().Entity;
 		await _db.SaveChangesAsync();
 
-		await _topicWatcher.WatchTopic(topicId, userId, true);
+		await _topicWatcher.WatchTopic(topic.Id, userId, true);
 
 		Assert.AreEqual(1, _db.ForumTopicWatches.Count());
 		Assert.AreEqual(userId, _db.ForumTopicWatches.Single().UserId);
-		Assert.AreEqual(topicId, _db.ForumTopicWatches.Single().ForumTopicId);
+		Assert.AreEqual(topic.Id, _db.ForumTopicWatches.Single().ForumTopicId);
 	}
 
 	[TestMethod]
 	public async Task WatchTopic_DoesNotAdd_IfAlreadyExists()
 	{
-		int userId = 1;
-		int topicId = 1;
-		_db.Users.Add(new User { Id = userId });
-		_db.ForumTopics.Add(new ForumTopic { Id = topicId });
-		_db.ForumTopicWatches.Add(new ForumTopicWatch { UserId = userId, ForumTopicId = topicId });
+		const int userId = 1;
+		_db.AddUser(userId, "_");
+		var topic = _db.AddTopic().Entity;
+		await _db.SaveChangesAsync();
+		_db.ForumTopicWatches.Add(new ForumTopicWatch { UserId = userId, ForumTopicId = topic.Id });
 		await _db.SaveChangesAsync();
 
-		await _topicWatcher.WatchTopic(topicId, userId, true);
+		await _topicWatcher.WatchTopic(topic.Id, userId, true);
 		Assert.AreEqual(1, _db.ForumTopicWatches.Count());
 		Assert.AreEqual(userId, _db.ForumTopicWatches.Single().UserId);
-		Assert.AreEqual(topicId, _db.ForumTopicWatches.Single().ForumTopicId);
+		Assert.AreEqual(topic.Id, _db.ForumTopicWatches.Single().ForumTopicId);
 	}
 
 	[TestMethod]
 	public async Task WatchTopic_DoesNotAddRestricted_IfUserCanNotSeeRestricted()
 	{
-		int userId = 1;
-		int topicId = 1;
-		_db.Users.Add(new User { Id = userId });
-		var forum = new Forum { Id = 1, Restricted = true };
-		_db.Forums.Add(forum);
-		_db.ForumTopics.Add(new ForumTopic { Id = topicId, ForumId = forum.Id });
+		const int userId = 1;
+		const int topicId = 1;
+		_db.AddUser(userId, "_");
+		var topic = _db.AddTopic().Entity;
+		topic.Forum!.Restricted = true;
 		await _db.SaveChangesAsync();
 
 		await _topicWatcher.WatchTopic(topicId, userId, false);
@@ -211,14 +194,14 @@ public class TopicWatcherTests
 	[TestMethod]
 	public async Task UnwatchTopic_RemovesTopic()
 	{
-		int userId = 1;
-		int topicId = 1;
-		_db.Users.Add(new User { Id = userId });
-		_db.ForumTopics.Add(new ForumTopic { Id = topicId });
-		_db.ForumTopicWatches.Add(new ForumTopicWatch { UserId = userId, ForumTopicId = topicId });
+		const int userId = 1;
+		_db.AddUser(userId, "_");
+		var topic = _db.AddTopic().Entity;
+		await _db.SaveChangesAsync();
+		_db.ForumTopicWatches.Add(new ForumTopicWatch { UserId = userId, ForumTopicId = topic.Id });
 		await _db.SaveChangesAsync();
 
-		await _topicWatcher.UnwatchTopic(topicId, userId);
+		await _topicWatcher.UnwatchTopic(topic.Id, userId);
 
 		Assert.AreEqual(0, _db.ForumTopicWatches.Count());
 	}
@@ -226,14 +209,13 @@ public class TopicWatcherTests
 	[TestMethod]
 	public async Task UnwatchAllTopics_RemovesAllTopics()
 	{
-		int userId = 1;
-		int topic1Id = 1;
-		int topic2Id = 2;
-		_db.Users.Add(new User { Id = userId });
-		_db.ForumTopics.Add(new ForumTopic { Id = topic1Id });
-		_db.ForumTopics.Add(new ForumTopic { Id = topic2Id });
-		_db.ForumTopicWatches.Add(new ForumTopicWatch { UserId = userId, ForumTopicId = topic1Id });
-		_db.ForumTopicWatches.Add(new ForumTopicWatch { UserId = userId, ForumTopicId = topic2Id });
+		const int userId = 1;
+		_db.AddUser(userId, "_");
+		var topic1 = _db.AddTopic().Entity;
+		var topic2 = _db.AddTopic().Entity;
+		await _db.SaveChangesAsync();
+		_db.ForumTopicWatches.Add(new ForumTopicWatch { UserId = userId, ForumTopicId = topic1.Id });
+		_db.ForumTopicWatches.Add(new ForumTopicWatch { UserId = userId, ForumTopicId = topic2.Id });
 		await _db.SaveChangesAsync();
 
 		await _topicWatcher.UnwatchAllTopics(userId);

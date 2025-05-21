@@ -1,47 +1,33 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
+﻿using System.Net;
+using TASVideos.Core.Services.Wiki;
 
 namespace TASVideos.Pages.Wiki;
 
 [AllowAnonymous]
-public class RenderModel : BasePageModel
+public class RenderModel(IWikiPages wikiPages, ApplicationDbContext db, ILogger<RenderModel> logger) : BasePageModel
 {
-	private readonly IWikiPages _wikiPages;
-	private readonly ApplicationDbContext _db;
-	private readonly ILogger<RenderModel> _logger;
-
-	public RenderModel(IWikiPages wikiPages, ApplicationDbContext db, ILogger<RenderModel> logger)
-	{
-		_wikiPages = wikiPages;
-		_db = db;
-		_logger = logger;
-	}
-
-	public WikiPage WikiPage { get; set; } = new();
+	public IWikiPage WikiPage { get; set; } = null!;
 
 	public async Task<IActionResult> OnGet(string? url, int? revision = null)
 	{
-		url = url?.Trim('/') ?? "";
-		if (url.ToLower() == "frontpage")
+		url = WebUtility.UrlDecode(url?.Trim('/') ?? "");
+		if (url.Equals("frontpage", StringComparison.InvariantCultureIgnoreCase))
 		{
 			return Redirect("/");
 		}
 
 		if (WikiHelper.IsHomePage(url))
 		{
-			if (!await UserNameExists(url) && !await _wikiPages.Exists(url))
+			if (!await UserNameExists(url) && !await wikiPages.Exists(url))
 			{
 				return RedirectToPage("/Wiki/HomePageDoesNotExist");
 			}
 		}
 
-		if (!WikiHelper.IsValidWikiPageName(url))
+		if (!WikiHelper.IsValidWikiPageName(url, validateLoosely: true)) // allow wrong url casing to navigate to the wiki page, we will show a proper canonical url in the html, and rewrite the browser url with javascript
 		{
 			// Support legacy links like [adelikat] that should have been [user:adelikat]
-			if (await _wikiPages.Exists(LinkConstants.HomePages + url))
+			if (await wikiPages.Exists(LinkConstants.HomePages + url))
 			{
 				return Redirect(LinkConstants.HomePages + url);
 			}
@@ -49,29 +35,23 @@ public class RenderModel : BasePageModel
 			return RedirectToPage("/Wiki/PageNotFound", new { possibleUrl = WikiEngine.Builtins.NormalizeInternalLink(url) });
 		}
 
-		var wikiPage = await _wikiPages.Page(url, revision);
-		if (wikiPage != null)
+		var wikiPage = await wikiPages.Page(url, revision);
+		if (wikiPage is not null)
 		{
-			if (_logger.IsEnabled(LogLevel.Information))
+			if (logger.IsEnabled(LogLevel.Information))
 			{
-				_logger.LogInformation("Rendering WikiPage {wikiPage}", wikiPage.PageName);
+				logger.LogInformation("Rendering WikiPage {wikiPage}", wikiPage.PageName);
 			}
 
 			WikiPage = wikiPage;
-			ViewData["WikiPage"] = WikiPage;
-			ViewData["Title"] = WikiPage.PageName;
+			ViewData.SetWikiPage(WikiPage);
+			ViewData.SetTitle(WikiPage.PageName);
+			ViewData.SetCanonicalUrl($"{Request.Scheme}://{Request.Host}{Request.PathBase}/{WikiPage.PageName}{Request.QueryString}");
 			return Page();
 		}
 
-		var homePage = await _wikiPages.Page("HomePages/" + url);
-		if (homePage != null)
-		{
-			// We redirected on invalid url homepages, now we have to do the same for valid ones
-			return Redirect("/HomePages/" + url);
-		}
-
 		// Account for garbage revision values
-		if (revision.HasValue && await _wikiPages.Exists(url))
+		if (revision.HasValue && await wikiPages.Exists(url))
 		{
 			return Redirect("/" + url);
 		}
@@ -82,6 +62,6 @@ public class RenderModel : BasePageModel
 	private async Task<bool> UserNameExists(string path)
 	{
 		var userName = WikiHelper.ToUserName(path);
-		return await _db.Users.Exists(userName);
+		return await db.Users.Exists(userName);
 	}
 }

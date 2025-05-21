@@ -1,176 +1,174 @@
 ﻿@page
 @model SettingsModel
 @{
-	ViewData["Title"] = "Profile Settings";
+	ViewData.SetTitle("Profile Settings");
 	ViewData.AddActivePage(ProfileNavPages.Settings);
+	const string ratingsTrueId = nameof(Model.PublicRatings) + "-true";
+	const string ratingsFalseId = nameof(Model.PublicRatings) + "-false";
+	const string emailOnPmTrueId = nameof(Model.EmailOnPrivateMessage) + "-true";
+	const string emailOnPmFalseId = nameof(Model.EmailOnPrivateMessage) + "-false";
+	var usingIvatar = Model.AvatarUrl?.Contains($"//{SiteGlobalConstants.MainIvatarDomain}/") ?? false;
 }
-<h4>@ViewData["Title"]</h4>
-<div asp-validation-summary="All" class="text-danger"></div>
-<form method="post">
+
+<form client-side-validation="true" method="post">
 	<row>
 		<column lg="6">
-			<form-group>
-				<label asp-for="Settings.Username"></label>
-				<input asp-for="Settings.Username" class="form-control" disabled />
+			<fieldset>
+				<label asp-for="Username"></label>
+				<label class="form-control">@Model.Username</label>
 				<div class="text-warning">
-					@await Component.RenderWiki("System/NameChanges")
+					@await Html.RenderWiki(SystemWiki.NameChanges)
 				</div>
-			</form-group>
+			</fieldset>
 			<a asp-page="ChangeEmail">Change Email</a>
-			@if (Model.Settings.IsEmailConfirmed)
+			@if (Model.IsEmailConfirmed)
 			{
-				<form-group disabled>
-					<label asp-for="Settings.Email"></label>
+				<fieldset disabled>
+					<label asp-for="CurrentEmail"></label>
 					<div class="input-group">
-						<input asp-for="Settings.Email" class="form-control" />
+						<input asp-for="CurrentEmail" data-email-box />
 						<div class="input-group-text" aria-disabled="true"><span class="fa fa-check-square text-success"></span></div>
 					</div>
-				</form-group>
-				
+				</fieldset>
 			}
 			else
 			{
-				<form-group>
+				<fieldset>
 					<div class="input-group">
-						<input asp-for="Settings.Email" readonly class="form-control"/>
+						<input asp-for="CurrentEmail" readonly  data-email-box />
 						<div class="input-group-text" aria-disabled="true" title="Email not confirmed"><span class="fa fa-exclamation text-warning"></span></div>
 					</div>
 					<button asp-page="Settings" asp-page-handler="SendVerificationEmail" class="btn btn-link">Send verification email</button>
-				</form-group>
+				</fieldset>
 			}
-			
-			<form-group>
-				<label asp-for="Settings.PublicRatings"></label>
+
+			<fieldset>
+				<label asp-for="PublicRatings">Allow Movie Ratings to be public</label>
 				<div class="btn-group btn-group-toggle" data-bs-toggle="buttons">
-					@{
-						const string trueId = nameof(Model.Settings.PublicRatings) + "-true";
-						const string falseId = nameof(Model.Settings.PublicRatings) + "-false";
-					}
-					<label for="@trueId" class="btn btn-secondary @(Model.Settings.PublicRatings ? "active" : "")">
-						<input id="@trueId" type="radio" value="True" asp-for="Settings.PublicRatings" /> Yes
+					<label for="@ratingsTrueId" class="btn btn-secondary @(Model.PublicRatings ? "active" : "")">
+						<input id="@ratingsTrueId" type="radio" value="True" asp-for="PublicRatings" /> Yes
 					</label>
-					<label for="@falseId" class="btn btn-secondary @(!Model.Settings.PublicRatings ? "active" : "")">
-						<input id="@falseId" type="radio" value="False" asp-for="Settings.PublicRatings" /> No
+					<label for="@ratingsFalseId" class="btn btn-secondary @(!Model.PublicRatings ? "active" : "")">
+						<input id="@ratingsFalseId" type="radio" value="False" asp-for="PublicRatings" /> No
 					</label>
 				</div>
-			</form-group>
-			<form-group>
-				<label asp-for="Settings.EmailOnPrivateMessage"></label>
+			</fieldset>
+			<fieldset>
+				<label asp-for="EmailOnPrivateMessage"></label>
 				<div class="btn-group btn-group-toggle" data-bs-toggle="buttons">
-					@{
-						const string trueId = nameof(Model.Settings.EmailOnPrivateMessage) + "-true";
-						const string falseId = nameof(Model.Settings.EmailOnPrivateMessage) + "-false";
-					}
-					<label for="@trueId" class="btn btn-secondary @(Model.Settings.EmailOnPrivateMessage ? "active" : "")">
-						<input id="@trueId" type="radio" value="True" asp-for="Settings.EmailOnPrivateMessage" /> Yes
+					<label for="@emailOnPmTrueId" class="btn btn-secondary @(Model.EmailOnPrivateMessage ? "active" : "")">
+						<input id="@emailOnPmTrueId" type="radio" value="True" asp-for="EmailOnPrivateMessage" /> Yes
 					</label>
-					<label for="@falseId" class="btn btn-secondary @(!Model.Settings.EmailOnPrivateMessage ? "active" : "")">
-						<input id="@falseId" type="radio" value="False" asp-for="Settings.EmailOnPrivateMessage" /> No
+					<label for="@emailOnPmFalseId" class="btn btn-secondary @(!Model.EmailOnPrivateMessage ? "active" : "")">
+						<input id="@emailOnPmFalseId" type="radio" value="False" asp-for="EmailOnPrivateMessage" /> No
 					</label>
 				</div>
-			</form-group>
+			</fieldset>
+			<fieldset>
+				<label asp-for="AutoWatchTopic">Preselect "Watch Topic" When Posting</label>
+				<select asp-for="AutoWatchTopic" asp-items="@SettingsModel.AvailableUserPreferenceTypes"></select>
+				<small>
+					This setting affects how the "Watch Topic" checkbox will be preselected when creating a new Post or Topic.<br />
+					<strong>Auto:</strong> Keep the current Watch Topic setting.
+					<strong>Always:</strong> Always enable the checkbox.
+					<strong>Never:</strong> Always disable the checkbox.<br />
+					Note that this is only a preselect. No matter what you choose here, you can always override it manually when creating a new Post or Topic.
+				</small>
+			</fieldset>
 		</column>
 		<column lg="6">
-			<form-group>
-				<label asp-for="Settings.TimeZoneId"></label>
-				<timezone-picker asp-for="Settings.TimeZoneId" class="form-select" />
-			</form-group>
-			<form-group>
-				<label asp-for="Settings.From"></label>
-				<input asp-for="Settings.From" class="form-control" />
-				<span asp-validation-for="Settings.From"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Settings.PreferredPronouns"></label>
-				<select asp-for="Settings.PreferredPronouns" asp-items="@SettingsModel.AvailablePronouns" class="form-select"></select>
-				<span asp-validation-for="Settings.PreferredPronouns"></span>
-			</form-group>
+			<fieldset>
+				<label asp-for="PreferredPronouns"></label>
+				<select asp-for="PreferredPronouns" asp-items="@SettingsModel.AvailablePronouns"></select>
+				<span asp-validation-for="PreferredPronouns"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Location"></label>
+				<input asp-for="Location" />
+				<span asp-validation-for="Location"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="TimeZone"></label>
+				<timezone-picker asp-for="TimeZone" />
+			</fieldset>
+			@{
+				var exampleDate = new DateTime(2024, 2, 29, 17, 35, 0);
+				const double exampleNumber = 1.23;
+			}
+			<fieldset>
+				<label asp-for="DateFormat"></label>
+				<label condition="@Model.DateFormat == UserDateFormat.Auto" asp-for="DateFormat" class="text-body-tertiary">(Currently: @exampleDate.ToShortDateString())</label>
+				<select asp-for="DateFormat" asp-items="@SettingsModel.AvailableDateFormats"></select>
+				<span asp-validation-for="DateFormat"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="TimeFormat"></label>
+				<label condition="@Model.TimeFormat == UserTimeFormat.Auto" asp-for="TimeFormat" class="text-body-tertiary">(Currently: @exampleDate.ToShortTimeString())</label>
+				<select asp-for="TimeFormat" asp-items="@SettingsModel.AvailableTimeFormats"></select>
+				<span asp-validation-for="TimeFormat"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="DecimalFormat"></label>
+				<label condition="@Model.DecimalFormat == UserDecimalFormat.Auto"  asp-for="DecimalFormat" class="text-body-tertiary">(Currently: @exampleNumber)</label>
+				<select asp-for="DecimalFormat" asp-items="@SettingsModel.AvailableDecimalFormats"></select>
+				<span asp-validation-for="DecimalFormat"></span>
+			</fieldset>
 		</column>
 	</row>
 	<hr />
-	<row>
-		<column md="6">
-			<label asp-for="Settings.Avatar"></label>
-			<input type="text" asp-for="Settings.Avatar" class="form-control" />
-		</column>
-		<column id="avatar-preview" md="6" class="mt-md-0 mt-3" show="!string.IsNullOrWhiteSpace(Model.Settings.Avatar)">
-			<label>Preview</label>
-			<button id="preview-btn" type="button" class="btn btn-secondary btn-sm">
-				<span class="fa fa-refresh"></span>
-			</button><br />
-			<img id="avatar-img" src="@Model.Settings.Avatar" class="float-start m-2" />
-			<small>
-				@await Component.RenderWiki("System/AvatarRequirements")
-			</small>
-		</column>
-	</row>
-	<row permission="UseMoodAvatars">
-		<column md="6">
-			<label asp-for="Settings.MoodAvatar"></label>
-			<input type="text" asp-for="Settings.MoodAvatar" class="form-control" />
-			<a asp-page="/Forum/MoodReport" asp-route-username="@Model.Settings.Username">Check Mood Avatars</a>
-		</column>
-		<column md="6">
-			<small>
-				@await Component.RenderWiki("System/MoodAvatarRequirements")
-			</small>
-		</column>
-	</row>
-	<fullrow class="mt-3">
-		<label asp-for="Settings.Signature"></label>
-		<textarea asp-for="Settings.Signature" class="form-control" rows="5"></textarea>
-	</fullrow>
-	<hr />
-	<div class="text-center">
-		<button id="submit-btn" type="submit" class="btn btn-secondary">Save</button>
+	<label>Use ivatar (Gravatar)</label>
+	<div class="btn-group btn-group-toggle" data-bs-toggle="buttons">
+		<label class="btn btn-secondary @(usingIvatar ? "active" : "")">
+			<input id="UseIvatar-true" type="radio" value="True" name="UseIvatar" @(usingIvatar ? "checked" : "") /> Yes
+		</label>
+		<label class="btn btn-secondary" value="True"  @(!usingIvatar ? "active" : "")>
+			<input id="UseIvatar-false" type="radio" value="False" name="UseIvatar" @(!usingIvatar ? "checked" : "") /> No
+		</label>
 	</div>
+	<div class="mt-3" id="ivatar-section">
+		<fieldset>
+			<label>Email to Use for ivatar Lookup</label>
+			<input id="ivatar-email" class="form-control" />
+		</fieldset>
+		<small>
+			This address will be used for the hash below.
+			<br>We currently won't honor any server choice in DNS&mdash;if you don't want to use Libravatar/Gravatar, manually set the relevant URL.
+		</small>
+	</div>
+	<fullrow class="mt-3">
+		<label asp-for="AvatarUrl"></label>
+		<input asp-for="AvatarUrl" data-avatar-box />
+		<span asp-validation-for="AvatarUrl"></span>
+		<span id="avatar-too-big" class="text-danger d-none">Image invalid, please check requirements</span>
+	</fullrow>
+	<fullrow class="mt-2">
+		<div class="float-end">
+			<img id="avatar-img" src="@Model.AvatarUrl" class="m-2" alt="Avatar preview" />
+		</div>
+		<small id="avatar-description">
+			@await Html.RenderWiki(SystemWiki.AvatarRequirements)
+		</small>
+	</fullrow>
+	<fullrow permission="UseMoodAvatars">
+		<label asp-for="MoodAvatar">Mood-variant avatar URL</label>
+		<input asp-for="MoodAvatar" />
+		<span asp-validation-for="MoodAvatar"></span>
+		<a asp-page="/Forum/MoodReport" asp-route-username="@Model.Username">Check Mood Avatars</a>
+	</fullrow>
+	<fullrow permission="UseMoodAvatars" class="mt-3">
+		<small>
+			@await Html.RenderWiki(SystemWiki.MoodAvatarRequirements)
+		</small>
+	</fullrow>
+	<fullrow permission="EditSignature" class="mt-3">
+		<label asp-for="Signature"></label>
+		<textarea asp-for="Signature" rows="5" disabled="@(!User.Has(PermissionTo.EditSignature))"></textarea>
+	</fullrow>
+	<form-button-bar>
+		<submit-button id="submit-btn"></submit-button>
+	</form-button-bar>
 </form>
 
 @section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-	<script>
-		{
-			let avatarBoxElem = document.getElementById('@Html.IdFor(m => m.Settings.Avatar)');
-			let previewElem = document.getElementById('avatar-preview');
-
-			document.addEventListener("DOMContentLoaded", validateAvatar);
-			avatarBoxElem.addEventListener('blur', toggleAvatarPreview);
-			document.getElementById('preview-btn').addEventListener('click', toggleAvatarPreview);
-
-			let avatarImgElem = document.getElementById('avatar-img');
-
-			function toggleAvatarPreview() {
-				const avatar = document.getElementById('@Html.IdFor(m => m.Settings.Avatar)').value;
-				if (avatar) {
-					avatarImgElem.onload = validateAvatar;
-					avatarImgElem.src = avatar;
-				} else {
-					previewElem.classList.add('d-none');
-					preventSave(false);
-				}
-			}
-
-			function validateAvatar() {
-				const maxWidth = @AvatarRequirements.Width;
-				const maxHeight = @AvatarRequirements.Height;
-
-				const tooBig = avatarImgElem.width > maxWidth || avatarImgElem.height > maxHeight;
-				if (tooBig) {
-					previewElem.classList.add('alert');
-					previewElem.classList.add('alert-danger');
-					preventSave(true);
-				} else {
-					previewElem.classList.remove('alert');
-					previewElem.classList.remove('alert-danger');
-					preventSave(false);
-				}
-
-				previewElem.classList.remove('d-none');
-			}
-
-			function preventSave(prevent) {
-				document.getElementById('submit-btn').disabled = prevent;
-			}
-		}
-	</script>
+	<script src="/js/profile-settings.js"></script>
 }

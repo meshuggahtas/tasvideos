@@ -1,99 +1,52 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
+﻿using Microsoft.AspNetCore.Mvc.RazorPages;
+using TASVideos.Core.Services.Wiki;
 using TASVideos.Core.Services.Youtube;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
 using TASVideos.Data.Entity.Forum;
+using TASVideos.Data.Helpers;
 using TASVideos.MovieParsers;
-using TASVideos.Pages.Submissions.Models;
 
 namespace TASVideos.Pages.Submissions;
 
 [RequirePermission(true, PermissionTo.SubmitMovies, PermissionTo.EditSubmissions)]
-public class EditModel : BasePageModel
+public class EditModel(
+	ApplicationDbContext db,
+	IMovieParser parser,
+	IWikiPages wikiPages,
+	IExternalMediaPublisher publisher,
+	ITASVideosGrue tasvideosGrue,
+	IMovieFormatDeprecator deprecator,
+	IQueueService queueService,
+	IYoutubeSync youtubeSync,
+	IForumService forumService,
+	ITopicWatcher topicWatcher,
+	IFileService fileService)
+	: SubmitPageModelBase(parser, fileService)
 {
-	private readonly string _fileFieldName = $"{nameof(Submission)}.{nameof(SubmissionEditModel.MovieFile)}";
-	private readonly ApplicationDbContext _db;
-	private readonly IMovieParser _parser;
-	private readonly IWikiPages _wikiPages;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly ITASVideosGrue _tasvideosGrue;
-	private readonly IMovieFormatDeprecator _deprecator;
-	private readonly IQueueService _queueService;
-	private readonly IYoutubeSync _youtubeSync;
-	private readonly IForumService _forumService;
-
-	public EditModel(
-		ApplicationDbContext db,
-		IMovieParser parser,
-		IWikiPages wikiPages,
-		ExternalMediaPublisher publisher,
-		ITASVideosGrue tasvideosGrue,
-		IMovieFormatDeprecator deprecator,
-		IQueueService queueService,
-		IYoutubeSync youtubeSync,
-		IForumService forumService)
-	{
-		_db = db;
-		_parser = parser;
-		_wikiPages = wikiPages;
-		_publisher = publisher;
-		_tasvideosGrue = tasvideosGrue;
-		_deprecator = deprecator;
-		_queueService = queueService;
-		_youtubeSync = youtubeSync;
-		_forumService = forumService;
-	}
+	private const string FileFieldName = $"{nameof(Submission)}.{nameof(SubmissionEdit.ReplaceMovieFile)}";
 
 	[FromRoute]
 	public int Id { get; set; }
 
 	[BindProperty]
-	public SubmissionEditModel Submission { get; set; } = new();
+	public SubmissionEdit Submission { get; set; } = new();
+
+	[BindProperty]
+	[DoNotTrim]
+	public string Markup { get; set; } = "";
+
+	[BindProperty]
+	public bool MarkupChanged { get; set; }
 
 	public bool CanDelete { get; set; }
-
-	[Display(Name = "Status")]
-	public IEnumerable<SubmissionStatus> AvailableStatuses { get; set; } = new List<SubmissionStatus>();
-
-	public IEnumerable<SelectListItem> AvailableClasses { get; set; } = new List<SelectListItem>();
-
-	public IEnumerable<SelectListItem> AvailableRejectionReasons { get; set; } = new List<SelectListItem>();
+	public ICollection<SubmissionStatus> AvailableStatuses { get; set; } = [];
+	public List<SelectListItem> AvailableClasses { get; set; } = [];
+	public List<SelectListItem> AvailableRejectionReasons { get; set; } = [];
 
 	public async Task<IActionResult> OnGet()
 	{
-		// TODO: set up auto-mapper and use ProjectTo<>
-		var submission = await _db.Submissions
+		var submission = await db.Submissions
 			.Where(s => s.Id == Id)
-			.Select(s => new SubmissionEditModel // It is important to use a projection here to avoid querying the file data which not needed and can be slow
-			{
-				SystemDisplayName = s.System!.DisplayName,
-				SystemCode = s.System.Code,
-				GameName = s.GameName,
-				GameVersion = s.GameVersion,
-				RomName = s.RomName,
-				Branch = s.Branch,
-				Emulator = s.EmulatorVersion,
-				FrameCount = s.Frames,
-				FrameRate = s.SystemFrameRate!.FrameRate,
-				RerecordCount = s.RerecordCount,
-				CreateTimestamp = s.CreateTimestamp,
-				Submitter = s.Submitter!.UserName,
-				LastUpdateTimestamp = s.WikiContent!.LastUpdateTimestamp,
-				LastUpdateUser = s.WikiContent.LastUpdateUserName,
-				Status = s.Status,
-				EncodeEmbedLink = s.EncodeEmbedLink,
-				Markup = s.WikiContent.Markup,
-				Judge = s.Judge != null ? s.Judge.UserName : "",
-				Publisher = s.Publisher != null ? s.Publisher.UserName : "",
-				PublicationClassId = s.IntendedClassId,
-				RejectionReason = s.RejectionReasonId,
-				AdditionalAuthors = s.AdditionalAuthors
-			})
+			.ToSubmissionEditModel()
 			.SingleOrDefaultAsync();
 
 		if (submission is null)
@@ -102,30 +55,25 @@ public class EditModel : BasePageModel
 		}
 
 		Submission = submission;
-		Submission.Authors = await _db.SubmissionAuthors
-			.Where(sa => sa.SubmissionId == Id)
-			.OrderBy(sa => sa.Ordinal)
-			.Select(sa => sa.Author!.UserName)
-			.ToListAsync();
 
 		var userName = User.Name();
-
-		// If user can not edit submissions then they must be an author or the original submitter
-		if (!User.Has(PermissionTo.EditSubmissions))
+		if (!CanEditSubmission(Submission.Submitter, Submission.Authors))
 		{
-			if (Submission.Submitter != userName
-				&& !Submission.Authors.Contains(userName))
-			{
-				return AccessDenied();
-			}
+			return AccessDenied();
+		}
+
+		var submissionPage = await wikiPages.SubmissionPage(Id);
+		if (submissionPage is not null)
+		{
+			Markup = submissionPage.Markup;
 		}
 
 		await PopulateDropdowns();
 
-		AvailableStatuses = _queueService.AvailableStatuses(
+		AvailableStatuses = queueService.AvailableStatuses(
 			Submission.Status,
 			User.Permissions(),
-			Submission.CreateTimestamp,
+			Submission.SubmitDate,
 			Submission.Submitter == userName || Submission.Authors.Contains(userName),
 			Submission.Judge == userName,
 			Submission.Publisher == userName);
@@ -135,28 +83,17 @@ public class EditModel : BasePageModel
 
 	public async Task<IActionResult> OnPost()
 	{
-		if (User.Has(PermissionTo.ReplaceSubmissionMovieFile) && Submission.MovieFile is not null)
+		if (User.Has(PermissionTo.ReplaceSubmissionMovieFile) && Submission.ReplaceMovieFile is not null)
 		{
-			if (!Submission.MovieFile.IsZip())
-			{
-				ModelState.AddModelError(_fileFieldName, "Not a valid .zip file");
-			}
-
-			if (!Submission.MovieFile.LessThanMovieSizeLimit())
-			{
-				ModelState.AddModelError(_fileFieldName, ".zip is too big, are you sure this is a valid movie file?");
-			}
+			Submission.ReplaceMovieFile?.AddModelErrorIfOverSizeLimit(ModelState, User, movieFieldName: FileFieldName);
 		}
 		else if (!User.Has(PermissionTo.ReplaceSubmissionMovieFile))
 		{
-			Submission.MovieFile = null;
+			Submission.ReplaceMovieFile = null;
 		}
 
 		// TODO: this has to be done anytime a string-list TagHelper is used, can we make this automatic with model binders?
-		var subAuthors = Submission.Authors
-			.Where(a => !string.IsNullOrWhiteSpace(a))
-			.ToList();
-		Submission.Authors = subAuthors;
+		Submission.Authors = Submission.Authors.RemoveEmpty();
 
 		var userName = User.Name();
 
@@ -164,15 +101,15 @@ public class EditModel : BasePageModel
 		// but if we treat null as no choice, then we have no way to unset these values
 		if (!User.Has(PermissionTo.JudgeSubmissions))
 		{
-			Submission.PublicationClassId = null;
+			Submission.IntendedPublicationClass = null;
 		}
-		else if (Submission.PublicationClassId is null &&
+		else if (Submission.IntendedPublicationClass is null &&
 			Submission.Status is SubmissionStatus.Accepted or SubmissionStatus.PublicationUnderway)
 		{
-			ModelState.AddModelError($"{nameof(Submission)}.{nameof(Submission.PublicationClassId)}", "A submission can not be accepted without a PublicationClass");
+			ModelState.AddModelError($"{nameof(Submission)}.{nameof(Submission.IntendedPublicationClass)}", "A submission can not be accepted without a PublicationClass");
 		}
 
-		var subInfo = await _db.Submissions
+		var subInfo = await db.Submissions
 			.Where(s => s.Id == Id)
 			.Select(s => new
 			{
@@ -189,65 +126,60 @@ public class EditModel : BasePageModel
 			return NotFound();
 		}
 
-		var availableStatus = _queueService.AvailableStatuses(
+		AvailableStatuses = queueService.AvailableStatuses(
 			subInfo.CurrentStatus,
 			User.Permissions(),
 			subInfo.CreateDate,
 			subInfo.UserIsAuthorOrSubmitter,
 			subInfo.UserIsJudge,
-			subInfo.UserIsPublisher)
-			.ToList();
+			subInfo.UserIsPublisher);
 
-		if (!availableStatus.Contains(Submission.Status))
+		if (!AvailableStatuses.Contains(Submission.Status))
 		{
 			ModelState.AddModelError($"{nameof(Submission)}.{nameof(Submission.Status)}", $"Invalid status: {Submission.Status}");
 		}
 
 		if (!ModelState.IsValid)
 		{
-			await PopulateDropdowns();
-			AvailableStatuses = availableStatus;
-			return Page();
+			return await ReturnWithModelErrors();
 		}
 
-		// If user can not edit submissions then they must be an author or the original submitter
-		if (!User.Has(PermissionTo.EditSubmissions))
+		if (!User.Has(PermissionTo.EditSubmissions) && !subInfo.UserIsAuthorOrSubmitter)
 		{
-			if (!subInfo.UserIsAuthorOrSubmitter)
-			{
-				return AccessDenied();
-			}
+			return AccessDenied();
 		}
 
-		var submission = await _db.Submissions
+		var submission = await db.Submissions
+			.Include(s => s.SubmissionAuthors)
+			.ThenInclude(sa => sa.Author)
+			.Include(s => s.System)
+			.Include(s => s.SystemFrameRate)
+			.Include(s => s.Game)
+			.Include(s => s.GameVersion)
+			.Include(s => s.GameGoal)
+			.Include(gg => gg.GameGoal)
 			.Include(s => s.Topic)
 			.Include(s => s.Judge)
 			.Include(s => s.Publisher)
-			.Include(s => s.System)
-			.Include(s => s.SystemFrameRate)
-			.Include(s => s.SubmissionAuthors)
-			.ThenInclude(sa => sa.Author)
-			.Include(s => s.Game)
-			.Include(s => s.Rom)
 			.SingleAsync(s => s.Id == Id);
 
-		if (Submission.MovieFile is not null)
+		if (Submission.ReplaceMovieFile is not null)
 		{
-			var parseResult = await _parser.ParseZip(Submission.MovieFile.OpenReadStream());
+			var (parseResult, movieFileBytes) = await ParseMovieFile(Submission.ReplaceMovieFile);
 			if (!parseResult.Success)
 			{
 				ModelState.AddParseErrors(parseResult);
-				return Page();
+				return await ReturnWithModelErrors();
 			}
 
-			var deprecated = await _deprecator.IsDeprecated("." + parseResult.FileExtension);
+			var deprecated = await deprecator.IsDeprecated("." + parseResult.FileExtension);
 			if (deprecated)
 			{
-				ModelState.AddModelError(_fileFieldName, $".{parseResult.FileExtension} is no longer submittable");
-				return Page();
+				ModelState.AddModelError(FileFieldName, $".{parseResult.FileExtension} is no longer submittable");
+				return await ReturnWithModelErrors();
 			}
 
-			var error = await _queueService.MapParsedResult(parseResult, submission);
+			var error = await queueService.MapParsedResult(parseResult, submission);
 			if (!string.IsNullOrWhiteSpace(error))
 			{
 				ModelState.AddModelError("", error);
@@ -255,57 +187,60 @@ public class EditModel : BasePageModel
 
 			if (!ModelState.IsValid)
 			{
-				return Page();
+				return await ReturnWithModelErrors();
 			}
 
-			submission.MovieFile = await Submission.MovieFile.ToBytes();
+			submission.MovieFile = movieFileBytes;
+			submission.SyncedOn = null;
+			submission.SyncedByUserId = null;
+
+			if (parseResult.Hashes.Count > 0)
+			{
+				submission.HashType = parseResult.Hashes.First().Key.ToString();
+				submission.Hash = parseResult.Hashes.First().Value;
+			}
+			else
+			{
+				submission.HashType = null;
+				submission.Hash = null;
+			}
 		}
 
-		// If a judge is claiming the submission
-		if (Submission.Status == SubmissionStatus.JudgingUnderWay
-			&& submission.Status != SubmissionStatus.JudgingUnderWay)
+		if (SubmissionHelper.JudgeIsClaiming(submission.Status, Submission.Status))
 		{
-			submission.Judge = await _db.Users.SingleAsync(u => u.UserName == userName);
+			submission.Judge = await db.Users.SingleAsync(u => u.UserName == userName);
 		}
-		else if (submission.Status == SubmissionStatus.JudgingUnderWay // If judge is unclaiming, remove them
-			&& Submission.Status == SubmissionStatus.New
-			&& submission.Judge is not null)
+		else if (SubmissionHelper.JudgeIsUnclaiming(Submission.Status))
 		{
 			submission.Judge = null;
 		}
 
-		if (Submission.Status == SubmissionStatus.PublicationUnderway
-			&& submission.Status != SubmissionStatus.PublicationUnderway)
+		if (SubmissionHelper.PublisherIsClaiming(submission.Status, Submission.Status))
 		{
-			submission.Publisher = await _db.Users.SingleAsync(u => u.UserName == userName);
+			submission.Publisher = await db.Users.SingleAsync(u => u.UserName == userName);
 		}
-		else if (submission.Status == SubmissionStatus.Accepted // If publisher is unclaiming, remove them
-			&& Submission.Status == SubmissionStatus.PublicationUnderway)
+		else if (SubmissionHelper.PublisherIsUnclaiming(submission.Status, Submission.Status))
 		{
 			submission.Publisher = null;
 		}
 
 		bool statusHasChanged = submission.Status != Submission.Status;
+		var previousStatus = submission.Status;
 		bool moveTopic = false;
 		if (statusHasChanged)
 		{
-			_db.SubmissionStatusHistory.Add(submission.Id, Submission.Status);
+			db.SubmissionStatusHistory.Add(submission.Id, Submission.Status);
 
 			int moveTopicTo = -1;
 
-			if (submission.Topic!.ForumId != SiteGlobalConstants.PlaygroundForumId &&
-				Submission.Status == SubmissionStatus.Playground)
+			if (submission.Topic!.ForumId != SiteGlobalConstants.PlaygroundForumId
+				&& Submission.Status == SubmissionStatus.Playground)
 			{
 				moveTopic = true;
 				moveTopicTo = SiteGlobalConstants.PlaygroundForumId;
 			}
-			else if (submission.Topic.ForumId != SiteGlobalConstants.WorkbenchForumId &&
-				(Submission.Status == SubmissionStatus.New ||
-				Submission.Status == SubmissionStatus.Delayed ||
-				Submission.Status == SubmissionStatus.NeedsMoreInfo ||
-				Submission.Status == SubmissionStatus.JudgingUnderWay ||
-				Submission.Status == SubmissionStatus.Accepted ||
-				Submission.Status == SubmissionStatus.PublicationUnderway))
+			else if (submission.Topic.ForumId != SiteGlobalConstants.WorkbenchForumId
+					&& Submission.Status.IsWorkInProgress())
 			{
 				moveTopic = true;
 				moveTopicTo = SiteGlobalConstants.WorkbenchForumId;
@@ -315,7 +250,7 @@ public class EditModel : BasePageModel
 			if (moveTopic)
 			{
 				submission.Topic.ForumId = moveTopicTo;
-				var postsToMove = await _db.ForumPosts
+				var postsToMove = await db.ForumPosts
 					.ForTopic(submission.Topic.Id)
 					.ToListAsync();
 				foreach (var post in postsToMove)
@@ -329,118 +264,108 @@ public class EditModel : BasePageModel
 			? Submission.RejectionReason
 			: null;
 
-		submission.IntendedClass = Submission.PublicationClassId.HasValue
-			? await _db.PublicationClasses.SingleAsync(t => t.Id == Submission.PublicationClassId.Value)
+		submission.IntendedClass = Submission.IntendedPublicationClass.HasValue
+			? await db.PublicationClasses.FindAsync(Submission.IntendedPublicationClass.Value)
 			: null;
 
-		submission.GameVersion = Submission.GameVersion;
+		submission.SubmittedGameVersion = Submission.GameVersion;
 		submission.GameName = Submission.GameName;
 		submission.EmulatorVersion = Submission.Emulator;
-		submission.Branch = Submission.Branch;
+		submission.Branch = Submission.Goal;
 		submission.RomName = Submission.RomName;
-		submission.EncodeEmbedLink = _youtubeSync.ConvertToEmbedLink(Submission.EncodeEmbedLink);
+		submission.EncodeEmbedLink = youtubeSync.ConvertToEmbedLink(Submission.EncodeEmbedLink);
 		submission.Status = Submission.Status;
-		submission.AdditionalAuthors = Submission.AdditionalAuthors.NullIfWhitespace();
+		submission.AdditionalAuthors = Submission.ExternalAuthors.NullIfWhitespace();
 
-		var revision = new WikiPage
+		if (MarkupChanged)
 		{
-			PageName = $"{LinkConstants.SubmissionWikiPage}{Id}",
-			Markup = Submission.Markup,
-			MinorEdit = Submission.MinorEdit,
-			RevisionMessage = Submission.RevisionMessage,
-			AuthorId = User.GetUserId()
-		};
-		var addResult = await _wikiPages.Add(revision);
-		if (!addResult)
-		{
-			throw new InvalidOperationException("Unable to save wiki revision!");
+			var revision = new WikiCreateRequest
+			{
+				PageName = $"{LinkConstants.SubmissionWikiPage}{Id}",
+				Markup = Markup,
+				MinorEdit = HttpContext.Request.MinorEdit(),
+				RevisionMessage = Submission.RevisionMessage,
+				AuthorId = User.GetUserId()
+			};
+			_ = await wikiPages.Add(revision) ?? throw new InvalidOperationException("Unable to save wiki revision!");
 		}
 
-		submission.WikiContentId = revision.Id;
-
 		submission.SubmissionAuthors.Clear();
-		submission.SubmissionAuthors.AddRange(await _db.Users
-			.Where(u => Submission.Authors.Contains(u.UserName))
-			.Select(u => new SubmissionAuthor
-			{
-				SubmissionId = submission.Id,
-				UserId = u.Id,
-				Author = u,
-				Ordinal = subAuthors.IndexOf(u.UserName)
-			})
+		submission.SubmissionAuthors.AddRange(await db.Users
+			.ToSubmissionAuthors(submission.Id, Submission.Authors)
 			.ToListAsync());
 
 		submission.GenerateTitle();
-		await _db.SaveChangesAsync();
+		await db.SaveChangesAsync();
 
-		var topic = await _db.ForumTopics.FirstOrDefaultAsync(t => t.Id == submission.TopicId);
+		var topic = await db.ForumTopics.FirstOrDefaultAsync(t => t.Id == submission.TopicId);
 		if (topic is not null)
 		{
 			topic.Title = submission.Title;
-			await _db.SaveChangesAsync();
+			await db.SaveChangesAsync();
 		}
 
 		if (moveTopic)
 		{
-			_forumService.ClearLatestPostCache();
-			_forumService.ClearTopicActivityCache();
+			forumService.ClearLatestPostCache();
+			forumService.ClearTopicActivityCache();
 		}
 
 		if (submission.Status is SubmissionStatus.Rejected or SubmissionStatus.Cancelled
 			&& statusHasChanged)
 		{
-			await _tasvideosGrue.RejectAndMove(submission.Id);
+			await tasvideosGrue.RejectAndMove(submission.Id);
 		}
 
-		if (!Submission.MinorEdit || statusHasChanged) // always publish submission status changes to media
+		var formattedTitle = await GetFormattedTitle(previousStatus, submission.Status);
+		var separator = !string.IsNullOrEmpty(Submission.RevisionMessage) ? " | " : "";
+		await publisher.SendSubmissionEdit(
+			Id, formattedTitle, $"{Submission.RevisionMessage}{separator}{submission.Title}", statusHasChanged);
+
+		return RedirectToPage("View", new { Id });
+	}
+
+	private async Task<string> GetFormattedTitle(SubmissionStatus previousStatus, SubmissionStatus newStatus)
+	{
+		if (previousStatus == newStatus)
 		{
-			string title;
-			if (statusHasChanged)
-			{
-				string statusStr = Submission.Status.ToString();
+			return $"[{Id}S]({{0}}) edited by {User.Name()}";
+		}
 
-				// CAPS on a judge decision
-				if (Submission.Status is SubmissionStatus.Accepted
-					or SubmissionStatus.Rejected
-					or SubmissionStatus.Cancelled
-					or SubmissionStatus.Delayed
-					or SubmissionStatus.NeedsMoreInfo
-					or SubmissionStatus.Playground)
+		string statusStr = newStatus.EnumDisplayName();
+
+		if (previousStatus == SubmissionStatus.PublicationUnderway && newStatus == SubmissionStatus.Accepted)
+		{
+			return $"[{Id}S]({{0}}) unset {SubmissionStatus.PublicationUnderway.EnumDisplayName()} by {User.Name()}";
+		}
+
+		if (newStatus.IsJudgeDecision())
+		{
+			statusStr = statusStr.ToUpper();
+		}
+
+		switch (newStatus)
+		{
+			case SubmissionStatus.Accepted:
 				{
-					statusStr = statusStr.ToUpper();
-				}
-
-				if (Submission.Status == SubmissionStatus.Accepted)
-				{
-					var publicationClass = (await _db.PublicationClasses.SingleAsync(t => t.Id == Submission.PublicationClassId)).Name;
-
+					var publicationClass = (await db.PublicationClasses.FindAsync(Submission.IntendedPublicationClass))!.Name;
 					if (publicationClass != "Standard")
 					{
 						statusStr += $" to {publicationClass}";
 					}
-				}
-				else if (Submission.Status is SubmissionStatus.NeedsMoreInfo
-						or SubmissionStatus.New
-						or SubmissionStatus.PublicationUnderway
-						or SubmissionStatus.Playground)
-				{
-					statusStr = "set to " + statusStr;
+
+					break;
 				}
 
-				title = $"Submission {statusStr} by {userName}";
-			}
-			else
-			{
-				title = $"Submission edited by {userName}";
-			}
-
-			await _publisher.SendSubmissionEdit(
-				title,
-				submission.Title,
-				$"{Id}S");
+			case SubmissionStatus.NeedsMoreInfo
+				or SubmissionStatus.New
+				or SubmissionStatus.PublicationUnderway
+				or SubmissionStatus.Playground:
+				statusStr = "set to " + statusStr;
+				break;
 		}
 
-		return RedirectToPage("View", new { Id });
+		return $"[{Id}S]({{0}}) {statusStr} by {User.Name()}";
 	}
 
 	public async Task<IActionResult> OnGetClaimForJudging()
@@ -465,10 +390,7 @@ public class EditModel : BasePageModel
 
 	private async Task<IActionResult> Claim(SubmissionStatus requiredStatus, SubmissionStatus newStatus, string action, string message, bool isJudge)
 	{
-		var submission = await _db.Submissions
-			.Include(s => s.WikiContent)
-			.SingleOrDefaultAsync(s => s.Id == Id);
-
+		var submission = await db.Submissions.FindAsync(Id);
 		if (submission is null)
 		{
 			return NotFound();
@@ -479,52 +401,80 @@ public class EditModel : BasePageModel
 			return BadRequest("Submission can not be claimed");
 		}
 
-		_db.SubmissionStatusHistory.Add(submission.Id, Submission.Status);
+		var submissionPage = (await wikiPages.SubmissionPage(Id))!;
+		db.SubmissionStatusHistory.Add(submission.Id, Submission.Status);
 
 		submission.Status = newStatus;
-		var wikiPage = new WikiPage
+		await wikiPages.Add(new WikiCreateRequest
 		{
-			PageName = submission.WikiContent!.PageName,
-			Markup = submission.WikiContent.Markup += $"\n----\n[user:{User.Name()}]: {message}",
+			PageName = submissionPage.PageName,
+			Markup = submissionPage.Markup + $"\n----\n[user:{User.Name()}]: {message}",
 			RevisionMessage = $"Claimed for {action}",
 			AuthorId = User.GetUserId()
-		};
-		await _wikiPages.Add(wikiPage);
-		submission.WikiContentId = wikiPage.Id;
+		});
 
 		if (isJudge)
 		{
 			submission.JudgeId = User.GetUserId();
+			if (submission.TopicId.HasValue)
+			{
+				await topicWatcher.WatchTopic(submission.TopicId.Value, User.GetUserId(), true);
+			}
 		}
 		else
 		{
 			submission.PublisherId = User.GetUserId();
 		}
 
-		var result = await ConcurrentSave(_db, "", "Unable to claim");
-		if (result)
+		var result = await db.TrySaveChanges();
+		SetMessage(result, "", "Unable to claim");
+		if (result.IsSuccess())
 		{
-			string statusPrefix = newStatus == SubmissionStatus.JudgingUnderWay ? "" : "set to ";
-			await _publisher.SendSubmissionEdit(
-				$"Submission {statusPrefix}{newStatus.EnumDisplayName()} by {User.Name()}",
-				$"{submission.Title}",
-				$"{Id}S");
+			await publisher.SendSubmissionEdit(Id, $"[Submission]({{0}}) {newStatus.EnumDisplayName()} by {User.Name()}", $"{submission.Title}");
 		}
 
 		return RedirectToPage("View", new { Id });
 	}
 
+	private async Task<PageResult> ReturnWithModelErrors()
+	{
+		await PopulateDropdowns();
+		return Page();
+	}
+
 	private async Task PopulateDropdowns()
 	{
 		CanDelete = User.Has(PermissionTo.DeleteSubmissions)
-			&& (await _queueService.CanDeleteSubmission(Id)).True;
+			&& (await queueService.CanDeleteSubmission(Id)).True;
 
-		AvailableClasses = await _db.PublicationClasses
-			.ToDropdown()
-			.ToListAsync();
+		AvailableClasses = await db.PublicationClasses.ToDropDownList();
+		AvailableRejectionReasons = await db.SubmissionRejectionReasons.ToDropDownList();
+	}
 
-		AvailableRejectionReasons = await _db.SubmissionRejectionReasons
-			.ToDropdown()
-			.ToListAsync();
+	public class SubmissionEdit
+	{
+		[StringLength(1000)]
+		public string? RevisionMessage { get; init; }
+		public IFormFile? ReplaceMovieFile { get; set; }
+		public int? IntendedPublicationClass { get; set; }
+		public int? RejectionReason { get; init; }
+
+		[Required]
+		public string GameName { get; init; } = "";
+		public string? GameVersion { get; init; }
+		public string? RomName { get; init; }
+		public string? Goal { get; init; }
+		public string? Emulator { get; init; }
+
+		[Url]
+		public string? EncodeEmbedLink { get; init; }
+		public List<string> Authors { get; set; } = [];
+		public string? Submitter { get; init; }
+		public DateTime SubmitDate { get; init; }
+		public SubmissionStatus Status { get; init; }
+		public string? Judge { get; init; }
+		public string? Publisher { get; init; }
+		public string? ExternalAuthors { get; init; }
+		public string Title { get; init; } = "";
 	}
 }

@@ -1,93 +1,54 @@
-﻿using System.ComponentModel.DataAnnotations;
-using AspNetCore.ReCaptcha;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
+﻿using AspNetCore.ReCaptcha;
 using TASVideos.Core.Services.Email;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data.Entity;
-using TASVideos.Models.ValidationAttributes;
 
 namespace TASVideos.Pages.Account;
 
+[BindProperties]
 [AllowAnonymous]
 [IpBanCheck]
 public class RegisterModel : BasePageModel
 {
-	private readonly SignInManager _signInManager;
-	private readonly IEmailService _emailService;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly IReCaptchaService _reCaptchaService;
-	private readonly IHostEnvironment _env;
-	private readonly IUserMaintenanceLogger _userMaintenanceLogger;
-
-	public RegisterModel(
-		SignInManager signInManager,
-		IEmailService emailService,
-		ExternalMediaPublisher publisher,
-		IReCaptchaService reCaptchaService,
-		IHostEnvironment env,
-		IUserMaintenanceLogger userMaintenanceLogger)
-	{
-		_signInManager = signInManager;
-		_emailService = emailService;
-		_publisher = publisher;
-		_reCaptchaService = reCaptchaService;
-		_env = env;
-		_userMaintenanceLogger = userMaintenanceLogger;
-	}
-
-	[BindProperty]
-	[Display(Name = "Time Zone")]
-	public string? SelectedTimeZone { get; set; }
-
-	[BindProperty]
 	[Required]
-	[StringLength(256)]
-	[Display(Name = "User Name")]
+	public string TimeZone { get; set; } = "";
+
+	[StringLength(50)]
 	public string UserName { get; set; } = "";
 
-	[RegularExpression(@"[^+]+", ErrorMessage = "Email pattern not allowed.")]
-	[BindProperty]
-	[Required]
 	[EmailAddress]
-	[Display(Name = "Email")]
 	public string Email { get; set; } = "";
 
-	[BindProperty]
-	[Required]
-	[StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 12)]
+	[StringLength(128, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 12)]
 	[DataType(DataType.Password)]
-	[Display(Name = "Password")]
 	public string Password { get; set; } = "";
 
-	[BindProperty]
+	[StringLength(128, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 12)]
 	[DataType(DataType.Password)]
-	[Display(Name = "Confirm password")]
 	public string ConfirmPassword { get; set; } = "";
 
-	[BindProperty]
-	[Display(Name = "Location")]
 	[StringLength(256)]
-	public string? From { get; set; }
+	public string? Location { get; set; }
 
-	[BindProperty]
-	[Required]
 	[MustBeTrue(ErrorMessage = "You must certify that you are 13 years of age or older")]
-	[Display(Name = "By checking the box below, you certify you are 13 years of age or older")]
 	public bool Coppa { get; set; }
 
-	public async Task<IActionResult> OnPost()
+	public async Task<IActionResult> OnPost(
+		[FromServices] ISignInManager signInManager,
+		[FromServices] IUserManager userManager,
+		[FromServices] IEmailService emailService,
+		[FromServices] IExternalMediaPublisher publisher,
+		[FromServices] IReCaptchaService reCaptchaService,
+		[FromServices] IHostEnvironment env,
+		[FromServices] IUserMaintenanceLogger userMaintenanceLogger)
 	{
 		if (Password != ConfirmPassword)
 		{
 			ModelState.AddModelError(nameof(ConfirmPassword), "The password and confirmation password do not match.");
 		}
 
-		string encodedResponse = Request.Form["g-recaptcha-response"];
-		bool isCaptchaValid = await _reCaptchaService.VerifyAsync(encodedResponse);
+		var encodedResponse = Request.Form["g-recaptcha-response"];
+		bool isCaptchaValid = await reCaptchaService.VerifyAsync(encodedResponse);
 
-		if (!_env.IsDevelopment() && !isCaptchaValid)
+		if (!env.IsDevelopment() && !isCaptchaValid)
 		{
 			ModelState.AddModelError("", "TASVideos prefers human users.  If you believe you have received this message in error, please contact admin@tasvideos.org");
 		}
@@ -97,43 +58,52 @@ public class RegisterModel : BasePageModel
 			return Page();
 		}
 
-		if (!await _signInManager.UsernameIsAllowed(UserName))
+		if (!await signInManager.UsernameIsAllowed(UserName))
 		{
 			ModelState.AddModelError(nameof(UserName), "The username is not allowed.");
 		}
 
-		if (ModelState.IsValid)
+		if (await signInManager.EmailExists(Email))
 		{
-			var user = new User
-			{
-				UserName = UserName,
-				Email = Email,
-				TimeZoneId = SelectedTimeZone ?? TimeZoneInfo.Utc.Id,
-				From = From,
-				EmailOnPrivateMessage = true
-			};
-			var result = await _signInManager.UserManager.CreateAsync(user, Password);
-			if (result.Succeeded)
-			{
-				var token = await _signInManager.UserManager.GenerateEmailConfirmationTokenAsync(user);
-				var callbackUrl = Url.EmailConfirmationLink(user.Id.ToString(), token, Request.Scheme);
-
-				await _signInManager.SignInAsync(user, isPersistent: false);
-				await _publisher.SendUserManagement(
-					$"New User registered! {user.UserName}",
-					"",
-					$"Users/Profile/{user.UserName}");
-				await _userMaintenanceLogger.Log(user.Id, $"New registration from {IpAddress}");
-				await _emailService.EmailConfirmation(Email, callbackUrl);
-
-				return _signInManager.UserManager.Options.SignIn.RequireConfirmedEmail
-					? RedirectToPage("EmailConfirmationSent")
-					: BaseReturnUrlRedirect();
-			}
-
-			AddErrors(result);
+			ModelState.AddModelError(nameof(Email), "Email is already taken.");
 		}
 
-		return Page();
+		if (!signInManager.IsPasswordAllowed(UserName, Email, Password))
+		{
+			ModelState.AddModelError(nameof(Password), "This password is not allowed, please ensure your password is sufficiently different from your username and/or email");
+		}
+
+		if (!ModelState.IsValid)
+		{
+			return Page();
+		}
+
+		var user = new User
+		{
+			UserName = UserName,
+			Email = Email,
+			TimeZoneId = TimeZone,
+			From = Location,
+			EmailOnPrivateMessage = true
+		};
+
+		var result = await userManager.Create(user, Password);
+		if (!result.Succeeded)
+		{
+			AddErrors(result);
+			return Page();
+		}
+
+		var token = await userManager.GenerateEmailConfirmationToken(user);
+		var callbackUrl = Url.EmailConfirmationLink(user.Id.ToString(), token);
+
+		await signInManager.SignIn(user, isPersistent: false);
+		await publisher.SendUserManagement($"New User registered! [{user.UserName}]({{0}})", user.UserName);
+		await userMaintenanceLogger.Log(user.Id, $"New registration from {IpAddress}");
+		await emailService.EmailConfirmation(Email, callbackUrl);
+
+		return userManager.IsConfirmedEmailRequired()
+			? RedirectToPage("EmailConfirmationSent")
+			: BaseReturnUrlRedirect();
 	}
 }

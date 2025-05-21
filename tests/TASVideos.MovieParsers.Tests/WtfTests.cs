@@ -4,14 +4,9 @@
 [TestCategory("WtfParsers")]
 public class WtfTests : BaseParserTests
 {
-	private readonly Wtf _wtfParser;
+	private readonly Wtf _wtfParser = new();
 
-	public override string ResourcesPath { get; } = "TASVideos.MovieParsers.Tests.WtfSampleFiles.";
-
-	public WtfTests()
-	{
-		_wtfParser = new Wtf();
-	}
+	protected override string ResourcesPath => "TASVideos.MovieParsers.Tests.WtfSampleFiles.";
 
 	[TestMethod]
 	public async Task InvalidHeader()
@@ -19,7 +14,6 @@ public class WtfTests : BaseParserTests
 		var result = await _wtfParser.Parse(Embedded("wrongheader.wtf"), EmbeddedLength("wrongheader.wtf"));
 		Assert.IsFalse(result.Success);
 		AssertNoWarnings(result);
-		Assert.IsNotNull(result.Errors);
 		Assert.AreEqual(1, result.Errors.Count());
 	}
 
@@ -74,7 +68,7 @@ public class WtfTests : BaseParserTests
 		Assert.IsTrue(result.Success);
 		AssertNoWarningsOrErrors(result);
 		Assert.IsNotNull(result.FrameRateOverride);
-		Assert.IsTrue(FrameRatesAreEqual(61, result.FrameRateOverride!.Value));
+		Assert.IsTrue(FrameRatesAreEqual(60, result.FrameRateOverride!.Value));
 	}
 
 	[TestMethod]

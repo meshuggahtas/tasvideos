@@ -27,6 +27,10 @@ public enum PermissionTo
 	RateMovies = 4,
 
 	[Group("User")]
+	[Description("The ability for a user to edit their own created forum posts.")]
+	EditForumPosts = 9,
+
+	[Group("User")]
 	[Description("The ability to create new topics on the forums. Experienced users have the ability to do this, unless revoked")]
 	CreateForumTopics = 10,
 
@@ -43,8 +47,8 @@ public enum PermissionTo
 	UploadUserFiles = 13,
 
 	[Group("User")]
-	[Description("Grants the ability to log into the site. Without this permissions, a user account is effectively banned.")]
-	Login = 14,
+	[Description("The ability for a user to edit their signature.")]
+	EditSignature = 15,
 
 	[Group("User")]
 	[Description("The ability to send private messages.")]
@@ -82,10 +86,6 @@ public enum PermissionTo
 	[Description("The ability to see wiki pages/revisions that were deleted.")]
 	SeeDeletedWikiPages = 106,
 
-	[Group("Wiki")]
-	[Description("The ability to add/edit/remove ram addresses.")]
-	EditRamAddresses = 107,
-
 	[Group("Wiki Administration")]
 	[Description("(Not used, do not assign), Was the ability to see certain restricted pages that pertain to administration activities. There are no pages that meet this criteria.")]
 	SeeAdminPages = 190,
@@ -111,8 +111,8 @@ public enum PermissionTo
 	ReplaceSubmissionMovieFile = 203,
 
 	[Group("Queue Maintenance")]
-	[Description("The ability to set a submission status regardless of condition (exception: published submissions)")]
-	OverrideSubmissionStatus = 204,
+	[Description("The ability to override filesize and other limits, as well as set the submission status regardless of condition (exception: published submissions)")]
+	OverrideSubmissionConstraints = 204,
 
 	[Group("Queue Maintenance")]
 	[Description("The ability to deprecate an existing movie parser. When deprecated, a movie will no longer be eligible for submission")]
@@ -159,6 +159,22 @@ public enum PermissionTo
 	CreateAdditionalMovieFiles = 306,
 
 	[Group("Publication Maintenance")]
+	[Description("The ability to create and modify publication awards")]
+	CreateAwards = 307,
+
+	[Group("Publication Maintenance")]
+	[Description("The ability to delete a game entry")]
+	DeleteGameEntries = 308,
+
+	[Group("Publication Maintenance")]
+	[Description("The ability to replace the primary movie file for a publciation")]
+	ReplacePrimaryMovieFile = 309,
+
+	[Group("Publication Maintenance")]
+	[Description("The ability to edit a movie's star flag")]
+	EditStars = 310,
+
+	[Group("Publication Maintenance")]
 	[Description("The ability to add, edit, and remove the tags used for publications")]
 	TagMaintenance = 390,
 
@@ -174,13 +190,21 @@ public enum PermissionTo
 	[Description("The ability to add, edit, and remove game systems")]
 	GameSystemMaintenance = 393,
 
+	[Group("Publication Maintenance")]
+	[Description("The ability to rewire games into other games")]
+	RewireGames = 394,
+
+	[Group("Publication Maintenance")]
+	[Description("The ability to add, edit, and remove the rejection reasons used on submissions")]
+	RejectionReasonMaintenance = 395,
+
 	#endregion
 
 	#region Forum Moderation 400
 
 	[Group("Forum Moderation")]
 	[Description("The ability to edit post created by another user.")]
-	EditForumPosts = 400,
+	EditUsersForumPosts = 400,
 
 	[Group("Forum Moderation")]
 	[Description("The ability to delete post created by another user.")]
@@ -276,7 +300,11 @@ public enum PermissionTo
 
 	[Group("Admin")]
 	[Description("The ability to see high level application and server information such as diagnostics stats and other sensitive information")]
-	SeeDiagnostics = 9001
+	SeeDiagnostics = 9001,
+
+	[Group("Email")]
+	[Description("The ability to see a user's email address")]
+	SeeEmails = 9002
 
 	#endregion
 }
@@ -284,7 +312,6 @@ public enum PermissionTo
 public static class PermissionUtil
 {
 	public static IEnumerable<PermissionTo> AllPermissions() => Enum
-		.GetValues(typeof(PermissionTo))
-		.Cast<PermissionTo>()
+		.GetValues<PermissionTo>()
 		.ToList();
 }

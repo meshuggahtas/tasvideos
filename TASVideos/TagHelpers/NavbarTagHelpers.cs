@@ -1,12 +1,5 @@
-﻿using System.Linq;
-using System.Threading.Tasks;
-
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.AspNetCore.Mvc.ViewFeatures;
+﻿using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
-
-using TASVideos.Extensions;
-using static TASVideos.TagHelpers.TagHelperExtensions;
 
 namespace TASVideos.TagHelpers;
 
@@ -79,18 +72,12 @@ public class NavItemBase : TagHelper
 			return false;
 		}
 
-		var viewPaths = ((string?)ViewContext.ViewData["ActiveTab"] ?? "").SplitWithEmpty("/");
+		var viewPaths = ((string?)ViewContext.TempData["ActiveTab"] ?? "").SplitWithEmpty("/");
 
 		// If length of the name is 2, assume it is the language prefix and use the next part of the path for tab matching
 		var viewActiveTab = viewPaths.Length > 1 && viewPaths[0].Length == 2
 			? viewPaths[1]
 			: viewPaths.FirstOrDefault();
-
-		var tempActiveTab = (string?)ViewContext.TempData["ActiveTab"];
-		if (!string.IsNullOrWhiteSpace(tempActiveTab))
-		{
-			viewActiveTab = tempActiveTab;
-		}
 
 		var page = ViewContext.Page();
 		var pageGroup = ViewContext.PageGroup();
@@ -109,22 +96,22 @@ public class NavItemBase : TagHelper
 		switch (Activate)
 		{
 			case "Home" when page == "/Index":
-			case "Movies" when new[] { "Publications", "Submissions", "UserFiles" }.Contains(pageGroup):
-			case "Articles" when new[] { "ArticleIndex", "Game Resources", "EmulatorResources" }.Contains(viewActiveTab):
-			case "Admin" when new[] { "Roles", "Users", "Permissions" }.Contains(pageGroup):
+			case "Movies" when MoviesGroup.Contains(pageGroup):
+			case "Articles" when ArticlesGroup.Contains(viewActiveTab):
+			case "Admin" when AdminGroup.Contains(pageGroup):
 			case "Register" when page == "/Account/Register":
 			case "Login" when page == "/Account/Login":
-			case "Wiki" when new[] { "SandBox", "RecentChanges", "WikiOrphans", "TODO", "System", "DeletedPages" }.Contains(viewActiveTab):
+			case "Wiki" when WikiGroup.Contains(viewActiveTab):
 				return true;
 		}
 
 		// Wiki Razor Pages that are not the general wiki page action
-		if (string.IsNullOrWhiteSpace(viewActiveTab)
-			&& Activate == "Wiki" && pageGroup == "Wiki")
-		{
-			return true;
-		}
-
-		return false;
+		return string.IsNullOrWhiteSpace(viewActiveTab)
+			&& Activate == "Wiki" && pageGroup == "Wiki";
 	}
+
+	private static readonly string[] MoviesGroup = ["Publications", "Submissions", "UserFiles"];
+	private static readonly string[] ArticlesGroup = ["ArticleIndex", "Game Resources", "EmulatorResources"];
+	private static readonly string[] AdminGroup = ["Roles", "Users", "Permissions"];
+	private static readonly string[] WikiGroup = ["SandBox", "RecentChanges", "WikiOrphans", "TODO", "System", "DeletedPages"];
 }

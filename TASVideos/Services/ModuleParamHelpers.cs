@@ -1,8 +1,8 @@
 ﻿using System.Reflection;
 using Namotion.Reflection;
-using TASVideos.Data.Entity;
+using TASVideos.Core.Services.Wiki;
 using TASVideos.TagHelpers;
-using TASVideos.ViewComponents;
+using TASVideos.WikiModules;
 
 namespace TASVideos.Services;
 
@@ -31,11 +31,18 @@ public static class ModuleParamHelpers
 		.Where(t => t.GetCustomAttribute(typeof(TextModuleAttribute)) != null)
 		.ToDictionary(tkey => ((WikiModuleAttribute)tkey.GetCustomAttribute(typeof(WikiModuleAttribute))!).Name, tvalue => tvalue, StringComparer.InvariantCultureIgnoreCase);
 
+	public static readonly IDictionary<string, Type> MetaDescriptionComponents = Assembly
+		.GetAssembly(typeof(WikiModuleAttribute))
+		!.GetTypes()
+		.Where(t => t.GetCustomAttribute(typeof(WikiModuleAttribute)) != null)
+		.Where(t => t.GetCustomAttribute(typeof(MetaDescriptionModuleAttribute)) != null)
+		.ToDictionary(tkey => ((WikiModuleAttribute)tkey.GetCustomAttribute(typeof(WikiModuleAttribute))!).Name, tvalue => tvalue, StringComparer.InvariantCultureIgnoreCase);
+
 	public static IDictionary<string, object?> GetParameterData(
 		TextWriter w,
 		string name,
 		MethodInfo invokeMethod,
-		WikiPage pageData,
+		IWikiPage? pageData,
 		IReadOnlyDictionary<string, string> pp)
 	{
 		var paramObject = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)

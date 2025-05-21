@@ -1,89 +1,77 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
 using TASVideos.Data.Entity.Forum;
 
 namespace TASVideos.Core.Tests.Services;
 
 [TestClass]
-public class TASVideosGrueTests
+public class TASVideosGrueTests : TestDbBase
 {
-	private const int SubmissionId = 1;
-
 	private readonly TASVideosGrue _tasVideosGrue;
-	private readonly TestDbContext _db;
 
 	public TASVideosGrueTests()
 	{
-		_db = TestDbContext.Create();
-		var mockForumService = new Mock<IForumService>();
-		_tasVideosGrue = new TASVideosGrue(_db, mockForumService.Object);
+		var mockForumService = Substitute.For<IForumService>();
+		_tasVideosGrue = new TASVideosGrue(_db, mockForumService);
 	}
 
 	[TestMethod]
 	public async Task PostSubmissionRejection_NoTopic_DoesNotPost()
 	{
-		await _tasVideosGrue.RejectAndMove(SubmissionId);
-		var actual = await _db.ForumPosts.LastOrDefaultAsync();
+		const int submissionId = 1;
+		await _tasVideosGrue.RejectAndMove(submissionId);
+		var actual = await _db.ForumPosts.OrderBy(fp => fp.Id).LastOrDefaultAsync();
 		Assert.IsNull(actual);
 	}
 
 	[TestMethod]
 	public async Task PostSubmissionRejection_TopicCreated()
 	{
-		var topicId = 1;
-		var forumId = 1;
-		var topic = _db.ForumTopics.Add(new ForumTopic
-		{
-			Id = topicId,
-			ForumId = forumId,
-			Title = "Title",
-			SubmissionId = SubmissionId
-		});
+		_db.AddForumConstantEntities();
+		var sub = _db.AddSubmission().Entity;
+		var topic = _db.AddTopic().Entity;
+		topic.ForumId = SiteGlobalConstants.WorkbenchForumId;
+		topic.Title = "Title";
+		topic.Submission = sub;
 		var post = _db.ForumPosts.Add(new ForumPost
 		{
-			TopicId = topicId,
-			ForumId = forumId,
+			Topic = topic,
+			ForumId = topic.ForumId,
+			PosterId = SiteGlobalConstants.TASVideosGrueId
 		});
 		await _db.SaveChangesAsync();
 
-		await _tasVideosGrue.RejectAndMove(SubmissionId);
-		var actual = await _db.ForumPosts.LastOrDefaultAsync();
+		await _tasVideosGrue.RejectAndMove(sub.Id);
+		var actual = await _db.ForumPosts.OrderBy(fp => fp.Id).LastOrDefaultAsync();
 
 		Assert.IsNotNull(actual);
-		Assert.AreEqual(SiteGlobalConstants.GrueFoodForumId, topic.Entity.ForumId);
+		Assert.AreEqual(SiteGlobalConstants.GrueFoodForumId, topic.ForumId);
 		Assert.AreEqual(SiteGlobalConstants.GrueFoodForumId, post.Entity.ForumId);
-		Assert.AreEqual(SiteGlobalConstants.TASVideosGrue, actual.CreateUserName);
-		Assert.AreEqual(SiteGlobalConstants.TASVideosGrue, actual.LastUpdateUserName);
 		Assert.AreEqual(SiteGlobalConstants.TASVideosGrueId, actual.PosterId);
 		Assert.AreEqual(SiteGlobalConstants.GrueFoodForumId, actual.ForumId);
 		Assert.IsFalse(actual.EnableHtml);
 		Assert.IsFalse(actual.EnableBbCode);
-		Assert.IsNotNull(actual.Text);
 		Assert.IsFalse(actual.Text.Contains("stale"));
 	}
 
 	[TestMethod]
 	public async Task PostSubmissionRejection_StaleIfOld()
 	{
-		var topic = _db.ForumTopics.Add(new ForumTopic
-		{
-			CreateTimestamp = DateTime.UtcNow.AddYears(-1),
-			Title = "Title",
-			SubmissionId = SubmissionId
-		});
+		_db.AddForumConstantEntities();
+		var sub = _db.AddSubmission().Entity;
+		var topic = _db.AddTopic().Entity;
+		topic.CreateTimestamp = DateTime.UtcNow.AddYears(-1);
+		topic.Title = "Title";
+		topic.Submission = sub;
 		await _db.SaveChangesAsync();
 
-		await _tasVideosGrue.RejectAndMove(SubmissionId);
-		var actual = await _db.ForumPosts.LastOrDefaultAsync();
+		await _tasVideosGrue.RejectAndMove(sub.Id);
+		var actual = await _db.ForumPosts.OrderBy(fp => fp.Id).LastOrDefaultAsync();
 
 		Assert.IsNotNull(actual);
-		Assert.AreEqual(SiteGlobalConstants.GrueFoodForumId, topic.Entity.ForumId);
-		Assert.AreEqual(SiteGlobalConstants.TASVideosGrue, actual.CreateUserName);
-		Assert.AreEqual(SiteGlobalConstants.TASVideosGrue, actual.LastUpdateUserName);
+		Assert.AreEqual(SiteGlobalConstants.GrueFoodForumId, topic.ForumId);
 		Assert.AreEqual(SiteGlobalConstants.TASVideosGrueId, actual.PosterId);
 		Assert.IsFalse(actual.EnableHtml);
 		Assert.IsFalse(actual.EnableBbCode);
-		Assert.IsNotNull(actual.Text);
 		Assert.IsTrue(actual.Text.Contains("stale"));
 	}
 }

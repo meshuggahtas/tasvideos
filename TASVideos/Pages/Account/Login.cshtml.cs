@@ -1,39 +1,27 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
+﻿using Microsoft.AspNetCore.Authentication;
 
 namespace TASVideos.Pages.Account;
 
+[BindProperties]
 [AllowAnonymous]
 [IpBanCheck]
-public class LoginModel : BasePageModel
+public class LoginModel(ISignInManager signInManager, IUserManager userManager, IHostEnvironment env) : BasePageModel
 {
-	private readonly SignInManager _signInManager;
-
-	public LoginModel(SignInManager signInManager)
-	{
-		_signInManager = signInManager;
-	}
-
-	[BindProperty]
-	[Required]
-	[Display(Name = "User Name")]
 	public string UserName { get; set; } = "";
 
-	[BindProperty]
-	[Required]
 	[DataType(DataType.Password)]
 	public string Password { get; set; } = "";
-
-	[BindProperty]
-	[Display(Name = "Remember me?")]
 	public bool RememberMe { get; set; }
 
-	public async Task OnGet()
+	public async Task<IActionResult> OnGet()
 	{
+		if (User.Identity?.IsAuthenticated ?? false)
+		{
+			return BaseReturnUrlRedirect();
+		}
+
 		await HttpContext.SignOutAsync();
+		return Page();
 	}
 
 	public async Task<IActionResult> OnPost()
@@ -43,11 +31,22 @@ public class LoginModel : BasePageModel
 			return Page();
 		}
 
-		var result = await _signInManager.SignIn(UserName, Password, RememberMe);
+		var (result, user, failedDueToBan) = await signInManager.SignIn(UserName, Password, RememberMe);
 
 		if (result.Succeeded)
 		{
 			return BaseReturnUrlRedirect();
+		}
+
+		if (user is not null && failedDueToBan)
+		{
+			TempData[nameof(BannedModel.BannedUserId)] = user.Id;
+			return RedirectToPage("/Account/Banned");
+		}
+
+		if (user is not null && !await userManager.IsEmailConfirmed(user) && !env.IsDevelopment())
+		{
+			return RedirectToPage("/Account/EmailConfirmationSent");
 		}
 
 		if (result.IsLockedOut)
@@ -55,12 +54,7 @@ public class LoginModel : BasePageModel
 			return RedirectToPage("/Account/Lockout");
 		}
 
-		if (result.IsNotAllowed)
-		{
-			return AccessDenied();
-		}
-
-		ModelState.AddModelError(string.Empty, "Invalid login attempt.");
+		ModelState.AddModelError("", "Invalid login attempt.");
 		return Page();
 	}
 }

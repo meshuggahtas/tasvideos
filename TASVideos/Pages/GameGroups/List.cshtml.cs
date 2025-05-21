@@ -1,31 +1,16 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-
-namespace TASVideos.Pages.GameGroups;
+﻿namespace TASVideos.Pages.GameGroups;
 
 [AllowAnonymous]
-public class ListModel : PageModel
+public class ListModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
+	public List<GroupEntry> GameGroups { get; set; } = [];
 
-	public ListModel(ApplicationDbContext db)
+	public async Task OnGet()
 	{
-		_db = db;
-	}
-
-	public IEnumerable<GroupListEntry> GameGroups { get; set; } = new List<GroupListEntry>();
-
-	public async Task<IActionResult> OnGet()
-	{
-		GameGroups = await _db.GameGroups
-			.Select(gg => new GroupListEntry(gg.Id, gg.Name))
+		GameGroups = await db.GameGroups
+			.Select(gg => new GroupEntry(gg.Id, gg.Name))
 			.ToListAsync();
-
-		return Page();
 	}
 
-	public record GroupListEntry(int Id, string Name);
+	public record GroupEntry(int Id, string Name);
 }

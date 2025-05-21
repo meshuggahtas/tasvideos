@@ -1,65 +1,56 @@
 ﻿@page "{id}"
 @model EditModel
-
 @{
-	ViewData["Title"] = $"Edit User file {Model.Id}";
-	string cancelUrl = PageContext.HttpContext.Request.ReturnUrl();
-	if (string.IsNullOrWhiteSpace(cancelUrl))
-	{
-		cancelUrl = $"/UserFiles/Info/{Model.Id}";
-	}
+	ViewData.SetTitle($"Edit User file {Model.Id}");
 }
 
 <fullrow class="mt-2 mb-2">
 	<label>Author: <profile-link username="@Model.UserFile.UserName"></profile-link></label>
 </fullrow>
-<form method="post" enctype="multipart/form-data">
+<form client-side-validation="true" method="post" enctype="multipart/form-data">
 	<row>
 		<column>
 			<input type="hidden" asp-for="UserFile.UserId" />
 			<input type="hidden" asp-for="UserFile.UserName" />
-			<form-group>
-				<label asp-for="UserFile.Title" class="form-control-label"></label>
-				<input asp-for="UserFile.Title" type="text" class="form-control" />
-				<span asp-validation-for="UserFile.Title" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="UserFile.Description" class="form-control-label"></label>
-				<textarea asp-for="UserFile.Description" rows="6" class="form-control wiki-edit"></textarea>
-				<span asp-validation-for="UserFile.Description" class="text-danger"></span>
-			</form-group>
-			<form-group>
+			<fieldset>
+				<label asp-for="UserFile.Title"></label>
+				<input asp-for="UserFile.Title" />
+				<span asp-validation-for="UserFile.Title"></span>
+			</fieldset>
+			<fieldset>
+				<wiki-edit-helper></wiki-edit-helper>
+				<label asp-for="UserFile.Description"></label>
+				<wiki-textarea asp-for="UserFile.Description" rows="6"></wiki-textarea>
+				<span asp-validation-for="UserFile.Description"></span>
+				@await Html.RenderWiki(SystemWiki.WikiEditHelp)
+			</fieldset>
+			<fieldset>
 				<div class="form-check">
 					<input type="checkbox" class="form-check-input" asp-for="UserFile.Hidden">
-					<label class="form-check-label form-control-label" asp-for="UserFile.Hidden"></label>
+					<label class="form-check-label" asp-for="UserFile.Hidden"></label>
 				</div>
-			</form-group>
-			<hr />
-			<form-group>
-				<label asp-for="UserFile.SystemId" class="form-control-label"></label>
-				<select asp-for="UserFile.SystemId" asp-items="@Model.AvailableSystems" class="form-control"></select>
-				<span asp-validation-for="UserFile.SystemId" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="UserFile.GameId" class="form-control-label"></label>
-				<select asp-for="UserFile.GameId" asp-items="@Model.AvailableGames" class="form-control"></select>
-				<span asp-validation-for="UserFile.GameId" class="text-danger"></span>
-			</form-group>
+			</fieldset>
+			<fieldset>
+				<label asp-for="UserFile.System"></label>
+				<select asp-for="UserFile.System" data-id="system" asp-items="@Model.AvailableSystems"></select>
+				<span asp-validation-for="UserFile.System"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="UserFile.Game"></label>
+				<select asp-for="UserFile.Game" data-id="game" asp-items="@Model.AvailableGames"></select>
+				<span asp-validation-for="UserFile.Game"></span>
+			</fieldset>
 		</column>
 	</row>
-	<fullrow class="text-center">
-		@await Component.RenderWiki("System/WikiEditNote")
-		<submit-button class="btn btn-primary"><i class="fa fa-save"></i> Update</submit-button>
-		<a href="@cancelUrl" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</fullrow>
+	<form-button-bar>
+		@await Html.RenderWiki(SystemWiki.WikiEditNote)
+		<preview-button></preview-button>
+		<submit-button></submit-button>
+		<cancel-link asp-page="/UserFiles/Info" asp-route-id="@Model.Id"></cancel-link>
+	</form-button-bar>
 </form>
+<wiki-preview></wiki-preview>
 
 @section Scripts {
-	<partial name="_ValidationScriptsPartial" />
 	<script src="/js/userfile.js"></script>
-	<script>
-		const gameId = "@Html.IdFor(m => m.UserFile.GameId)";
-		const systemId = "@Html.IdFor(m => m.UserFile.SystemId)";
-		enableUserFile(gameId, systemId);
-	</script>
 }

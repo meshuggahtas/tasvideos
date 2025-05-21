@@ -1,6 +1,5 @@
 ﻿using System.Reflection;
 using TASVideos.MovieParsers.Parsers;
-using TASVideos.MovieParsers.Result;
 
 namespace TASVideos.MovieParsers;
 
@@ -8,7 +7,7 @@ namespace TASVideos.MovieParsers;
 /// The entry point for movie file parsers
 /// Takes a stream of the zip file containing a movie file
 /// The file must have precisely one file
-/// The file is processed and a <see cref="IParseResult"/>
+/// The file is processed and an <see cref="IParseResult"/>
 /// is returned.
 /// </summary>
 /// <seealso cref="IParseResult"/>
@@ -19,7 +18,7 @@ public interface IMovieParser
 	Task<IParseResult> ParseFile(string fileName, Stream stream);
 }
 
-public sealed class MovieParser : IMovieParser
+internal sealed class MovieParser : IMovieParser
 {
 	private static readonly ICollection<Type> ParserTypes =
 		typeof(IParser).Assembly
@@ -37,14 +36,14 @@ public sealed class MovieParser : IMovieParser
 	{
 		try
 		{
-			using var zip = new ZipArchive(stream);
+			using var zip = await stream.OpenZipArchiveRead();
 			if (zip.Entries.Count > 1)
 			{
 				return Error("Multiple files detected in the .zip, only one file is allowed");
 			}
 
-			var movieFile = zip.Entries[0];
-			var ext = Path.GetExtension(movieFile.Name).Trim('.').ToLower();
+			var movieFile = zip.Entries.First();
+			var ext = Path.GetExtension(movieFile.Key).Trim('.').ToLower();
 
 			var parser = GetParser(ext);
 			if (parser is null)
@@ -52,13 +51,13 @@ public sealed class MovieParser : IMovieParser
 				return Error($".{ext} files are not currently supported.");
 			}
 
-			await using var movieFileStream = movieFile.Open();
-			return await parser.Parse(movieFileStream, movieFile.Length);
+			await using var movieFileStream = movieFile.OpenEntryStream();
+			return await parser.Parse(movieFileStream, movieFile.Size);
 		}
 		catch (Exception)
 		{
 			// TODO: do we want to log here? or catch at a higher layer?
-			return Error("An general error occured while processing the movie file.");
+			return Error("A general error occured while processing the movie file.");
 		}
 	}
 
@@ -76,7 +75,7 @@ public sealed class MovieParser : IMovieParser
 		catch (Exception)
 		{
 			// TODO: do we want to log here? or catch at a higher layer?
-			return Error("An general error occured while processing the movie file.");
+			return Error("A general error occured while processing the movie file.");
 		}
 	}
 
@@ -94,5 +93,5 @@ public sealed class MovieParser : IMovieParser
 		return Activator.CreateInstance(type) as IParser;
 	}
 
-	private static IParseResult Error(string errorMsg) => new ErrorResult(errorMsg);
+	private static ErrorResult Error(string errorMsg) => new(errorMsg);
 }

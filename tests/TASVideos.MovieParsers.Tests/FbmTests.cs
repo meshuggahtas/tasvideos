@@ -4,14 +4,9 @@
 [TestCategory("FbmParsers")]
 public class FbmTests : BaseParserTests
 {
-	private readonly Fbm _fbmParser;
+	private readonly Fbm _fbmParser = new();
 
-	public override string ResourcesPath { get; } = "TASVideos.MovieParsers.Tests.FbmSampleFiles.";
-
-	public FbmTests()
-	{
-		_fbmParser = new Fbm();
-	}
+	protected override string ResourcesPath => "TASVideos.MovieParsers.Tests.FbmSampleFiles.";
 
 	[TestMethod]
 	public async Task InvalidHeader()
@@ -19,7 +14,6 @@ public class FbmTests : BaseParserTests
 		var result = await _fbmParser.Parse(Embedded("wrongmarker.fbm"), EmbeddedLength("wrongmarker.fbm"));
 		Assert.IsFalse(result.Success);
 		AssertNoWarnings(result);
-		Assert.IsNotNull(result.Errors);
 		Assert.AreEqual(1, result.Errors.Count());
 	}
 
@@ -29,7 +23,6 @@ public class FbmTests : BaseParserTests
 		var result = await _fbmParser.Parse(Embedded("missinginput.fbm"), EmbeddedLength("missinginput.fbm"));
 		Assert.IsFalse(result.Success);
 		AssertNoWarnings(result);
-		Assert.IsNotNull(result.Errors);
 		Assert.AreEqual(1, result.Errors.Count());
 	}
 

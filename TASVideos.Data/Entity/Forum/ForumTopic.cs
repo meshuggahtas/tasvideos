@@ -12,38 +12,38 @@ public class ForumTopic : BaseEntity
 	public int Id { get; set; }
 
 	public int ForumId { get; set; }
-	public virtual Forum? Forum { get; set; }
+	public Forum? Forum { get; set; }
 
-	public virtual ICollection<ForumPost> ForumPosts { get; set; } = new HashSet<ForumPost>();
-	public virtual ICollection<ForumTopicWatch> ForumTopicWatches { get; set; } = new HashSet<ForumTopicWatch>();
+	public ICollection<ForumPost> ForumPosts { get; init; } = [];
+	public ICollection<ForumTopicWatch> ForumTopicWatches { get; init; } = [];
 
-	[Required]
-	[StringLength(500)]
 	public string Title { get; set; } = "";
 
 	public int PosterId { get; set; }
-	public virtual User? Poster { get; set; }
+	public User? Poster { get; set; }
 
 	public ForumTopicType Type { get; set; }
 
 	public bool IsLocked { get; set; }
 
 	public int? PollId { get; set; }
-	public virtual ForumPoll? Poll { get; set; }
+	public ForumPoll? Poll { get; set; }
 
 	public int? SubmissionId { get; set; }
-	public virtual Submission? Submission { get; set; }
+	public Submission? Submission { get; set; }
+
+	public int? GameId { get; set; }
+	public Game.Game? Game { get; set; }
 }
 
 public static class ForumTopicQueryableExtensions
 {
-	public static IQueryable<ForumTopic> ExcludeRestricted(this IQueryable<ForumTopic> list, bool seeRestricted)
-	{
-		return list.Where(f => seeRestricted || !f.Forum!.Restricted);
-	}
+	public static IQueryable<ForumTopic> ExcludeRestricted(this IQueryable<ForumTopic> query, bool seeRestricted)
+		=> seeRestricted ? query : query.Where(f => !f.Forum!.Restricted);
 
-	public static IQueryable<ForumTopic> ForForum(this IQueryable<ForumTopic> list, int forumId)
-	{
-		return list.Where(t => t.ForumId == forumId);
-	}
+	public static IQueryable<ForumTopic> ForForum(this IQueryable<ForumTopic> query, int forumId)
+		=> query.Where(t => t.ForumId == forumId);
+
+	public static IQueryable<ForumTopic> ForGame(this IQueryable<ForumTopic> query, int gameId)
+		=> query.Where(t => t.GameId == gameId);
 }

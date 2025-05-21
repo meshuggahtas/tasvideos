@@ -1,10 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Npgsql;
-using TASVideos.Core.Settings;
-using TASVideos.Data;
 using SharpCompress.Compressors;
+using TASVideos.Core.Settings;
 
 namespace TASVideos.Core.Data;
 
@@ -31,9 +31,14 @@ public static class DbInitializer
 	private static async Task SampleStrategy(DbContext context)
 	{
 		await context.Database.EnsureDeletedAsync();
-		await context.Database.MigrateAsync();
+
+		// create db without filling schema
+		IRelationalDatabaseCreator creator = context.GetService<IRelationalDatabaseCreator>();
+		await creator.CreateAsync();
 
 		await GenerateDevSampleData(context);
+
+		await context.Database.MigrateAsync();
 
 		// https://github.com/npgsql/npgsql/issues/2366
 		// For NpgSql specifically, if we drop and create SCHEMA while running the application
@@ -42,16 +47,16 @@ public static class DbInitializer
 		if (conn is NpgsqlConnection nConn)
 		{
 			await nConn.OpenAsync();
-			nConn.ReloadTypes();
+			await nConn.ReloadTypesAsync();
 			await nConn.CloseAsync();
 		}
 	}
 
-	// Adds optional sample data for testing purposes (would not be apart of a production release)
+	// Adds optional sample data for testing purposes (would not be a part of a production release)
 	private static async Task GenerateDevSampleData(DbContext context)
 	{
 		var sql = await GetSampleDataScript();
-		await using (await context.Database.BeginTransactionAsync())
+		using (await context.Database.BeginTransactionAsync())
 		{
 			var commands = new[] { sql };
 

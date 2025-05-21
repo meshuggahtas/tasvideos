@@ -1,0 +1,34 @@
+﻿@page "{id}"
+@model EditEmailModel
+@{
+	ViewData.SetTitle($"Editing Email for User: {Model.UserToEdit.UserName}");
+}
+<danger-alert>
+	<p>Be careful changing emails for users! If they are not who they say they are, this allows someone to hijack an account.</p>
+	<p>For GDPR and other privacy removals, set something like anonymous@(Model.Id)@@example.com</p>
+</danger-alert>
+<form method="post">
+	<input type="hidden" asp-for="UserToEdit.UserName" />
+	<row>
+		<column md="6">
+			<fieldset>
+				<label asp-for="UserToEdit.Email"></label>
+				<input asp-for="UserToEdit.Email" data-id="email" />
+				<span asp-validation-for="UserToEdit.Email"></span>
+			</fieldset>
+			<fieldset>
+				<div class="checkbox">
+					<label asp-for="UserToEdit.EmailConfirmed">
+						<input asp-for="UserToEdit.EmailConfirmed" data-id="email-confirmed" />
+						Email Confirmed
+					</label>
+				</div>
+			</fieldset>
+		</column>
+	</row>
+	<form-button-bar>
+		<submit-button></submit-button>
+		<cancel-link asp-page="Edit" asp-route-id="@Model.Id"></cancel-link>
+	</form-button-bar>
+</form>
+<script src="/js/user-email-edit.js"></script>

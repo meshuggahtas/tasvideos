@@ -1,31 +1,19 @@
-﻿using TASVideos.MovieParsers.Extensions;
-using TASVideos.MovieParsers.Result;
-
-namespace TASVideos.MovieParsers.Parsers;
+﻿namespace TASVideos.MovieParsers.Parsers;
 
 [FileExtension("dsm")]
-internal class Dsm : IParser
+internal class Dsm : Parser, IParser
 {
-	private const string FileExtension = "dsm";
-
 	public async Task<IParseResult> Parse(Stream file, long length)
 	{
-		using var reader = new StreamReader(file);
-		var result = new ParseResult
+		var result = new SuccessResult(FileExtension)
 		{
 			Region = RegionType.Ntsc,
-			FileExtension = FileExtension,
 			SystemCode = SystemCodes.Ds
 		};
 
-		var lines = (await reader.ReadToEndAsync()).LineSplit();
-		var header = lines
-			.WithoutPipes()
-			.ToArray();
+		(var header, result.Frames) = await file.PipeBasedMovieHeaderAndFrameCount();
 
-		result.Frames = lines.PipeCount();
-
-		int? rerecordVal = header.GetValueFor(Keys.RerecordCount).ToPositiveInt();
+		int? rerecordVal = header.GetPositiveIntFor(Keys.RerecordCount);
 		if (rerecordVal.HasValue)
 		{
 			result.RerecordCount = rerecordVal.Value;
@@ -35,12 +23,13 @@ internal class Dsm : IParser
 			result.WarnNoRerecords();
 		}
 
-		if (header.GetValueFor(Keys.StartsFromSavestate).Length > 1)
+		var startsFromSavestate = header.GetValueFor(Keys.StartsFromSavestate);
+		if (!string.IsNullOrWhiteSpace(startsFromSavestate) && startsFromSavestate != "0")
 		{
 			result.StartType = MovieStartType.Savestate;
 		}
 
-		if (header.GetValueFor(Keys.StartsFromSram).Length > 1)
+		if (header.HasValue(Keys.StartsFromSram))
 		{
 			result.StartType = MovieStartType.Sram;
 		}

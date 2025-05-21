@@ -9,7 +9,7 @@
 			"type": "coreclr",
 			"request": "launch",
 			"preLaunchTask": "build_forumengine",
-			"program": "${workspaceRoot}/TASVideos.ForumEngineTempTest/bin/Debug/net6.0/TASVideos.ForumEngineTempTest.dll",
+			"program": "${workspaceRoot}/TASVideos.ForumEngineTempTest/bin/Debug/net8.0/TASVideos.ForumEngineTempTest.dll",
 			"args": [],
 			"cwd": "${workspaceRoot}",
 			"stopAtEntry": false,
@@ -20,7 +20,7 @@
 			"type": "coreclr",
 			"request": "launch",
 			"preLaunchTask": "build_wikiengine",
-			"program": "${workspaceRoot}/TASVideos.WikiEngineTest/bin/Debug/net6.0/TASVideos.WikiEngineTest.dll",
+			"program": "${workspaceRoot}/TASVideos.WikiEngineTest/bin/Debug/net8.0/TASVideos.WikiEngineTest.dll",
 			"args": [
 				"--force"
 			],
@@ -29,12 +29,12 @@
 			"console": "internalConsole"
 		},
 		{
-			"name": "TASVideos",
+			"name": "TASVideos (Generate Sample Data)",
 			"type": "coreclr",
 			"request": "launch",
 			"preLaunchTask": "build",
 			// If you have changed target frameworks, make sure to update the program path.
-			"program": "${workspaceFolder}/TASVideos/bin/Debug/net6.0/TASVideos.dll",
+			"program": "${workspaceFolder}/TASVideos/bin/Debug/net8.0/TASVideos.dll",
 			"args": [],
 			"cwd": "${workspaceFolder}/TASVideos",
 			"stopAtEntry": false,
@@ -56,6 +56,72 @@
 			"env": {
 				"ASPNETCORE_ENVIRONMENT": "Development",
 				"StartupStrategy": "Sample"
+			},
+			"sourceFileMap": {
+				"/Views": "${workspaceFolder}/Views"
+			}
+		},
+		{
+			"name": "TASVideos (Sample Data No Recreate)",
+			"type": "coreclr",
+			"request": "launch",
+			"preLaunchTask": "build",
+			// If you have changed target frameworks, make sure to update the program path.
+			"program": "${workspaceFolder}/TASVideos/bin/Debug/net8.0/TASVideos.dll",
+			"args": [],
+			"cwd": "${workspaceFolder}/TASVideos",
+			"stopAtEntry": false,
+			"internalConsoleOptions": "openOnSessionStart",
+			"launchBrowser": {
+				"enabled": true,
+				"args": "${auto-detect-url}",
+				"windows": {
+					"command": "cmd.exe",
+					"args": "/C start ${auto-detect-url}"
+				},
+				"osx": {
+					"command": "open"
+				},
+				"linux": {
+					"command": "xdg-open"
+				}
+			},
+			"env": {
+				"ASPNETCORE_ENVIRONMENT": "Development",
+				"StartupStrategy": "Minimal"
+			},
+			"sourceFileMap": {
+				"/Views": "${workspaceFolder}/Views"
+			}
+		},
+		{
+			"name": "TASVideos (Migrate Sample Data)",
+			"type": "coreclr",
+			"request": "launch",
+			"preLaunchTask": "build",
+			// If you have changed target frameworks, make sure to update the program path.
+			"program": "${workspaceFolder}/TASVideos/bin/Debug/net8.0/TASVideos.dll",
+			"args": [],
+			"cwd": "${workspaceFolder}/TASVideos",
+			"stopAtEntry": false,
+			"internalConsoleOptions": "openOnSessionStart",
+			"launchBrowser": {
+				"enabled": true,
+				"args": "${auto-detect-url}",
+				"windows": {
+					"command": "cmd.exe",
+					"args": "/C start ${auto-detect-url}"
+				},
+				"osx": {
+					"command": "open"
+				},
+				"linux": {
+					"command": "xdg-open"
+				}
+			},
+			"env": {
+				"ASPNETCORE_ENVIRONMENT": "Development",
+				"StartupStrategy": "Migrate"
 			},
 			"sourceFileMap": {
 				"/Views": "${workspaceFolder}/Views"

@@ -1,21 +1,15 @@
 ﻿@page
 @model IndexModel
 @{
-	ViewData["Title"] = "Flag List";
+	ViewData.SetTitle("Flag List");
 }
 
-<a class="btn btn-primary float-end mb-3" asp-page="Create"><i class="fa fa-plus"></i> Create</a>
-
-<table class="table table-bordered table-striped table-sm">
-	<tr>
-		<th>Name</th>
-		<th>Icon Path</th>
-		<th>Link Path</th>
-		<th>Token</th>
-		<th>Permission Restriction</th>
-		<th></th>
-	</tr>
-	@foreach (var flag in Model.Flags)
+<top-button-bar>
+	<add-link asp-page="Create"></add-link>
+</top-button-bar>
+<standard-table>
+	<table-head columns="Name,Icon Path,Link Path,Token,Permission Restriction,Weight,"></table-head>
+	@foreach (var flag in Model.Flags.OrderBy(f => f.Token))
 	{
 		<tr>
 			<td>@flag.Name</td>
@@ -23,11 +17,10 @@
 			<td>@flag.LinkPath</td>
 			<td>@flag.Token</td>
 			<td>@flag.PermissionRestriction</td>
-			<td>
-				<a class="btn btn-primary" asp-page="Edit" asp-route-id="@flag.Id">
-					<i class="fa fa-pencil"></i> Edit
-				</a>
-			</td>
+			<td>@flag.Weight</td>
+			<td-action-column>
+				<edit-link asp-page="Edit" asp-route-id="@flag.Id"></edit-link>
+			</td-action-column>
 		</tr>
 	}
-</table>
+</standard-table>

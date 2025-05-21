@@ -1,7 +1,7 @@
 ﻿namespace TASVideos.Core.Services.Email;
 
 /// <summary>
-/// Represents an email that can be send to an <see cref="IEmailSender"/>
+/// Represents an email that can be sent to an <see cref="IEmailSender"/>
 /// </summary>
 public interface IEmail
 {
@@ -21,7 +21,7 @@ public interface IEmail
 	string Message { get; }
 
 	/// <summary>
-	/// Gets a value indicating whether or not the <see cref="Message" /> contains HTML content
+	/// Gets a value indicating whether the <see cref="Message" /> contains HTML content
 	/// </summary>
 	bool ContainsHtml { get; }
 }
@@ -29,7 +29,7 @@ public interface IEmail
 public class SingleEmail : IEmail
 {
 	public string Recipient { get; init; } = "";
-	public IEnumerable<string> Recipients => new[] { Recipient };
+	public IEnumerable<string> Recipients => [Recipient];
 	public string Subject { get; init; } = "";
 	public string Message { get; init; } = "";
 	public bool ContainsHtml { get; init; }
@@ -37,7 +37,7 @@ public class SingleEmail : IEmail
 
 public class StandardEmail : IEmail
 {
-	public IEnumerable<string> Recipients { get; init; } = Array.Empty<string>();
+	public IEnumerable<string> Recipients { get; init; } = [];
 	public string Subject { get; init; } = "";
 	public string Message { get; init; } = "";
 	public bool ContainsHtml { get; init; }

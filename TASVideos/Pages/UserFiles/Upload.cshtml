@@ -1,95 +1,64 @@
 ﻿@page
 @model UploadModel
-
 @{
-	ViewData["Title"] = "Upload a User file";
+	ViewData.SetTitle("Upload a User file");
+	ViewData.UseClientFileCompression();
 }
 
 <info-alert dismissible="true">
-	@await Component.RenderWiki("System/UserFileUploadHeader")
+	@await Html.RenderWiki(SystemWiki.UserFileUploadHeader)
 </info-alert>
 
 <partial name="Shared/_StorageUsed" model="Model.StorageUsed" />
 <hr />
-<form method="post" enctype="multipart/form-data">
+<form client-side-validation="true" method="post" enctype="multipart/form-data">
 	<row>
 		<column>
-			<form-group>
-				<label asp-for="UserFile.File" class="form-control-label"></label>
-				<input asp-for="UserFile.File" type="file" class="form-control" />
-				<span id="FileInputWarning" asp-validation-for="UserFile.File" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="UserFile.Title" class="form-control-label"></label>
-				<input asp-for="UserFile.Title" type="text" class="form-control" />
-				<span asp-validation-for="UserFile.Title" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="UserFile.Description" class="form-control-label"></label>
-				<textarea asp-for="UserFile.Description" rows="6" class="form-control wiki-edit"></textarea>
-				<span asp-validation-for="UserFile.Description" class="text-danger"></span>
-			</form-group>
-			<form-group>
+			<fieldset>
+				<label asp-for="UserFile"></label>
+				<input asp-for="UserFile" data-id="user-form-file" data-supported-extensions="@string.Join(",", Model.SupportedFileExtensions)" />
+				<small>Valid file types: @string.Join(", ", Model.SupportedFileExtensions)</small><br />
+				<span id="FileInputWarning" asp-validation-for="UserFile"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Title"></label>
+				<input asp-for="Title" />
+				<span asp-validation-for="Title"></span>
+			</fieldset>
+			<fieldset>
+				<wiki-edit-helper></wiki-edit-helper>
+				<label asp-for="Description"></label>
+				<wiki-textarea asp-for="Description" rows="6"></wiki-textarea>
+				<span asp-validation-for="Description"></span>
+			</fieldset>
+			<fieldset>
 				<div class="form-check">
-					<input type="checkbox" class="form-check-input" asp-for="UserFile.Hidden">
-					<label class="form-check-label form-control-label" asp-for="UserFile.Hidden"></label>
+					<input type="checkbox" class="form-check-input" asp-for="Hidden">
+					<label class="form-check-label" asp-for="Hidden"></label>
 				</div>
-			</form-group>
+			</fieldset>
 			<hr />
-			<form-group>
-				<label asp-for="UserFile.SystemId" class="form-control-label"></label>
-				<select asp-for="UserFile.SystemId" asp-items="@Model.AvailableSystems" class="form-control"></select>
-				<span asp-validation-for="UserFile.SystemId" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="UserFile.GameId" class="form-control-label"></label>
-				<select asp-for="UserFile.GameId" asp-items="@Model.AvailableGames" class="form-control"></select>
-				<span asp-validation-for="UserFile.GameId" class="text-danger"></span>
-			</form-group>
+			<fieldset>
+				<label asp-for="System"></label>
+				<select asp-for="System" data-id="system" asp-items="@Model.AvailableSystems"></select>
+				<span asp-validation-for="System"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Game"></label>
+				<select asp-for="Game" data-id="game" asp-items="@Model.AvailableGames"></select>
+				<span asp-validation-for="Game"></span>
+			</fieldset>
 		</column>
 	</row>
-	<fullrow class="text-center">
-		@await Component.RenderWiki("System/WikiEditNote")
-		<submit-button class="btn btn-primary"><i class="fa fa-upload"></i> Upload</submit-button>
-		<a href="/Profile/UserFiles" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</fullrow>
+	<form-button-bar>
+		@await Html.RenderWiki(SystemWiki.WikiEditNote)
+		<preview-button></preview-button>
+		<submit-button><i class="fa fa-upload"></i> Upload</submit-button>
+		<cancel-link asp-page="/Profile/UserFiles"></cancel-link>
+	</form-button-bar>
 </form>
-
+<wiki-preview></wiki-preview>
 @section Scripts {
-	<partial name="_ValidationScriptsPartial" />
 	<script src="/js/userfile.js"></script>
-	<script>
-		const gameId = "@Html.IdFor(m => m.UserFile.GameId)";
-		const systemId = "@Html.IdFor(m => m.UserFile.SystemId)";
-		enableUserFile(gameId, systemId);
-	</script>
-	<script src="/js/pako_deflate.min.js"></script>
-	<script>
-		"use strict";
-		{
-			const fileInput = document.getElementById("@Html.IdFor(m => m.UserFile.File)");
-			const storageAvailable = parseFloat(document.getElementById("StorageAvailable").value);
-			const fileInputWarning = document.getElementById("FileInputWarning");
-			fileInput.addEventListener("input", async () => {
-				const inputFile = fileInput.files[0];
-				if (!inputFile) {
-					return;
-				}
-
-				const inputBytes = await inputFile.arrayBuffer();
-				const zippedBytes = pako.gzip(inputBytes);
-
-				const newFile = new File([zippedBytes], inputFile.name, { type: inputFile.type, lastModified: inputFile.lastModified });
-				if (newFile.size < storageAvailable) {
-					const dto = new DataTransfer;
-					dto.items.add(newFile);
-					fileInput.files = dto.files;
-					fileInputWarning.innerText = "";
-				} else {
-					fileInput.value = "";
-					fileInputWarning.innerText = "Chosen File Exceeds Quota";
-				}
-			});
-		}
-	</script>
+	<script src="/js/userfiles-upload.js"></script>
 }

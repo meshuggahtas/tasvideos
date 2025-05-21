@@ -4,13 +4,8 @@
 [TestCategory("DsmParsers")]
 public class DsmParserTests : BaseParserTests
 {
-	private readonly Dsm _dsmParser;
-	public override string ResourcesPath { get; } = "TASVideos.MovieParsers.Tests.DsmSampleFiles.";
-
-	public DsmParserTests()
-	{
-		_dsmParser = new Dsm();
-	}
+	private readonly Dsm _dsmParser = new();
+	protected override string ResourcesPath => "TASVideos.MovieParsers.Tests.DsmSampleFiles.";
 
 	[TestMethod]
 	public async Task System()
@@ -54,7 +49,6 @@ public class DsmParserTests : BaseParserTests
 		var result = await _dsmParser.Parse(Embedded("norerecords.dsm"), EmbeddedLength("norerecords.dsm"));
 		Assert.IsTrue(result.Success);
 		Assert.AreEqual(0, result.RerecordCount, "Rerecord count is assumed to be 0");
-		Assert.IsNotNull(result.Warnings);
 		Assert.AreEqual(1, result.Warnings.Count());
 		AssertNoErrors(result);
 	}
@@ -83,6 +77,15 @@ public class DsmParserTests : BaseParserTests
 		var result = await _dsmParser.Parse(Embedded("savestate.dsm"), EmbeddedLength("savestate.dsm"));
 		Assert.IsTrue(result.Success);
 		Assert.AreEqual(MovieStartType.Savestate, result.StartType);
+		AssertNoWarningsOrErrors(result);
+	}
+
+	[TestMethod]
+	public async Task SavestateSetAs0()
+	{
+		var result = await _dsmParser.Parse(Embedded("savestate0.dsm"), EmbeddedLength("savestate0.dsm"));
+		Assert.IsTrue(result.Success);
+		Assert.AreEqual(MovieStartType.PowerOn, result.StartType);
 		AssertNoWarningsOrErrors(result);
 	}
 

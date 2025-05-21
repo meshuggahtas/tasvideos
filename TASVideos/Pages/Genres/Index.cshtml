@@ -1,0 +1,23 @@
+﻿@page
+@model IndexModel
+@{
+	ViewData.SetTitle("Genre List");
+}
+<top-button-bar>
+	<add-link asp-page="Create" Permission="TagMaintenance"></add-link>
+</top-button-bar>
+<standard-table>
+	<table-head columns="Display Name,Game Count,"></table-head>
+	@foreach (var genre in Model.Genres.OrderBy(g => g.DisplayName))
+	{
+		<tr>
+			<td>@genre.DisplayName</td>
+			<td>
+				<a asp-page="/Games/List" asp-route-Genre="@genre.DisplayName">@genre.GameCount</a>
+			</td>
+			<td>
+				<edit-link asp-page="Edit" asp-route-id="@genre.Id"></edit-link>
+			</td>
+		</tr>
+	}
+</standard-table>

@@ -2,10 +2,12 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Update;
 using TASVideos.Data;
+using TASVideos.Data.Entity;
+using TASVideos.Data.Entity.Forum;
+using TASVideos.Data.Entity.Game;
 
 namespace TASVideos.Tests.Base;
 
@@ -13,31 +15,10 @@ namespace TASVideos.Tests.Base;
 /// Creates a context optimized for unit testing.
 /// Database is in memory, and provides mechanisms for mocking database conflicts.
 /// </summary>
-public class TestDbContext : ApplicationDbContext
+public class TestDbContext(DbContextOptions<ApplicationDbContext> options, TestDbContext.TestHttpContextAccessor testHttpContext) : ApplicationDbContext(options, testHttpContext)
 {
-	private readonly IHttpContextAccessor _testHttpContext;
-
 	private bool _dbConcurrentUpdateConflict;
 	private bool _dbUpdateConflict;
-
-	private TestDbContext(DbContextOptions<ApplicationDbContext> options, TestHttpContextAccessor httpContextAccessor)
-		: base(options, httpContextAccessor)
-	{
-		_testHttpContext = httpContextAccessor;
-	}
-
-	public static TestDbContext Create()
-	{
-		var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-			.UseInMemoryDatabase("TestDb")
-			.ConfigureWarnings(x => x.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-			.Options;
-
-		var testHttpContext = new TestHttpContextAccessor();
-		var db = new TestDbContext(options, testHttpContext);
-		db.Database.EnsureDeleted();
-		return db;
-	}
 
 	/// <summary>
 	/// Simulates a user having logged in.
@@ -45,9 +26,9 @@ public class TestDbContext : ApplicationDbContext
 	public void LogInUser(string userName)
 	{
 		var identity = new GenericIdentity(userName);
-		string[] roles = { "TestRole" };
+		string[] roles = ["TestRole"];
 		var principal = new GenericPrincipal(identity, roles);
-		_testHttpContext.HttpContext!.User = principal;
+		testHttpContext.HttpContext!.User = principal;
 	}
 
 	public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -60,7 +41,7 @@ public class TestDbContext : ApplicationDbContext
 
 		if (_dbConcurrentUpdateConflict)
 		{
-			throw new DbUpdateConcurrencyException("Mock concurrency conflict scenario", new IUpdateEntry[] { new TestUpdateEntry() });
+			throw new DbUpdateConcurrencyException("Mock concurrency conflict scenario", [new TestUpdateEntry()]);
 		}
 
 		return base.SaveChangesAsync(cancellationToken);
@@ -84,7 +65,112 @@ public class TestDbContext : ApplicationDbContext
 		_dbConcurrentUpdateConflict = true;
 	}
 
-	private class TestHttpContextAccessor : IHttpContextAccessor
+	public EntityEntry<User> AddUser(string userName) => AddUser(0, userName);
+	public EntityEntry<User> AddUser(int userId) => AddUser(userId, "User" + userId + Guid.NewGuid());
+
+	public EntityEntry<User> AddUser(int id, string userName)
+	{
+		var email = userName + "@example.com";
+		var user = new User
+		{
+			Id = id,
+			UserName = userName,
+			NormalizedUserName = userName.ToUpper(),
+			Email = email,
+			NormalizedEmail = email.ToUpper()
+		};
+
+		return Users.Add(user);
+	}
+
+	public EntityEntry<Submission> AddAndSaveUnpublishedSubmission()
+	{
+		var submission = AddSubmission();
+		var system = GameSystems.Add(new GameSystem { Id = 1, Code = "Default" });
+		var framerate = GameSystemFrameRates.Add(new GameSystemFrameRate { GameSystemId = system.Entity.Id, FrameRate = 60.0 });
+		submission.Entity.System = system.Entity;
+		submission.Entity.SystemFrameRate = framerate.Entity;
+		SaveChanges();
+
+		return submission;
+	}
+
+	public EntityEntry<Submission> AddSubmission(User? submitter = null)
+	{
+		submitter ??= AddUser(0).Entity;
+		var submission = new Submission
+		{
+			Submitter = submitter
+		};
+		return Submissions.Add(submission);
+	}
+
+	public EntityEntry<Publication> AddPublication(User? author = null, PublicationClass? publicationClass = null)
+	{
+		var gameSystemId = (GameSystems.Max(gs => (int?)gs.Id) ?? -1) + 1;
+		var gameSystem = new GameSystem { Id = gameSystemId, Code = gameSystemId.ToString(), DisplayName = gameSystemId.ToString() };
+		GameSystems.Add(gameSystem);
+		var systemFrameRate = new GameSystemFrameRate { GameSystemId = gameSystem.Id };
+		GameSystemFrameRates.Add(systemFrameRate);
+		var game = new Game { DisplayName = "TestGame" };
+		Games.Add(game);
+		var gameVersion = new GameVersion { Game = game, Name = "TestGameVersion" };
+		GameVersions.Add(gameVersion);
+		var publicationClassId = (PublicationClasses.Max(pc => (int?)pc.Id) ?? -1) + 1;
+		publicationClass ??= new PublicationClass { Id = publicationClassId, Name = publicationClassId.ToString() };
+		PublicationClasses.Add(publicationClass);
+		author ??= AddUser(0).Entity;
+		var submission = AddSubmission(author).Entity;
+		submission.Status = SubmissionStatus.Published;
+		SaveChanges();
+
+		var pub = new Publication
+		{
+			Title = "Test Publication",
+			SystemFrameRate = systemFrameRate,
+			Game = game,
+			GameVersion = gameVersion,
+			PublicationClass = publicationClass,
+			Submission = submission,
+			MovieFileName = submission.Id.ToString()
+		};
+		PublicationAuthors.Add(new PublicationAuthor { Author = author, Publication = pub });
+		var pubRecord = Publications.Add(pub);
+		SaveChanges();
+		return pubRecord;
+	}
+
+	public EntityEntry<Publication> AddPublication(User author)
+	{
+		return AddPublication(author, null);
+	}
+
+	public EntityEntry<Publication> AddPublication(PublicationClass publicationClass)
+	{
+		return AddPublication(null, publicationClass);
+	}
+
+	public void AddForumConstantEntities()
+	{
+		var forumCategory = new ForumCategory();
+		Forums.Add(new Forum { Id = SiteGlobalConstants.WorkbenchForumId, Category = forumCategory });
+		Forums.Add(new Forum { Id = SiteGlobalConstants.PlaygroundForumId, Category = forumCategory });
+		Forums.Add(new Forum { Id = SiteGlobalConstants.PublishedMoviesForumId, Category = forumCategory });
+		Forums.Add(new Forum { Id = SiteGlobalConstants.GrueFoodForumId, Category = forumCategory });
+		AddUser(SiteGlobalConstants.TASVideosGrueId);
+		AddUser(SiteGlobalConstants.TASVideoAgentId);
+	}
+
+	public EntityEntry<ForumTopic> AddTopic(User? createdByUser = null)
+	{
+		var user = createdByUser ?? AddUser(0).Entity;
+		var forumCategory = new ForumCategory();
+		var forum = new Forum { Category = forumCategory };
+		var topic = new ForumTopic { Forum = forum, Poster = user };
+		return ForumTopics.Add(topic);
+	}
+
+	public class TestHttpContextAccessor : IHttpContextAccessor
 	{
 		public HttpContext? HttpContext { get; set; } = new DefaultHttpContext();
 	}
@@ -135,7 +221,7 @@ internal class TestUpdateEntry : IUpdateEntry
 		throw new NotImplementedException();
 	}
 
-	public void SetStoreGeneratedValue(IProperty property, object? value)
+	public void SetStoreGeneratedValue(IProperty property, object? value, bool setModified = true)
 	{
 	}
 
@@ -158,6 +244,8 @@ internal class TestUpdateEntry : IUpdateEntry
 	{
 		throw new NotImplementedException();
 	}
+
+	public DbContext Context => null!;
 
 	// ReSharper disable once UnassignedGetOnlyAutoProperty
 	public IEntityType EntityType => null!;

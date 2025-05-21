@@ -1,83 +1,65 @@
 ﻿@page
-@{ ViewData["Title"] = "External Dependencies"; }
 @model ExternalDependenciesModel
+@{
+	ViewData.SetTitle("External Dependencies");
+}
 
 @functions
 {
-	string ToIcon(bool? val)
+	static string ToIcon(bool? val)
 	{
 		return $"<i class=\"fa {ToIconClass(val)}\"></i>";
 	}
 
-	string ToIconClass(bool? val)
+	static string ToIconClass(bool? val)
 	{
-		if (val == true)
+		return val switch
 		{
-			return "text-success fa-check";
-		}
-
-		if (val == false)
-		{
-			return "text-danger fa-exclamation";
-		}
-
-		return "text-info fa-question";
+			true => "text-success fa-check",
+			false => "text-danger fa-exclamation",
+			_ => "text-info fa-question"
+		};
 	}
 }
-<ul>
-	<li><a asp-page="Index">Diagnostics</a></li>
-</ul>
-<row>
-	<column lg="6">
-		<table class="table table-bordered table-striped">
-			<tr>
-				<th>Service</th>
-				<th>Status</th>
-			</tr>
-			<tr>
-				<td>Youtube Enabled</td>
-				<td>
-					@Html.Raw(ToIcon(Model.Statuses.YoutubeEnabled))
-				</td>
-			</tr>
-			<tr>
-				<td>Youtube Access Successful</td>
-				<td>
-					@Html.Raw(ToIcon(Model.Statuses.YoutubeAccessSuccessful))
-				</td>
-			</tr>
-			<tr>
-				<td>Gmail Enabled</td>
-				<td>
-					@Html.Raw(ToIcon(Model.Statuses.GmailEnabled))
-				</td>
-			</tr>
-			<tr>
-				<td>Gmail Access Successful</td>
-				<td>
-					@Html.Raw(ToIcon(Model.Statuses.GmailAccessSuccessful))
-				</td>
-			</tr>
-			<tr>
-				<td>Irc</td>
-				<td>@Html.Raw(ToIcon(Model.Statuses.IrcEnabled))</td>
-			</tr>
-			<tr>
-				<td>Irc Secure Channel</td>
-				<td>@Html.Raw(ToIcon(Model.Statuses.SecureIrcEnabled))</td>
-			</tr>
-			<tr>
-				<td>Discord</td>
-				<td>@Html.Raw(ToIcon(Model.Statuses.DiscordEnabled))</td>
-			</tr>
-			<tr>
-				<td>Discord Private Channel</td>
-				<td>@Html.Raw(ToIcon(Model.Statuses.DiscordPrivateChannelEnabled))</td>
-			</tr>
-			<tr>
-				<td>Twitter Enabled</td>
-				<td>@Html.Raw(ToIcon(Model.Statuses.TwitterEnabled))</td>
-			</tr>
-		</table>
-	</column>
-</row>
+
+<top-button-bar>
+	<back-link asp-page="Index"></back-link>
+</top-button-bar>
+<standard-table>
+	<table-head columns="Service,Status"></table-head>
+	<tr>
+		<td>YouTube Enabled</td>
+		<td>
+			@Html.Raw(ToIcon(Model.YoutubeEnabled))
+		</td>
+	</tr>
+	<tr>
+		<td>Youtube Access Successful</td>
+		<td>
+			@Html.Raw(ToIcon(Model.YoutubeAccessSuccessful))
+		</td>
+	</tr>
+	<tr>
+		<td>Email Enabled</td>
+		<td>
+			@Html.Raw(ToIcon(Model.EmailEnabled))
+		</td>
+	</tr>
+	<tr>
+		<td>Irc</td>
+		<td>@Html.Raw(ToIcon(Model.IrcEnabled))</td>
+	</tr>
+	<tr>
+		<td>Irc Secure Channel</td>
+		<td>@Html.Raw(ToIcon(Model.SecureIrcEnabled))</td>
+	</tr>
+	<tr>
+		<td>Discord</td>
+		<td>@Html.Raw(ToIcon(Model.DiscordEnabled))</td>
+	</tr>
+	<tr>
+		<td>Discord Private Channel</td>
+		<td>@Html.Raw(ToIcon(Model.DiscordPrivateChannelEnabled))</td>
+	</tr>
+</standard-table>
+

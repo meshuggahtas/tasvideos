@@ -1,54 +1,57 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity.Game;
-using TASVideos.Pages.Games.Groups.Models;
+﻿using TASVideos.Data.Entity.Game;
 
-namespace TASVideos.Pages.GamesGroups;
+namespace TASVideos.Pages.GameGroups;
 
 [AllowAnonymous]
-public class IndexModel : PageModel
+public class IndexModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
 	[FromRoute]
-	public int Id { get; set; }
+	public string Id { get; set; } = "";
 
-	public IEnumerable<GameListEntry> Games { get; set; } = new List<GameListEntry>();
+	public int ParsedId => int.TryParse(Id, out var id) ? id : -1;
+
+	public List<GameEntry> Games { get; set; } = [];
 
 	public string Name { get; set; } = "";
-
-	public IndexModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
+	public string? Description { get; set; }
+	public string? Abbreviation { get; set; }
 
 	public async Task<IActionResult> OnGet()
 	{
-		var gameGroup = await _db.GameGroups.SingleOrDefaultAsync(gg => gg.Id == Id);
+		var query = ParsedId > 0
+			? db.GameGroups.Where(g => g.Id == ParsedId)
+			: db.GameGroups.Where(g => g.Abbreviation == Id);
 
+		var gameGroup = await query.SingleOrDefaultAsync();
 		if (gameGroup is null)
 		{
 			return NotFound();
 		}
 
 		Name = gameGroup.Name;
+		Description = gameGroup.Description;
+		Abbreviation = gameGroup.Abbreviation;
 
-		Games = await _db.Games
-			.ForGroup(Id)
-			.Select(g => new GameListEntry
-			{
-				Id = g.Id,
-				Name = g.DisplayName,
-				PublicationCount = g.Publications.Count,
-				SubmissionsCount = g.Submissions.Count,
-				GameResourcesPage = g.GameResourcesPage
-			})
-			.OrderBy(g => g.Name)
+		Games = await db.Games
+			.ForGroup(gameGroup.Id)
+			.Select(g => new GameEntry(
+				g.Id,
+				g.DisplayName,
+				g.GameVersions
+					.Select(v => v.System!.Code)
+					.Distinct()
+					.OrderBy(s => s)
+					.ToList(),
+				g.Publications.Count,
+				g.Submissions.Count,
+				g.GameResourcesPage))
 			.ToListAsync();
 
 		return Page();
+	}
+
+	public record GameEntry(int Id, string Name, List<string> Systems, int PubCount, int SubCount, string? GameResourcesPage)
+	{
+		public string SystemsString() => string.Join(", ", Systems);
 	}
 }

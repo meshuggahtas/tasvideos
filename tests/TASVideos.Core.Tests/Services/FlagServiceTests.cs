@@ -1,18 +1,15 @@
-﻿using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
+﻿using TASVideos.Data.Entity;
 
 namespace TASVideos.Core.Tests.Services;
 
 [TestClass]
-public class FlagServiceTests
+public class FlagServiceTests : TestDbBase
 {
-	private readonly TestDbContext _db;
 	private readonly TestCache _cache;
 	private readonly FlagService _flagService;
 
 	public FlagServiceTests()
 	{
-		_db = TestDbContext.Create();
 		_cache = new TestCache();
 		_flagService = new FlagService(_db, _cache);
 	}
@@ -71,7 +68,7 @@ public class FlagServiceTests
 		_db.Flags.Add(new Flag { Id = id2, Token = token2 });
 		await _db.SaveChangesAsync();
 
-		var result = await _flagService.GetDiff(new[] { id1 }, new[] { id2 });
+		var result = await _flagService.GetDiff([id1], [id2]);
 		Assert.IsNotNull(result);
 		Assert.AreEqual(1, result.Added.Count);
 		Assert.AreEqual(1, result.Removed.Count);
@@ -88,10 +85,9 @@ public class FlagServiceTests
 	public async Task InUse_Exists_ReturnsFalse()
 	{
 		const int flagId = 1;
-		const int publicationId = 1;
 		_db.Flags.Add(new Flag { Id = flagId });
-		_db.Publications.Add(new Publication { Id = publicationId });
-		_db.PublicationFlags.Add(new PublicationFlag { PublicationId = publicationId, FlagId = flagId });
+		var pub = _db.AddPublication().Entity;
+		_db.PublicationFlags.Add(new PublicationFlag { Publication = pub, FlagId = flagId });
 		await _db.SaveChangesAsync();
 
 		var result = await _flagService.InUse(flagId);
@@ -101,13 +97,11 @@ public class FlagServiceTests
 	[TestMethod]
 	public async Task Add_Success_FlushesCaches()
 	{
-		const int identity = 1;
-		_db.Flags.Add(new Flag { Id = identity });
+		_db.Flags.Add(new Flag());
 		await _db.SaveChangesAsync();
 
 		var flag = new Flag
 		{
-			Id = identity + 10,
 			Name = "Name",
 			IconPath = "IconPath",
 			LinkPath = "LinkPath",
@@ -119,8 +113,7 @@ public class FlagServiceTests
 
 		Assert.AreEqual(FlagEditResult.Success, result);
 		Assert.AreEqual(2, _db.Flags.Count());
-		var savedFlag = _db.Flags.Last();
-		Assert.AreEqual(identity + 1, savedFlag.Id);
+		var savedFlag = _db.Flags.OrderBy(f => f.Id).Last();
 		Assert.AreEqual(flag.Name, savedFlag.Name);
 		Assert.AreEqual(flag.IconPath, savedFlag.IconPath);
 		Assert.AreEqual(flag.LinkPath, savedFlag.LinkPath);
@@ -133,12 +126,12 @@ public class FlagServiceTests
 	public async Task Add_DuplicateError_DoesNotFlushCache()
 	{
 		const string token = "Test";
-		_db.Flags.Add(new Flag { Id = 1, Token = token });
+		_db.Flags.Add(new Flag { Token = token });
 		_cache.Set(FlagService.FlagsKey, new object());
 		await _db.SaveChangesAsync();
 		_db.CreateUpdateConflict();
 
-		var result = await _flagService.Add(new Flag { Id = 2, Token = token });
+		var result = await _flagService.Add(new Flag { Token = token });
 		Assert.AreEqual(FlagEditResult.DuplicateCode, result);
 		Assert.IsTrue(_cache.ContainsKey(FlagService.FlagsKey));
 	}
@@ -146,12 +139,12 @@ public class FlagServiceTests
 	[TestMethod]
 	public async Task Add_ConcurrencyError_DoesNotFlushCache()
 	{
-		_db.Flags.Add(new Flag { Id = 1, Token = "token1" });
+		_db.Flags.Add(new Flag { Token = "token1" });
 		_cache.Set(FlagService.FlagsKey, new object());
 		await _db.SaveChangesAsync();
 		_db.CreateConcurrentUpdateConflict();
 
-		var result = await _flagService.Add(new Flag { Id = 2, Token = "token2" });
+		var result = await _flagService.Add(new Flag { Token = "token2" });
 		Assert.AreEqual(FlagEditResult.Fail, result);
 		Assert.IsTrue(_cache.ContainsKey(FlagService.FlagsKey));
 	}
@@ -176,7 +169,7 @@ public class FlagServiceTests
 	[TestMethod]
 	public async Task Edit_NotFound_DoesNotFlushCache()
 	{
-		var id = 1;
+		const int id = 1;
 		_db.Flags.Add(new Flag { Id = id });
 		await _db.SaveChangesAsync();
 		_cache.Set(FlagService.FlagsKey, new object());
@@ -244,12 +237,11 @@ public class FlagServiceTests
 	public async Task Delete_InUse_FlushesNotCache()
 	{
 		const int flagId = 1;
-		const int publicationId = 1;
 		var flag = new Flag { Id = flagId };
 		_db.Flags.Add(flag);
 		_cache.Set(FlagService.FlagsKey, new object());
-		_db.Publications.Add(new Publication { Id = publicationId });
-		_db.PublicationFlags.Add(new PublicationFlag { PublicationId = publicationId, FlagId = flagId });
+		var pub = _db.AddPublication().Entity;
+		_db.PublicationFlags.Add(new PublicationFlag { Publication = pub, FlagId = flagId });
 		await _db.SaveChangesAsync();
 
 		var result = await _flagService.Delete(flagId);

@@ -1,46 +1,30 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
-
-using TASVideos.Data;
-using TASVideos.Pages.Activity.Model;
-
-namespace TASVideos.Pages.Activity;
+﻿namespace TASVideos.Pages.Activity;
 
 [AllowAnonymous]
-public class IndexModel : PageModel
+public class IndexModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public IndexModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
-	public IEnumerable<ActivitySummaryModel> Judges { get; set; } = new List<ActivitySummaryModel>();
-	public IEnumerable<ActivitySummaryModel> Publishers { get; set; } = new List<ActivitySummaryModel>();
+	public List<ActivityEntry> Judges { get; set; } = [];
+	public List<ActivityEntry> Publishers { get; set; } = [];
 
 	public async Task OnGet()
 	{
-		Judges = await _db.Submissions
+		Judges = await db.Submissions
 			.Where(s => s.JudgeId.HasValue)
 			.GroupBy(s => s.Judge!.UserName)
-			.Select(s => new ActivitySummaryModel
-			{
-				UserName = s.Key,
-				Count = s.Count(),
-				LastActivity = s.Max(ss => ss.CreateTimestamp)
-			})
+			.Select(s => new ActivityEntry(
+				s.Key,
+				s.Count(),
+				s.Max(ss => ss.CreateTimestamp)))
 			.ToListAsync();
 
-		Publishers = await _db.Publications
+		Publishers = await db.Publications
 			.GroupBy(p => p.Submission!.Publisher!.UserName)
-			.Select(p => new ActivitySummaryModel
-			{
-				UserName = p.Key,
-				Count = p.Count(),
-				LastActivity = p.Max(pp => pp.CreateTimestamp)
-			})
+			.Select(p => new ActivityEntry(
+				p.Key,
+				p.Count(),
+				p.Max(pp => pp.CreateTimestamp)))
 			.ToListAsync();
 	}
+
+	public record ActivityEntry(string? UserName, int Count, DateTime LastActivity);
 }

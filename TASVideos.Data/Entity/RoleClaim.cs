@@ -2,6 +2,4 @@
 
 namespace TASVideos.Data.Entity;
 
-public class RoleClaim : IdentityRoleClaim<int>
-{
-}
+public class RoleClaim : IdentityRoleClaim<int>;

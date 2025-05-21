@@ -1,35 +1,20 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Permissions.Models;
-
-namespace TASVideos.Pages.Permissions;
+﻿namespace TASVideos.Pages.Permissions;
 
 [Authorize]
-public class IndexModel : BasePageModel
+public class IndexModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public IndexModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
-	public IEnumerable<PermissionDisplayModel> Permissions { get; } = PermissionUtil
+	public List<PermissionDisplay> Permissions { get; } = PermissionUtil
 		.AllPermissions()
-		.Select(p => new PermissionDisplayModel
-		{
-			Id = p,
-			Name = p.ToString().SplitCamelCase(),
-			Group = p.Group(),
-			Description = p.Description()
-		})
+		.Select(p => new PermissionDisplay(
+			p,
+			p.ToString(),
+			p.Group(),
+			p.Description()))
 		.ToList();
 
 	public async Task OnGet()
 	{
-		var allRoles = await _db.Roles
+		var allRoles = await db.Roles
 			.Select(r => new
 			{
 				r.Name,
@@ -43,7 +28,13 @@ public class IndexModel : BasePageModel
 		{
 			permission.Roles = allRoles
 				.Where(r => r.RolePermissionId.Any(p => p == permission.Id))
-				.Select(r => r.Name);
+				.Select(r => r.Name)
+				.ToList();
 		}
+	}
+
+	public record PermissionDisplay(PermissionTo Id, string Name, string Group, string Description)
+	{
+		public List<string> Roles { get; set; } = [];
 	}
 }

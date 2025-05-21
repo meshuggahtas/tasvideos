@@ -1,78 +1,103 @@
-﻿using System.ComponentModel;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Forum;
-using TASVideos.Pages.Forum.Topics.Models;
+﻿using TASVideos.Data.Entity.Forum;
 
 namespace TASVideos.Pages.Forum.Topics;
 
 [RequirePermission(PermissionTo.CreateForumTopics)]
-public class CreateModel : BaseForumModel
+public class CreateModel(
+	IUserManager userManager,
+	ApplicationDbContext db,
+	IExternalMediaPublisher publisher,
+	IForumService forumService)
+	: BaseForumModel
 {
-	private readonly UserManager _userManager;
-	private readonly ApplicationDbContext _db;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly IForumService _forumService;
-
-	public CreateModel(
-		UserManager userManager,
-		ApplicationDbContext db,
-		ExternalMediaPublisher publisher,
-		IForumService forumService)
-	{
-		_userManager = userManager;
-		_db = db;
-		_publisher = publisher;
-		_forumService = forumService;
-	}
-
 	[FromRoute]
 	public int ForumId { get; set; }
 
 	[BindProperty]
-	public TopicCreateModel Topic { get; set; } = new();
+	public string ForumName { get; set; } = "";
 
 	[BindProperty]
-	[DisplayName("Watch Topic for Replies")]
+	[StringLength(100, MinimumLength = 5)]
+	public string Title { get; init; } = "";
+
+	[BindProperty]
+	public string Post { get; init; } = "";
+
+	[BindProperty]
+	public ForumTopicType Type { get; init; } = ForumTopicType.Regular;
+
+	[BindProperty]
+	public ForumPostMood Mood { get; init; } = ForumPostMood.Normal;
+
+	[BindProperty]
+	public AddEditPollModel.PollCreate Poll { get; set; } = new();
+
+	[BindProperty]
 	public bool WatchTopic { get; set; } = true;
 
 	public AvatarUrls UserAvatars { get; set; } = new(null, null);
 
+	public string BackupSubmissionDeterminator { get; set; } = "";
+
 	public async Task<IActionResult> OnGet()
 	{
 		var seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
-		var topic = await _db.Forums
+		var forum = await db.Forums
 			.ExcludeRestricted(seeRestricted)
 			.Where(f => f.Id == ForumId)
-			.Select(f => new TopicCreateModel
-			{
-				ForumName = f.Name
-			})
+			.Select(f => new { f.Name, f.CanCreateTopics })
 			.SingleOrDefaultAsync();
 
-		if (topic is null)
+		if (forum is null)
 		{
 			return NotFound();
 		}
 
-		Topic = topic;
-		UserAvatars = await _forumService.UserAvatars(User.GetUserId());
+		if (!forum.CanCreateTopics)
+		{
+			return AccessDenied();
+		}
+
+		ForumName = forum.Name;
+		UserAvatars = await forumService.UserAvatars(User.GetUserId());
+
+		var user = await userManager.GetRequiredUser(User);
+		WatchTopic = user.AutoWatchTopic switch
+		{
+			UserPreference.Auto => true,
+			UserPreference.Always => true,
+			UserPreference.Never => false,
+			_ => true,
+		};
+
+		BackupSubmissionDeterminator = (await forumService.GetTopicCountInForum(User.GetUserId(), ForumId)).ToString();
+
 		return Page();
 	}
 
-	public async Task<IActionResult> OnPost(PollCreateModel poll)
+	public async Task<IActionResult> OnPost()
 	{
+		if (Poll.HasAnyField)
+		{
+			if (string.IsNullOrEmpty(Poll.Question))
+			{
+				ModelState.AddModelError($"{nameof(Poll.Question)}", "The Question field is required.");
+			}
+
+			if (!Poll.OptionsAreValid)
+			{
+				ModelState.AddModelError($"{nameof(Poll.PollOptions)}", "Enter at least 2 options. Each option must be a string with a maximum length of 250.");
+				return Page();
+			}
+		}
+
 		if (!ModelState.IsValid)
 		{
-			UserAvatars = await _forumService.UserAvatars(User.GetUserId());
+			UserAvatars = await forumService.UserAvatars(User.GetUserId());
 			return Page();
 		}
 
-		var forum = await _db.Forums.SingleOrDefaultAsync(f => f.Id == ForumId);
+		var forum = await db.Forums.SingleOrDefaultAsync(f => f.Id == ForumId);
 		if (forum is null)
 		{
 			return NotFound();
@@ -87,42 +112,34 @@ public class CreateModel : BaseForumModel
 
 		var topic = new ForumTopic
 		{
-			Type = Topic.Type,
-			Title = Topic.Title,
+			Type = Type,
+			Title = Title,
 			PosterId = userId,
 			ForumId = ForumId
 		};
 
-		_db.ForumTopics.Add(topic);
+		using var dbTransaction = await db.Database.BeginTransactionAsync();
+		db.ForumTopics.Add(topic);
+		await db.SaveChangesAsync();
 
-		// TODO: catch DbConcurrencyException
-		await _db.SaveChangesAsync();
+		await forumService.CreatePost(new PostCreate(
+			ForumId, topic.Id, null, Post, userId, User.Name(), Mood, IpAddress, WatchTopic));
 
-		await _forumService.CreatePost(new PostCreateDto(
-			ForumId,
-			topic.Id,
-			null,
-			Topic.Post,
-			userId,
-			User.Name(),
-			Topic.Mood,
-			IpAddress,
-			WatchTopic));
-
-		if (User.Has(PermissionTo.CreateForumPolls) && poll.IsValid)
+		if (User.Has(PermissionTo.CreateForumPolls) && Poll.IsValid)
 		{
-			await _forumService.CreatePoll(
+			await forumService.CreatePoll(
 				topic,
-				new PollCreateDto(poll.Question, poll.DaysOpen, poll.MultiSelect, poll.PollOptions));
+				new PollCreate(Poll.Question, Poll.DaysOpen, Poll.MultiSelect, Poll.PollOptions));
 		}
 
-		await _publisher.SendForum(
-			forum.Restricted,
-			$"New Topic by {User.Name()}",
-			$"{forum.ShortName}: {Topic.Title}",
-			$"Forum/Topics/{topic.Id}");
+		await userManager.AssignAutoAssignableRolesByPost(User.GetUserId());
+		await dbTransaction.CommitAsync();
 
-		await _userManager.AssignAutoAssignableRolesByPost(User.GetUserId());
+		await publisher.SendForum(
+			forum.Restricted,
+			$"[New Topic]({{0}}) by {User.Name()}",
+			$"{forum.ShortName}: {Title}",
+			$"Forum/Topics/{topic.Id}");
 
 		return RedirectToPage("Index", new { topic.Id });
 	}

@@ -1,45 +1,54 @@
 ﻿@page "{id}"
 @model SplitModel
 @{
-	ViewData["Title"] = $"Splitting Topic: {Model.Topic.Title}";
+	ViewData.SetTitle($"Splitting Topic: {Model.Topic.Title}");
 }
-<partial Name="_ForumHeader" />
-<h4>
+
+@section PageTitle {
 	Splitting Topic:
 	<a asp-page="/Forum/Subforum/Index" asp-route-id="@Model.Topic.ForumId">@Model.Topic.ForumName</a> →
 	<a asp-page="/Forum/Topics/Index" asp-route-id="@Model.Id">@Model.Topic.Title</a>
-</h4>
-<hr />
-<form method="post">
+}
+
+<partial Name="_ForumHeader" />
+<div condition="Model.TotalPages > 1" class="btn-group flex-wrap" role="group">
+	@for (int iteratorPage = 1; iteratorPage <= Model.TotalPages; iteratorPage++)
+	{
+		<a asp-page="@ViewContext.Page()"
+		   asp-route-CurrentPage="@iteratorPage"
+		   type="button" class="btn btn-secondary border-dark flex-grow-0 @(iteratorPage == Model.CurrentPage ? "active" : "")">@iteratorPage</a>
+	}
+</div>
+<form client-side-validation="true" method="post">
 	<input type="hidden" asp-for="Topic.ForumName" />
 	<input type="hidden" asp-for="Topic.ForumId" />
 	<input type="hidden" asp-for="Topic.Title" />
-	<form-group class="col-lg-6">
-		<label asp-for="Topic.SplitToForumId" class="form-control-label"></label>
-		<select asp-for="Topic.SplitToForumId" asp-items="Model.AvailableForums.OrderBy(f => f.Text)" class="form-control"></select>
-		<span asp-validation-for="Topic.SplitToForumId" class="text-danger"></span>
-	</form-group>
-	<form-group class="col-lg-6">
-		<label asp-for="Topic.SplitTopicName" class="form-control-label"></label>
-		<input type="text" asp-for="Topic.SplitTopicName" class="form-control" />
-		<span asp-validation-for="Topic.SplitTopicName" class="text-danger"></span>
-	</form-group>
-	<small class="text-muted">Either select one Post to start splitting at (left), or manually select the Posts to be split (right). If both are provided the manual selection will take precedence.</small>
+	<fieldset class="col-lg-6">
+		<label asp-for="Topic.CreateNewTopicIn"></label>
+		<select asp-for="Topic.CreateNewTopicIn" asp-items="Model.AvailableForums.OrderBy(f => f.Text)"></select>
+		<span asp-validation-for="Topic.CreateNewTopicIn"></span>
+	</fieldset>
+	<fieldset class="col-lg-6">
+		<label asp-for="Topic.NewTopicName"></label>
+		<input asp-for="Topic.NewTopicName" />
+		<span asp-validation-for="Topic.NewTopicName"></span>
+	</fieldset>
+	<small class="text-body-tertiary">Either select one Post to start splitting at (left), or manually select the Posts to be split (right). If both are provided the manual selection will take precedence.</small>
 	<div class="border border-info p-2">
 		<small>
 			<row>
 				<div class="col-2 col-md-1">
-					<label asp-for="Topic.PostToSplitId" class="form-control-label"></label>
+					<label asp-for="Topic.SplitPostsStartingAt"></label>
 				</div>
 				<div class="col-2 col-md-1">
-					<label class="form-control-label">Split Selected Posts</label>
+					<label>Split Selected Posts</label>
 				</div>
 			</row>
 			@for (int i = 0; i < Model.Topic.Posts.Count; i++)
 			{
 				<row class="align-items-center">
 					<div class="col-2 col-md-1">
-						<input class="m-2" type="radio" value="@Model.Topic.Posts[i].Id" name="@Html.NameFor(m =>m.Topic.PostToSplitId)" id="post_@Model.Topic.Posts[i].Id" />
+						<input class="m-2" type="radio" value="@Model.Topic.Posts[i].Id" name="@Html.NameFor(m =>m.Topic.SplitPostsStartingAt)" id="post_@Model.Topic.Posts[i].Id" />
 					</div>
 					<div class="col-2 col-md-1">
 						<input type="hidden" asp-for="@Model.Topic.Posts[i].Id" />
@@ -47,7 +56,7 @@
 					</div>
 					<div class="col-md-10 mb-4 mb-md-2">
 						<card>
-							<cardheader>
+							<card-header>
 								<row>
 									<div class="col-4 border-end">
 										@Model.Topic.Posts[i].PosterName
@@ -56,29 +65,25 @@
 										@Model.Topic.Posts[i].Subject
 									</div>
 								</row>
-							</cardheader>
-							<cardbody>
+							</card-header>
+							<card-body>
 								<row>
 									<div class="col-4">
 										<img src="@Model.Topic.Posts[i].PosterAvatar" />
 									</div>
 									<div class="col-8">
-										<forum-markup markup=@Model.Topic.Posts[i].Text enable-html=@Model.Topic.Posts[i].EnableHtml enable-bb-code=@Model.Topic.Posts[i].EnableBbCode></forum-markup>
+										<forum-markup markup="@Model.Topic.Posts[i].Text" enable-html="@Model.Topic.Posts[i].EnableHtml" enable-bb-code="@Model.Topic.Posts[i].EnableBbCode"></forum-markup>
 									</div>
 								</row>
-							</cardbody>
+							</card-body>
 						</card>
 					</div>
 				</row>
 			}
 		</small>
 	</div>
-	<div class="text-center mt-2">
-		<button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Split</button>
-		<a asp-page="/Forum/Topics/Index" asp-route-id="@Model.Id" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</div>
+	<form-button-bar>
+		<submit-button><i class="fa fa-save"></i> Split</submit-button>
+		<cancel-link asp-page="/Forum/Topics/Index" asp-route-id="@Model.Id"></cancel-link>
+	</form-button-bar>
 </form>
-
-@section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-}

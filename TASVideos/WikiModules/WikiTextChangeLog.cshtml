@@ -1,0 +1,40 @@
+﻿@model WikiTextChangeLog
+@{
+	var grouped = Model.Logs.GroupBy(m => m.CreateTimestamp.Date);
+}
+
+<partial name="_Pager" model="Model.Logs" />
+<standard-table>
+	<table-head columns="Page,Author,Message,Time,Diff"></table-head>
+	@foreach (var group in grouped)
+	{
+		<tr>
+			<td style="background-color: #D0D0D0" colspan="6">@group.Key.ToShortDateString()</td>
+		</tr>
+		foreach (var item in group)
+		{
+			var isHomePage = item.PageName.StartsWith("HomePages");
+			var pageName = WikiHelper.ProcessLink(item.PageName);
+			<tr>
+				<td>
+					<i class="fa fa-home" condition="isHomePage"></i>
+					<a href="/@pageName">@pageName</a> <small>(r@(item.Revision))</small>
+				</td>
+				<td>@item.Author</td>
+				<td>@item.RevisionMessage @(item.MinorEdit ? "(Minor edit)" : "")</td>
+				<td>@item.CreateTimestamp.ToShortTimeString()</td>
+				<td>
+					<a
+						asp-page="/Wiki/PageHistory"
+						asp-route-path="@item.PageName"
+						asp-route-fromRevision="@(item.Revision - 1)"
+						asp-route-toRevision="@item.Revision"
+						class="btn btn-secondary">
+						Diff
+					</a>
+				</td>
+			</tr>
+		}
+	}
+</standard-table>
+<partial name="_Pager" model="Model.Logs" />

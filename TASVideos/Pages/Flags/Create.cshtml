@@ -1,47 +1,48 @@
 ﻿@page
 @model CreateModel
 @{
-	ViewData["Title"] = "Creating a new Flag";
+	ViewData.SetTitle("Creating a new Flag");
 }
 
-<form method="post">
+<form client-side-validation="true" method="post">
 	<row>
 		<column lg="6">
-			<form-group>
+			<fieldset>
 				<label asp-for="Flag.Name"></label>
-				<input type="text" asp-for="Flag.Name" class="form-control" />
-				<span asp-validation-for="Flag.Name" class="text-danger"></span>
-			</form-group>
-			<form-group>
+				<input asp-for="Flag.Name" />
+				<span asp-validation-for="Flag.Name"></span>
+			</fieldset>
+			<fieldset>
 				<label asp-for="Flag.IconPath"></label>
-				<input type="text" asp-for="Flag.IconPath" class="form-control" />
-				<span asp-validation-for="Flag.IconPath" class="text-danger"></span>
-			</form-group>
-			<form-group>
+				<input asp-for="Flag.IconPath" />
+				<span asp-validation-for="Flag.IconPath"></span>
+			</fieldset>
+			<fieldset>
 				<label asp-for="Flag.LinkPath"></label>
-				<input type="text" asp-for="Flag.LinkPath" class="form-control" />
-				<span asp-validation-for="Flag.LinkPath" class="text-danger"></span>
-			</form-group>
+				<input asp-for="Flag.LinkPath" />
+				<span asp-validation-for="Flag.LinkPath"></span>
+			</fieldset>
 		</column>
-		<column lg="6" class="mt-lg-0 mt-3">
-			<form-group>
+		<column lg="6">
+			<fieldset>
 				<label asp-for="Flag.Token"></label>
-				<input type="text" asp-for="Flag.Token" class="form-control" />
-				<span asp-validation-for="Flag.Token" class="text-danger"></span>
-			</form-group>
-			<form-group>
+				<input asp-for="Flag.Token" />
+				<span asp-validation-for="Flag.Token"></span>
+			</fieldset>
+			<fieldset>
 				<label asp-for="Flag.PermissionRestriction"></label>
-				<select asp-for="Flag.PermissionRestriction" asp-items="Model.AvailablePermissions" class="form-control"></select>
-				<span asp-validation-for="Flag.PermissionRestriction" class="text-danger"></span>
-			</form-group>
+				<select asp-for="Flag.PermissionRestriction" asp-items="Model.AvailablePermissions.WithDefaultEntry()"></select>
+				<span asp-validation-for="Flag.PermissionRestriction"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Flag.Weight"></label>
+				<input asp-for="Flag.Weight" />
+				<span asp-validation-for="Flag.Weight"></span>
+			</fieldset>
 		</column>
 	</row>
-	<div class="text-center mt-3">
-		<submit-button class="btn btn-primary"><i class="fa fa-save"></i> Save</submit-button>
-		<a asp-page="Index" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</div>
+	<form-button-bar>
+		<submit-button edit="false"></submit-button>
+		<cancel-link asp-page="Index"></cancel-link>
+	</form-button-bar>
 </form>
-
-@section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-}

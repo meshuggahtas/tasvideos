@@ -1,0 +1,100 @@
+﻿@page "/Games/{gameId}/Versions/Edit/{id?}/{handler?}"
+@model EditModel
+@{
+	ViewData.SetTitle(Model.Id.HasValue
+		? $"Editing Game Version #{Model.Id} {Model.Version.Name}"
+		: "Create A New Game Version Entry");
+	var deleteLink = $"/Games/{Model.GameId}/Versions/Edit/{Model.Id ?? 0}/Delete";
+}
+
+<top-button-bar>
+	<h4 class="heading">Game: <game-link id="Model.GameId">@Model.GameName</game-link></h4>
+	<delete-button condition="@Model.CanDelete" asp-href="@deleteLink"></delete-button>
+</top-button-bar>
+<form client-side-validation="true" method="post">
+	<input type="hidden" asp-for="GameName" />
+	<row>
+		<column lg="6">
+			<fieldset>
+				<label asp-for="Version.System"></label>
+				<select asp-for="Version.System" asp-items="@Model.AvailableSystems.OrderBy(s => s.Value)"></select>
+				<span asp-validation-for="Version.System"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Version.Name"></label>
+				<input asp-for="Version.Name" data-id="name" autocomplete="off" />
+				<span asp-validation-for="Version.Name"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Version.Sha1"></label>
+				<input asp-for="Version.Sha1" data-id="sha1" autocomplete="off" spellcheck="false" />
+				<span asp-validation-for="Version.Sha1"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Version.Md5"></label>
+				<input asp-for="Version.Md5" data-id="md5" autocomplete="off" spellcheck="false" />
+				<span asp-validation-for="Version.Md5"></span>
+			</fieldset>
+			<fieldset>
+				<div id="hash-drop-area" role="button" class="border border-silver rounded p-2 text-body-tertiary">
+					<row class="align-items-center mb-1">
+						<div class="col-auto">
+							<i class="fa-solid fa-calculator fa-xl"></i>
+						</div>
+						<div class="col ps-0">
+							<span>Drag and drop a file here to automatically calculate SHA-1 and MD5 hashes. This is done locally in your browser, without uploading the file.</span>
+						</div>
+					</row>
+					<fullrow>
+						<div class="d-none progress" role="progressbar">
+							<div id="hash-progress" class="progress-bar progress-bar-striped" style="width: 0"></div>
+						</div>
+					</fullrow>
+				</div>
+			</fieldset>
+		</column>
+		<column lg="6">
+			<fieldset>
+				<label asp-for="Version.Type"></label>
+				<select asp-for="Version.Type" asp-items="@Model.AvailableVersionTypes.OrderBy(s => s.Value)"></select>
+				<span asp-validation-for="Version.Type"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Version.TitleOverride"></label>
+				<input asp-for="Version.TitleOverride" />
+				<span asp-validation-for="Version.TitleOverride"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Version.Version"></label>
+				<input asp-for="Version.Version" autocomplete="off" spellcheck="false" />
+				<span asp-validation-for="Version.Version"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Version.Region"></label>
+				<select asp-for="Version.Region" asp-items="@Model.AvailableRegionTypes"></select>
+				<span asp-validation-for="Version.Region"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Version.SourceDb"></label>
+				<input asp-for="Version.SourceDb" />
+				<span asp-validation-for="Version.SourceDb"></span>
+			</fieldset>
+		</column>
+	</row>
+	<fullrow>
+		<label asp-for="Version.Notes"></label>
+		<textarea asp-for="Version.Notes" rows="4"></textarea>
+		<span asp-validation-for="Version.Notes"></span>
+	</fullrow>
+	<form-button-bar>
+		<submit-button edit="@Model.Id.HasValue"></submit-button>
+		<cancel-link asp-page="/Games/Versions/List" asp-route-gameId="@Model.GameId"></cancel-link>
+		<minor-edit></minor-edit>
+	</form-button-bar>
+</form>
+<input id="hash-input" type="file" class="d-none" />
+
+@section Scripts {
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js" integrity="sha512-E8QSvWZ0eCLGk4km3hxSsNmGWbLtSCSUcewDQPQWZF6pEU8GlT8a5fF32wOl1i8ftdMhssTrF/OhyGWwonTcXA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+	<script src="/js/games-edit.js"></script>
+}

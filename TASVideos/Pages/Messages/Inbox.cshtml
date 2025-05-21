@@ -1,30 +1,25 @@
 ﻿@page "{id?}/{handler?}"
 @model InboxModel
 @{
-	ViewData["Title"] = $"Private messages for {User.Name()}";
+	ViewData.SetTitle($"Private messages for {User.Name()}");
 }
 
-<div class="mb-1">
-	<a permission="SendPrivateMessages" class="float-end btn btn-primary" asp-page="Create">
-		<span class="fa fa-envelope"></span> Create
-	</a>
+<top-button-bar>
+	<div class="heading">
+		<a permission="SendPrivateMessages" class="btn btn-primary" asp-page="Create">
+			<span class="fa fa-envelope"></span> Create
+		</a>
+	</div>
 	<a class="btn btn-secondary" asp-page="Savebox">
 		<span class="fa fa-check-square"></span> Savebox
 	</a>
 	<a class="btn btn-secondary" asp-page="Sentbox">
 		<span class="fa fa-arrow-right"></span> Sentbox
 	</a>
-</div>
-<table class="table table-bordered table-striped">
-	<tr>
-		<th>@Html.DisplayNameFor(m => m.Messages.First().Subject)</th>
-		<th>@Html.DisplayNameFor(m => m.Messages.First().FromUser)</th>
-		<th>@Html.DisplayNameFor(m => m.Messages.First().SendDate)</th>
-		<th>Actions</th>
-	</tr>
-	@foreach (var entry in Model.Messages
-	   .OrderBy(m => m.IsRead)
-	   .ThenByDescending(m => m.SendDate))
+</top-button-bar>
+<standard-table>
+	<table-head columns="Subject,From,Date,Actions"></table-head>
+	@foreach (var entry in Model.Messages)
 	{
 		<tr>
 			<td>
@@ -35,21 +30,20 @@
 				</a>
 			</td>
 			<td>
-				<profile-link username="@entry.FromUser"></profile-link>
+				<profile-link username="@entry.From"></profile-link>
 			</td>
-			<td>@entry.SendDate</td>
-			<td>
-				<form method="post" asp-page="Inbox" asp-page-handler="Save" asp-route-id="@entry.Id" style="display: inline-block">
-					<button type="submit" class="btn btn-primary btn-sm">Save</button>
+			<td>@entry.Date</td>
+			<td-action-column>
+				<form method="post" class="d-inline-block" asp-page="Inbox" asp-page-handler="Save" asp-route-id="@entry.Id">
+					<submit-button class="btn-sm"></submit-button>
 				</form>
 				<delete-button
 					asp-href="/Messages/InBox/@entry.Id/Delete"
 					warning-message="Are you sure you want to remove this message?"
-					class="btn-sm">
-					Delete
-				</delete-button>
-			</td>
+					class="btn-sm"></delete-button>
+			</td-action-column>
 		</tr>
 	}
-</table>
+</standard-table>
+<partial name="_Pager" model="Model.Messages" />
 

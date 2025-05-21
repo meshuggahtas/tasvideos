@@ -1,20 +1,21 @@
-﻿namespace TASVideos.Data.Entity;
+﻿using TASVideos.Data.AutoHistory;
+
+namespace TASVideos.Data.Entity;
 
 public enum PublicationUrlType { Streaming, Mirror }
 
+[IncludeInAutoHistory]
 public class PublicationUrl : BaseEntity
 {
 	public int Id { get; set; }
 	public int PublicationId { get; set; }
-	public virtual Publication? Publication { get; set; }
+	public Publication? Publication { get; set; }
 
 	[Required]
-	[StringLength(500)]
 	public string? Url { get; set; }
 
 	public PublicationUrlType Type { get; set; } = PublicationUrlType.Streaming;
 
-	[StringLength(100)]
 	public string? DisplayName { get; set; }
 }
 

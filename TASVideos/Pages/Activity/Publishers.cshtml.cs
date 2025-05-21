@@ -1,27 +1,12 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Activity.Model;
-
-namespace TASVideos.Pages.Activity;
+﻿namespace TASVideos.Pages.Activity;
 
 [AllowAnonymous]
-public class PublishersModel : PageModel
+public class PublishersModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public PublishersModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
-	public IEnumerable<MovieEntryModel> Publications { get; set; } = new List<MovieEntryModel>();
-
 	[FromRoute]
 	public string UserName { get; set; } = "";
+
+	public List<MovieEntry> Publications { get; set; } = [];
 
 	public async Task<IActionResult> OnGet()
 	{
@@ -30,22 +15,23 @@ public class PublishersModel : PageModel
 			return NotFound();
 		}
 
-		var user = await _db.Users.SingleOrDefaultAsync(u => u.UserName == UserName);
+		var user = await db.Users.SingleOrDefaultAsync(u => u.UserName == UserName);
 		if (user is null)
 		{
 			return NotFound();
 		}
 
-		Publications = await _db.Publications
+		Publications = await db.Publications
 			.ThatHaveBeenPublishedBy(user.Id)
-			.Where(p => p.Submission!.PublisherId == user.Id)
-			.Select(s => new MovieEntryModel
-			{
-				Id = s.Id,
-				Title = s.Title
-			})
+			.Select(s => new MovieEntry(
+				s.Id,
+				s.CreateTimestamp,
+				s.Title,
+				s.PublicationClass!.Name))
 			.ToListAsync();
 
 		return Page();
 	}
+
+	public record MovieEntry(int Id, DateTime CreateTimestamp, string Title, string Class);
 }

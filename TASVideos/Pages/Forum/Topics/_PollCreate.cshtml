@@ -1,41 +1,38 @@
-﻿@model TASVideos.Pages.Forum.Topics.Models.PollCreateModel
-@{
-	bool restricted = ViewData["Restricted"] is true;
-}
+﻿@model AddEditPollModel.PollCreate
 
-<h4 class="text-danger" condition="restricted">This poll has votes! Some options have been restricted</h4>
+<h4 class="text-danger" condition="Model.HasVotes">This poll has votes! Some options have been restricted</h4>
 
 <row>
 	<column lg="6">
-		<form-group>
+		<fieldset>
 			<label asp-for="Question"></label>
-			<input condition="!restricted" type="text" asp-for="Question" class="form-control" />
-			<input condition="restricted" disabled placeholder="@Model!.Question" type="text" class="form-control" />
-			<span asp-validation-for="Question" class="text-danger"></span>
-		</form-group>
-		<form-group>
-			<label asp-for="DaysOpen"></label>
-			<input asp-for="DaysOpen" type="number" max="365" class="form-control" placeholder="@Html.DescriptionFor(m => m.DaysOpen)" />
-			<span asp-validation-for="DaysOpen" class="text-danger"></span>
-		</form-group>
-		<form-group condition="!restricted">
-			<label asp-for="PollOptions"></label>
+			<input readonly="@Model.HasVotes" asp-for="Question" placeholder="@Model.Question" />
+			<span asp-validation-for="Question"></span>
+		</fieldset>
+		<fieldset>
+			<label asp-for="DaysOpen">Days to Run for</label>
+			<input asp-for="DaysOpen" min="0" max="365" />
+			<div>0 or empty for a never-ending poll</div>
+			<span asp-validation-for="DaysOpen"></span>
+		</fieldset>
+		<fieldset condition="!Model.HasVotes">
+			<label asp-for="PollOptions">Options</label>
 			<string-list asp-for="PollOptions" />
-			<span asp-validation-for="PollOptions" class="text-danger"></span>
-		</form-group>
-		<form-group condition="restricted">
+			<span asp-validation-for="PollOptions"></span>
+		</fieldset>
+		<fieldset condition="Model.HasVotes">
 			@for (int i = 0; i < Model.PollOptions.Count; i++)
 			{
 				<input disabled type="text" placeholder="@Model.PollOptions[i]" class="form-control" />
 				<input asp-for="PollOptions[i]" type="hidden" />
 			}
-		</form-group>
-		<form-group>
+		</fieldset>
+		<fieldset>
 			<div class="form-check">
-				<label asp-for="MultiSelect" class="form-check-label"></label>
-				<input disable="restricted" asp-for="MultiSelect" type="checkbox" class="form-check-input"/>
+				<label asp-for="MultiSelect" class="form-check-label">Allow Multiple Selections</label>
+				<input disable="@Model.HasVotes" asp-for="MultiSelect" type="checkbox" class="form-check-input" />
 			</div>
-			<span asp-validation-for="MultiSelect" class="text-danger"></span>
-		</form-group>
+			<span asp-validation-for="MultiSelect"></span>
+		</fieldset>
 	</column>
 </row>

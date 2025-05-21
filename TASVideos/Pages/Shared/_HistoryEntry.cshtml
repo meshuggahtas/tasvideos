@@ -1,28 +1,22 @@
 ﻿@model TASVideos.Core.Services.PublicationHistoryNode
 @{
-	var highlight = Model!.Id == (int?)ViewData["Highlight"] ? ViewData["HighlightClass"] : "";
-	var classIconPath2X = "";
-	var classIconPath4X = "";
-	if (Model.ClassIconPath != null)
-	{
-		classIconPath2X = $"{Model.ClassIconPath.Split('.')[0]}-2x.png";
-		classIconPath4X = $"{Model.ClassIconPath.Split('.')[0]}-4x.png";
-	}
+	var highlight = Model.Id == ViewData.Int("Highlight") ? "fw-bold fst-italic border border-info p-1" : "";
+	var strikethrough = Model.ObsoletedById is null ? "" : "text-decoration-line-through";
 }
-<img style="width: 18px" condition="!string.IsNullOrWhiteSpace(Model.ClassIconPath)" src="/@classIconPath2X"
-	 srcset="/@Model.ClassIconPath 1x,
-	 /@classIconPath2X 2x,
-	 /@classIconPath4X 4x"/>
-<pub-link class="@highlight text-decoration-line-through" id="@Model.Id">@Model.Title</pub-link>
-<span>(<timezone-convert asp-for="@Model.CreateTimestamp" date-only="true" />)</span>
-@if (Model.Obsoletes.Any())
+<icon path="@Model.ClassIconPath" title="@Model.Class" />
+@foreach (var flag in Model.Flags.Where(f => !string.IsNullOrWhiteSpace(f.IconPath)))
 {
-	<ul>
-		@foreach (var node in Model.Obsoletes)
-		{
-			<li>
-				<partial name="_HistoryEntry" model="node" />
-			</li>
-		}
-	</ul>
+	<a href="/@flag.LinkPath">
+		<img class="ms-1" title="@flag.Name" alt="[@flag.Name]" src="/@flag.IconPath" />
+	</a>
 }
+<pub-link class="@highlight @strikethrough" id="@Model.Id">@Model.Title</pub-link>
+<span>(<timezone-convert asp-for="@Model.CreateTimestamp" date-only="true" />)</span>
+<ul class="mb-0">
+	@foreach (var node in Model.Obsoletes)
+	{
+		<li>
+			<partial name="_HistoryEntry" model="node" view-data="ViewData" />
+		</li>
+	}
+</ul>

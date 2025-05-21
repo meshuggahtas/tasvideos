@@ -1,12 +1,6 @@
-﻿using TASVideos.Core;
+﻿namespace TASVideos.Api.Responses;
 
-#pragma warning disable 1591
-namespace TASVideos.Api.Responses;
-
-/// <summary>
-/// Represents a publication returned by the publications endpoint.
-/// </summary>
-public class PublicationsResponse
+internal class PublicationsResponse
 {
 	[Sortable]
 	public int Id { get; init; }
@@ -14,11 +8,14 @@ public class PublicationsResponse
 	[Sortable]
 	public string Title { get; init; } = "";
 
+	// Left in for backwards compatibility
 	[Sortable]
-	public string Branch { get; init; } = "";
+	public string? Branch { get; init; } = "";
+	public string Goal { get; init; } = "";
+	public int GameGoalId { get; init; }
 
 	[Sortable]
-	public string EmulatorVersion { get; init; } = "";
+	public string? EmulatorVersion { get; init; } = "";
 
 	[Sortable]
 	public string Class { get; init; } = "";
@@ -33,10 +30,10 @@ public class PublicationsResponse
 	public int GameId { get; init; }
 
 	[Sortable]
-	public int RomId { get; init; }
+	public int GameVersionId { get; init; }
 
 	[Sortable]
-	public int ObsoletedById { get; init; }
+	public int? ObsoletedById { get; init; }
 
 	[Sortable]
 	public int Frames { get; init; }
@@ -50,10 +47,16 @@ public class PublicationsResponse
 	[Sortable]
 	public string MovieFileName { get; init; } = "";
 
-	public IEnumerable<string> Authors { get; init; } = Array.Empty<string>();
-	public IEnumerable<string> Tags { get; init; } = Array.Empty<string>();
-	public IEnumerable<string> Flags { get; init; } = Array.Empty<string>();
+	[Sortable]
+	public string? AdditionalAuthors { get; init; }
 
-	public IEnumerable<string> Urls { get; init; } = Array.Empty<string>();
-	public IEnumerable<string> FilePaths { get; init; } = Array.Empty<string>();
+	[Sortable]
+	public DateTime CreateTimestamp { get; init; }
+
+	public IEnumerable<string> Authors { get; init; } = [];
+	public IEnumerable<string> Tags { get; init; } = [];
+	public IEnumerable<string> Flags { get; init; } = [];
+
+	public IEnumerable<string> Urls { get; init; } = [];
+	public IEnumerable<string> FilePaths { get; init; } = [];
 }

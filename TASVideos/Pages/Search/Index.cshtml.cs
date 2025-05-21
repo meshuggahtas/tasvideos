@@ -1,40 +1,29 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Forum;
+﻿using TASVideos.Data.Entity.Forum;
+using TASVideos.Data.Entity.Game;
 
 namespace TASVideos.Pages.Search;
 
 [AllowAnonymous]
-public class IndexModel : PageModel
+public class IndexModel(ApplicationDbContext db) : BasePageModel
 {
 	public const int PageSize = 10;
-	private readonly ApplicationDbContext _db;
-
-	public IndexModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
 
 	[FromQuery]
 	[StringLength(100, MinimumLength = 2)]
-	[Display(Name = "Search Terms")]
 	public string SearchTerms { get; set; } = "";
 
 	[FromQuery]
+	[Range(1, int.MaxValue)]
 	public int PageNumber { get; set; } = 1;
 
-	public List<PageSearchModel> PageResults { get; set; } = new();
-	public List<PostSearchModel> PostResults { get; set; } = new();
-	public List<GameSearchModel> GameResults { get; set; } = new();
+	public List<PageSearch> PageResults { get; set; } = [];
+	public List<PostSearch> PostResults { get; set; } = [];
+	public List<GameSearch> GameResults { get; set; } = [];
+	public List<PublicationSearch> PublicationResults { get; set; } = [];
 
 	public async Task<IActionResult> OnGet()
 	{
-		if (!_db.Database.IsNpgsql())
+		if (!db.HasFullTextSearch())
 		{
 			ModelState.AddModelError("", "This feature is not currently available.");
 			return BadRequest(ModelState);
@@ -47,44 +36,63 @@ public class IndexModel : PageModel
 
 		if (!string.IsNullOrWhiteSpace(SearchTerms))
 		{
-			var seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
 			var skip = PageSize * (PageNumber - 1);
-			_db.Database.SetCommandTimeout(TimeSpan.FromSeconds(30));
-			PageResults = await _db.WikiPages
+			db.ExtendTimeoutForSearch();
+			PageResults = await db.WikiPages
 				.ThatAreNotDeleted()
-				.WithNoChildren()
-				.Where(w => w.SearchVector.Matches(EF.Functions.WebSearchToTsQuery(SearchTerms)))
-				.OrderByDescending(w => EF.Functions.ToTsVector(w.Markup).Rank(EF.Functions.WebSearchToTsQuery(SearchTerms)))
+				.ThatAreCurrent()
+				.WebSearch(SearchTerms)
+				.ByWebRanking(SearchTerms)
 				.Skip(skip)
 				.Take(PageSize + 1)
-				.Select(w => new PageSearchModel(EF.Functions.WebSearchToTsQuery(SearchTerms).GetResultHeadline(w.Markup), w.PageName))
+				.Select(w => new PageSearch(EF.Functions.WebSearchToTsQuery(SearchTerms).GetResultHeadline(w.Markup), w.PageName))
 				.ToListAsync();
 
-			PostResults = await _db.ForumPosts
-				.ExcludeRestricted(seeRestricted)
-				.Where(p => p.SearchVector.Matches(EF.Functions.WebSearchToTsQuery(SearchTerms)))
-				.OrderByDescending(p => p.SearchVector.Rank(EF.Functions.WebSearchToTsQuery(SearchTerms)))
+			PostResults = await db.ForumPosts
+				.ExcludeRestricted(UserCanSeeRestricted)
+				.WebSearch(SearchTerms)
+				.ByWebRanking(SearchTerms)
 				.Skip(skip)
 				.Take(PageSize + 1)
-				.Select(p => new PostSearchModel(
+				.Select(p => new PostSearch(
 					EF.Functions.WebSearchToTsQuery(SearchTerms).GetResultHeadline(p.Text),
 					p.Topic!.Title,
 					p.Id))
 				.ToListAsync();
 
-			GameResults = await _db.Games
-				.Where(g => EF.Functions.ToTsVector(g.DisplayName + " || " + g.GoodName + " || " + g.Abbreviation).Matches(EF.Functions.WebSearchToTsQuery(SearchTerms)))
-				.OrderBy(g => g.DisplayName)
+			GameResults = await db.Games
+				.WebSearch(SearchTerms)
+				.ByWebRanking(SearchTerms)
+				.ThenBy(g => g.DisplayName.Length)
+				.ThenBy(g => g.DisplayName)
 				.Skip(skip)
 				.Take(PageSize + 1)
-				.Select(g => new GameSearchModel(g.Id, g.DisplayName))
+				.Select(g => new GameSearch(
+					g.Id,
+					g.DisplayName,
+					g.GameVersions.Select(v => v.System!.Code),
+					g.GameGroups.Select(gg => new GameGroupEntry(gg.GameGroupId, gg.GameGroup!.Name)).ToList()))
+				.ToListAsync();
+
+			PublicationResults = await db.Publications
+				.Where(p => EF.Functions.ToTsVector("simple", p.Title).Matches(EF.Functions.WebSearchToTsQuery("simple", SearchTerms)))
+				.OrderBy(p => p.ObsoletedById == null ? 0 : 1)
+				.ThenByDescending(p => p.CreateTimestamp)
+				.Skip(skip)
+				.Take(PageSize + 1)
+				.Select(p => new PublicationSearch(
+					p.Id,
+					p.Title,
+					p.ObsoletedById != null))
 				.ToListAsync();
 		}
 
 		return Page();
 	}
 
-	public record PageSearchModel(string Highlight, string PageName);
-	public record PostSearchModel(string Highlight, string TopicName, int PostId);
-	public record GameSearchModel(int Id, string DisplayName);
+	public record PageSearch(string Highlight, string PageName);
+	public record PostSearch(string Highlight, string TopicName, int PostId);
+	public record GameSearch(int Id, string DisplayName, IEnumerable<string> Systems, List<GameGroupEntry> Groups);
+	public record GameGroupEntry(int Id, string Name);
+	public record PublicationSearch(int Id, string Title, bool IsObsolete);
 }

@@ -1,0 +1,51 @@
+﻿@page "/Games/{gameId}/Versions/List"
+@using TASVideos.Data.Entity.Game
+@model ListModel
+@{
+	ViewData.SetTitle($"Versions for {Model.GameDisplayName}");
+}
+
+@section PageTitle {
+	Versions for <game-link id="@Model.GameId">@Model.GameDisplayName</game-link>
+}
+
+<top-button-bar>
+	<add-link asp-page="Edit" permission="CatalogMovies" asp-route-gameId="@Model.GameId"></add-link>
+</top-button-bar>
+<standard-table>
+	<table-head columns="Type,Name,Title Override,Version,Region,Hashes,System,"></table-head>
+	@foreach (var version in Model.Versions.OrderBy(v => v.Name))
+	{
+		<tr>
+			<td>
+				<span class="text-nowrap"><i condition="@version.Type == VersionTypes.Unknown" class="fa fa-circle-question"></i> @version.Type</span>
+			</td>
+			<td>
+				@version.Name
+				@if (!string.IsNullOrWhiteSpace(version.SourceDb))
+				{
+					<br /><span>SourceDB: @version.SourceDb</span>
+				}
+			</td>
+			<td>@version.TitleOverride</td>
+			<td>@version.Version</td>
+			<td>@version.Region</td>
+			<td>
+				<small condition="!string.IsNullOrEmpty(version.Sha1)" class="text-nowrap">SHA1: @version.Sha1</small>
+				<small condition="!string.IsNullOrEmpty(version.Md5)" class="text-nowrap">MD5: @version.Md5</small><br />
+			</td>
+			<td>@version.System</td>
+			<td-action-column>
+				<a
+					class="btn btn-secondary btn-sm"
+					asp-page="/Games/Versions/View"
+					asp-route-gameId="@Model.GameId"
+					asp-route-id="@version.Id">
+					<i class="fa fa-eye"></i> View
+				</a>
+				<edit-link class="btn-sm" asp-page="Edit" permission="CatalogMovies" asp-route-id="@version.Id" asp-route-gameId="@Model.GameId"></edit-link>
+			</td-action-column>
+		</tr>
+	}
+</standard-table>
+

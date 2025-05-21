@@ -1,0 +1,19 @@
+﻿@model MovieMaintenanceLog
+<top-button-bar>
+	<a condition="!Model.IsSinglePub" asp-page="" asp-route-begin="@Model.Next" class="btn btn-primary">Next</a>
+</top-button-bar>
+@foreach (var pub in Model.Logs)
+{
+	<pub-link id="pub.Key.Id">@pub.Key.Title</pub-link>
+	<standard-table>
+		<table-head columns="Editor,Datetime,Log"></table-head>
+		@foreach (var log in pub)
+		{
+			<tr>
+				<td><profile-link username="@log.UserName"></profile-link></td>
+				<td><timezone-convert asp-for="@log.Timestamp" /></td>
+				<td>@log.Log</td>
+			</tr>
+		}
+	</standard-table>
+}

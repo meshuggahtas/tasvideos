@@ -1,70 +1,39 @@
-﻿using System.ComponentModel.DataAnnotations;
-using AutoMapper;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
+﻿using TASVideos.Common;
+using TASVideos.Core.Services.Wiki;
 using TASVideos.Core.Services.Youtube;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Publications.Models;
 
 namespace TASVideos.Pages.Publications;
 
 [RequirePermission(PermissionTo.EditPublicationMetaData)]
-public class EditModel : BasePageModel
+public class EditModel(
+	ApplicationDbContext db,
+	IExternalMediaPublisher publisher,
+	IWikiPages wikiPages,
+	ITagService tagsService,
+	IFlagService flagsService,
+	IPublicationMaintenanceLogger publicationMaintenanceLogger,
+	IYoutubeSync youtubeSync)
+	: BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly IMapper _mapper;
-	private readonly IWikiPages _wikiPages;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly ITagService _tagsService;
-	private readonly IFlagService _flagsService;
-	private readonly IPublicationMaintenanceLogger _publicationMaintenanceLogger;
-	private readonly IYoutubeSync _youtubeSync;
-
-	public EditModel(
-		ApplicationDbContext db,
-		IMapper mapper,
-		ExternalMediaPublisher publisher,
-		IWikiPages wikiPages,
-		ITagService tagsService,
-		IFlagService flagsService,
-		IPublicationMaintenanceLogger publicationMaintenanceLogger,
-		IYoutubeSync youtubeSync)
-	{
-		_db = db;
-		_mapper = mapper;
-		_wikiPages = wikiPages;
-		_publisher = publisher;
-		_tagsService = tagsService;
-		_flagsService = flagsService;
-		_publicationMaintenanceLogger = publicationMaintenanceLogger;
-		_youtubeSync = youtubeSync;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
 	[BindProperty]
-	public PublicationEditModel Publication { get; set; } = new();
+	public PublicationEdit Publication { get; set; } = new();
 
-	[Display(Name = "Available Flags")]
-	public IEnumerable<SelectListItem> AvailableFlags { get; set; } = new List<SelectListItem>();
+	public List<SelectListItem> AvailableFlags { get; set; } = [];
 
-	[Display(Name = "Available Tags")]
-	public IEnumerable<SelectListItem> AvailableTags { get; set; } = new List<SelectListItem>();
+	public List<SelectListItem> AvailableTags { get; set; } = [];
 
-	public IEnumerable<PublicationFileDisplayModel> Files { get; set; } = new List<PublicationFileDisplayModel>();
+	public List<PublicationFileDisplay> Files { get; set; } = [];
 
 	public async Task<IActionResult> OnGet()
 	{
-		var publication = await _db.Publications
+		var publication = await db.Publications
 			.Where(p => p.Id == Id)
-			.Select(p => new PublicationEditModel
+			.Select(p => new PublicationEdit
 			{
-				Class = p.PublicationClass!.Name,
+				PublicationClass = p.PublicationClass!.Name,
 				MovieFileName = p.MovieFileName,
 				ClassIconPath = p.PublicationClass.IconPath,
 				ClassLink = p.PublicationClass.Link,
@@ -72,25 +41,18 @@ public class EditModel : BasePageModel
 				Title = p.Title,
 				ObsoletedBy = p.ObsoletedById,
 				ObsoletedByTitle = p.ObsoletedBy != null ? p.ObsoletedBy.Title : null,
-				Branch = p.Branch,
 				EmulatorVersion = p.EmulatorVersion,
-				AdditionalAuthors = p.AdditionalAuthors,
+				ExternalAuthors = p.AdditionalAuthors,
 				Urls = p.PublicationUrls
-					.Select(u => new PublicationUrlDisplayModel
-					{
-						Id = u.Id,
-						Url = u.Url!,
-						Type = u.Type,
-						DisplayName = u.DisplayName
-					})
+					.Select(u => new PublicationUrlDisplay(
+						u.Id, u.Url!, u.Type, u.DisplayName))
 					.ToList(),
 				SelectedFlags = p.PublicationFlags
 					.Select(pf => pf.FlagId)
 					.ToList(),
 				SelectedTags = p.PublicationTags
 					.Select(pt => pt.TagId)
-					.ToList(),
-				Markup = p.WikiContent != null ? p.WikiContent.Markup : ""
+					.ToList()
 			})
 			.SingleOrDefaultAsync();
 
@@ -99,8 +61,10 @@ public class EditModel : BasePageModel
 			return NotFound();
 		}
 
+		publication.Markup = (await wikiPages.PublicationPage(Id))?.Markup ?? "";
+
 		Publication = publication;
-		Publication.Authors = await _db.PublicationAuthors
+		Publication.Authors = await db.PublicationAuthors
 			.Where(pa => pa.PublicationId == Id)
 			.OrderBy(pa => pa.Ordinal)
 			.Select(pa => pa.Author!.UserName)
@@ -120,8 +84,8 @@ public class EditModel : BasePageModel
 
 		if (Publication.ObsoletedBy.HasValue)
 		{
-			var obsoletedBy = await _db.Publications.SingleOrDefaultAsync(p => p.Id == Publication.ObsoletedBy.Value);
-			if (obsoletedBy is null)
+			var obsoletedByExists = await db.Publications.AnyAsync(p => p.Id == Publication.ObsoletedBy.Value);
+			if (!obsoletedByExists)
 			{
 				ModelState.AddModelError($"{nameof(Publication)}.{nameof(Publication.ObsoletedBy)}", "Publication does not exist");
 				return Page();
@@ -134,38 +98,36 @@ public class EditModel : BasePageModel
 
 	public async Task<IActionResult> OnGetTitle(int publicationId)
 	{
-		var title = (await _db.Publications.SingleOrDefaultAsync(p => p.Id == publicationId))?.Title;
-		return new ContentResult { Content = title };
+		var title = (await db.Publications.SingleOrDefaultAsync(p => p.Id == publicationId))?.Title;
+		return Content(title ?? "");
 	}
 
 	private async Task PopulateDropdowns()
 	{
-		AvailableFlags = await _db.Flags
-			.ToDropDown(User.Permissions())
-			.ToListAsync();
-		AvailableTags = await _db.Tags
-			.ToDropdown()
-			.ToListAsync();
-		Files = await _mapper.ProjectTo<PublicationFileDisplayModel>(
-				_db.PublicationFiles.Where(f => f.PublicationId == Id))
+		AvailableFlags = await db.Flags.ToDropDownList(User.Permissions());
+		AvailableTags = await db.Tags.ToDropdownList();
+		Files = await db.PublicationFiles
+			.Where(f => f.PublicationId == Id)
+			.Select(f => new PublicationFileDisplay(
+				f.Id, f.Path, f.Type, f.Description))
 			.ToListAsync();
 	}
 
-	private async Task UpdatePublication(int id, PublicationEditModel model)
+	private async Task UpdatePublication(int id, PublicationEdit model)
 	{
 		var externalMessages = new List<string>();
 
-		var publication = await _db.Publications
-			.Include(p => p.PublicationUrls)
-			.Include(p => p.PublicationTags)
-			.Include(p => p.PublicationFlags)
-			.Include(p => p.WikiContent)
+		var publication = await db.Publications
+			.Include(p => p.Authors)
+			.ThenInclude(pa => pa.Author)
 			.Include(p => p.System)
 			.Include(p => p.SystemFrameRate)
 			.Include(p => p.Game)
-			.Include(p => p.Rom)
-			.Include(p => p.Authors)
-			.ThenInclude(pa => pa.Author)
+			.Include(p => p.GameVersion)
+			.Include(p => p.GameGoal)
+			.Include(p => p.PublicationUrls)
+			.Include(p => p.PublicationTags)
+			.Include(p => p.PublicationFlags)
 			.SingleOrDefaultAsync(p => p.Id == id);
 
 		if (publication is null)
@@ -174,113 +136,123 @@ public class EditModel : BasePageModel
 		}
 
 		// TODO: this has to be done anytime a string-list TagHelper is used, can we make this automatic with model binders?
-		var pubAuthors = Publication.Authors
-			.Where(a => !string.IsNullOrWhiteSpace(a))
-			.ToList();
-		Publication.Authors = pubAuthors;
-
-		if (publication.Branch != model.Branch)
-		{
-			externalMessages.Add($"Changed branch from \"{publication.Branch}\" to \"{model.Branch}\"");
-		}
-
-		publication.Branch = model.Branch;
+		Publication.Authors = Publication.Authors.RemoveEmpty();
 
 		if (publication.ObsoletedById != model.ObsoletedBy)
 		{
 			externalMessages.Add($"Changed obsoleting movie from \"{publication.ObsoletedById}\" to \"{model.ObsoletedBy}\"");
 		}
 
-		if (publication.AdditionalAuthors != model.AdditionalAuthors)
+		if (publication.AdditionalAuthors != model.ExternalAuthors)
 		{
-			externalMessages.Add($"Changed additional authors from \"{publication.AdditionalAuthors}\" to \"{model.AdditionalAuthors}\"");
+			externalMessages.Add($"Changed external authors from \"{publication.AdditionalAuthors}\" to \"{model.ExternalAuthors}\"");
 		}
 
 		publication.ObsoletedById = model.ObsoletedBy;
 		publication.EmulatorVersion = model.EmulatorVersion;
-		publication.AdditionalAuthors = model.AdditionalAuthors.NullIfWhitespace();
+		publication.AdditionalAuthors = model.ExternalAuthors.NullIfWhitespace();
 		publication.Authors.Clear();
-		publication.Authors.AddRange(await _db.Users
-			.Where(u => Publication.Authors.Contains(u.UserName))
+		publication.Authors.AddRange(await db.Users
+			.ForUsers(Publication.Authors)
 			.Select(u => new PublicationAuthor
 			{
 				PublicationId = publication.Id,
 				UserId = u.Id,
 				Author = u,
-				Ordinal = pubAuthors.IndexOf(u.UserName)
+				Ordinal = Publication.Authors.IndexOf(u.UserName)
 			})
 			.ToListAsync());
 
 		publication.GenerateTitle();
 
-		externalMessages.AddRange((await _flagsService
-			.GetDiff(publication.PublicationFlags.Select(p => p.FlagId), model.SelectedFlags))
+		List<int> editableFlags = await db.Flags
+			.Where(f => f.PermissionRestriction.HasValue && User.Permissions().Contains(f.PermissionRestriction.Value) || f.PermissionRestriction == null)
+			.Select(f => f.Id)
+			.ToListAsync();
+		List<PublicationFlag> existingEditablePublicationFlags = publication.PublicationFlags.Where(pf => editableFlags.Contains(pf.FlagId)).ToList();
+		List<int> selectedEditableFlagIds = model.SelectedFlags.Intersect(editableFlags).ToList();
+
+		var flagsToAdd = publication.PublicationFlags.Except(existingEditablePublicationFlags).ToList();
+		publication.PublicationFlags.Clear();
+		publication.PublicationFlags.AddRange(flagsToAdd);
+		publication.PublicationFlags.AddFlags(selectedEditableFlagIds);
+		externalMessages.AddRange((await flagsService
+			.GetDiff(existingEditablePublicationFlags.Select(p => p.FlagId), selectedEditableFlagIds))
 			.ToMessages("flags"));
 
-		publication.PublicationFlags.Clear();
-		_db.PublicationFlags.RemoveRange(
-			_db.PublicationFlags.Where(pf => pf.PublicationId == publication.Id));
-
-		publication.PublicationFlags.AddFlags(model.SelectedFlags);
-
-		externalMessages.AddRange((await _tagsService
+		externalMessages.AddRange((await tagsService
 			.GetDiff(publication.PublicationTags.Select(p => p.TagId), model.SelectedTags))
 			.ToMessages("tags"));
 
 		publication.PublicationTags.Clear();
-		_db.PublicationTags.RemoveRange(
-			_db.PublicationTags.Where(pt => pt.PublicationId == publication.Id));
+		db.PublicationTags.RemoveRange(
+			db.PublicationTags.Where(pt => pt.PublicationId == publication.Id));
 
 		publication.PublicationTags.AddTags(model.SelectedTags);
 
-		await _db.SaveChangesAsync();
+		await db.SaveChangesAsync();
+		var existingWikiPage = await wikiPages.PublicationPage(Id);
+		IWikiPage? pageToSync = existingWikiPage;
 
-		if (model.Markup != publication.WikiContent!.Markup)
+		if (model.Markup != existingWikiPage!.Markup)
 		{
-			var revision = new WikiPage
+			pageToSync = await wikiPages.Add(new WikiCreateRequest
 			{
-				PageName = $"{LinkConstants.PublicationWikiPage}{id}",
+				PageName = WikiHelper.ToPublicationWikiPageName(id),
 				Markup = model.Markup,
-				MinorEdit = model.MinorEdit,
+				MinorEdit = HttpContext.Request.MinorEdit(),
 				RevisionMessage = model.RevisionMessage,
 				AuthorId = User.GetUserId()
-			};
-
-			await _wikiPages.Add(revision);
-			publication.WikiContentId = revision.Id;
-			publication.WikiContent = revision;
+			});
 			externalMessages.Add("Description updated");
 		}
 
 		foreach (var url in publication.PublicationUrls.ThatAreStreaming())
 		{
-			if (_youtubeSync.IsYoutubeUrl(url.Url))
+			if (youtubeSync.IsYoutubeUrl(url.Url))
 			{
-				await _youtubeSync.SyncYouTubeVideo(new YoutubeVideo(
+				await youtubeSync.SyncYouTubeVideo(new YoutubeVideo(
 					Id,
 					publication.CreateTimestamp,
 					url.Url!,
 					url.DisplayName,
 					publication.Title,
-					publication.WikiContent,
+					pageToSync!,
 					publication.System!.Code,
 					publication.Authors.OrderBy(pa => pa.Ordinal).Select(a => a.Author!.UserName),
-					publication.Game!.SearchKey,
 					publication.ObsoletedById));
 			}
 		}
 
-		await _publicationMaintenanceLogger.Log(Id, User.GetUserId(), externalMessages);
-
-		if (!model.MinorEdit)
-		{
-			foreach (var unused in externalMessages)
-			{
-				await _publisher.SendPublicationEdit(
-					$"{Id}M edited by {User.Name()}",
-					$"{string.Join(", ", externalMessages)} | {publication.Title}",
-					$"{Id}M");
-			}
-		}
+		await publicationMaintenanceLogger.Log(Id, User.GetUserId(), externalMessages);
+		await publisher.SendPublicationEdit(User.Name(), Id, $"{string.Join(", ", externalMessages)} | {publication.Title}");
 	}
+
+	public class PublicationEdit
+	{
+		public string SystemCode { get; init; } = "";
+		public string Title { get; init; } = "";
+		public string MovieFileName { get; init; } = "";
+		public string? ExternalAuthors { get; init; }
+		public List<string> Authors { get; set; } = [];
+		public string PublicationClass { get; init; } = "";
+		public string? ClassIconPath { get; init; } = "";
+		public string ClassLink { get; init; } = "";
+		public int? ObsoletedBy { get; init; }
+		public string? ObsoletedByTitle { get; init; }
+
+		[StringLength(50)]
+		public string? EmulatorVersion { get; init; }
+		public List<int> SelectedFlags { get; init; } = [];
+		public List<int> SelectedTags { get; init; } = [];
+		public string? RevisionMessage { get; init; }
+
+		[DoNotTrim]
+		public string Markup { get; set; } = "";
+		public List<PublicationUrlDisplay> Urls { get; init; } = [];
+	}
+
+	public record PublicationFileDisplay(int Id, string Path, FileType Type, string? Description);
+
+	public record PublicationUrlDisplay(int Id, string Url, PublicationUrlType Type, string? DisplayName);
 }

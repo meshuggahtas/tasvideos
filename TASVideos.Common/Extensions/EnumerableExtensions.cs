@@ -1,4 +1,6 @@
-﻿namespace TASVideos.Extensions;
+﻿using System.Linq.Expressions;
+
+namespace TASVideos.Extensions;
 
 public static class EnumerableExtensions
 {
@@ -29,12 +31,7 @@ public static class EnumerableExtensions
 	/// </summary>
 	public static T AtRandom<T>(this ICollection<T> collection)
 	{
-		if (collection is null)
-		{
-			throw new ArgumentNullException($"{nameof(collection)} can not be null");
-		}
-
-		var randomIndex = new Random(DateTime.UtcNow.Millisecond).Next(0, collection.Count);
+		var randomIndex = new Random().Next(0, collection.Count);
 		return collection.ElementAt(randomIndex);
 	}
 
@@ -49,35 +46,13 @@ public static class EnumerableExtensions
 		}
 	}
 
-	// TODO: .NET 6 has a built in method
-	public static IEnumerable<IEnumerable<T>> Batch<T>(
-		this IEnumerable<T> source, int size)
+	/// <summary>
+	/// An overload of OrderBy that will call OrderByDescending depending on the <see cref="descending"/> param
+	/// </summary>
+	public static IOrderedQueryable<TSource> OrderBy<TSource, TKey>(this IQueryable<TSource> source, Expression<Func<TSource, TKey>> keySelector, bool descending)
 	{
-		T[]? bucket = default;
-		var count = 0;
-
-		foreach (var item in source)
-		{
-			bucket ??= new T[size];
-
-			bucket[count++] = item;
-
-			if (count != size)
-			{
-				continue;
-			}
-
-			yield return bucket.Select(x => x);
-
-			bucket = null;
-			count = 0;
-		}
-
-		// Return the last bucket with all remaining elements
-		if (bucket != null && count > 0)
-		{
-			Array.Resize(ref bucket, count);
-			yield return bucket.Select(x => x);
-		}
+		return descending
+			? source.OrderByDescending(keySelector)
+			: source.OrderBy(keySelector);
 	}
 }

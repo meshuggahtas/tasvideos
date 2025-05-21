@@ -1,36 +1,29 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
-
-namespace TASVideos.Pages.Users;
+﻿namespace TASVideos.Pages.Users;
 
 [AllowAnonymous]
-public class RatingsModel : BasePageModel
+public class RatingsModel(IRatingService ratingService) : BasePageModel
 {
-	private readonly UserManager _userManager;
-
-	public RatingsModel(UserManager userManager)
-	{
-		_userManager = userManager;
-	}
+	[FromQuery]
+	public RatingRequest Search { get; set; } = new();
 
 	[FromRoute]
 	public string UserName { get; set; } = "";
 
-	public UserRatings? Ratings { get; set; }
+	public UserRatings Ratings { get; set; } = new();
 
 	public async Task<IActionResult> OnGet()
 	{
-		Ratings = await _userManager.GetUserRatings(
+		var ratings = await ratingService.GetUserRatings(
 			UserName,
+			Search,
 			User.Has(PermissionTo.SeePrivateRatings) || User.Name() == UserName);
 
-		if (Ratings is null)
+		if (ratings is null)
 		{
 			return NotFound();
 		}
 
+		Ratings = ratings;
 		return Page();
 	}
 }

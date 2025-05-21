@@ -1,48 +1,41 @@
 ﻿@page
 @model LoginModel
 @{
-	ViewData["Title"] = "Log in";
+	ViewData.SetTitle("Log in");
+	ViewData.SetHeading("Use a TASVideos account to log in");
 }
 
-<h2>@ViewData["Title"]</h2>
 <row>
-	<section class="col-lg-4">
-		<form method="post">
-			<h4>Use a TASVideos account to log in.</h4>
-			<hr />
-			<div asp-validation-summary="All" class="text-danger"></div>
-			<form-group>
+	<column lg="4">
+		<form client-side-validation="true" method="post">
+			<fieldset>
 				<label asp-for="UserName"></label>
-				<input asp-for="UserName" class="form-control" autocomplete="username" />
-				<span asp-validation-for="UserName" class="text-danger"></span>
-			</form-group>
-			<form-group>
+				<input asp-for="UserName" autocomplete="username"/>
+				<span asp-validation-for="UserName"></span>
+			</fieldset>
+			<fieldset>
 				<label asp-for="Password"></label>
-				<input asp-for="Password" class="form-control" autocomplete="current-password" />
-				<span asp-validation-for="Password" class="text-danger"></span>
-			</form-group>
-			<form-group>
+				<input asp-for="Password" class="form-control" autocomplete="current-password"/>
+				<span asp-validation-for="Password"></span>
+			</fieldset>
+			<fieldset>
 				<div class="checkbox">
 					<label asp-for="RememberMe">
-						<input asp-for="RememberMe" />
-						@Html.DisplayNameFor(m => m.RememberMe)
+						<input asp-for="RememberMe"/>
+						Remember me?
 					</label>
 				</div>
-			</form-group>
-			<form-group>
-				<button type="submit" class="btn btn-secondary">Log in</button>
-			</form-group>
-			<form-group>
-				Please view our <a href="/System/PrivacyPolicy">Privacy Policy</a>
-			</form-group>
-			<form-group>
-				<p><a asp-page="ForgotPassword">Forgot your password?</a></p>
-				<p><a asp-page="Register" asp-route-returnurl="@HttpContext.CurrentPathToReturnUrl()">Register as a new user?</a></p>
-			</form-group>
+			</fieldset>
+			<fieldset>
+				<submit-button>Log in</submit-button>
+			</fieldset>
+			<fieldset>
+				<p>
+					Please view our <a href="/System/PrivacyPolicy">Privacy Policy</a><br/>
+					<a asp-page="ForgotPassword">Forgot your password?</a><br/>
+					<a asp-page="Register" asp-route-returnurl="@HttpContext.CurrentPathToReturnUrl()">Register as a new user?</a><br/>
+				</p>
+			</fieldset>
 		</form>
-	</section>
+	</column>
 </row>
-
-@section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-}

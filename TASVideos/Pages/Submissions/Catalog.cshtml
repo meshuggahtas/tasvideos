@@ -1,71 +1,98 @@
 ﻿@page "{id}"
 @model CatalogModel
 @{
-	ViewData["Title"] = $"Set Catalogging Information for {Model.Catalog.Title}";
+	ViewData.SetTitle($"Set Cataloging Information for {Model.Catalog.Title}");
 }
 
-<div asp-validation-summary="ModelOnly" class="alert alert-danger alert-dismissible" role="alert"></div>
-<form method="post">
+<form client-side-validation="true" method="post">
 	<row>
-		<div class="col-lg-6">
-			<form-group>
-				<label asp-for="Catalog.SystemId" class="form-control-label"></label>
-				<select asp-for="Catalog.SystemId" asp-items="Model.AvailableSystems" class="form-control"></select>
-			</form-group>
-			<form-group>
-				<label asp-for="Catalog.SystemFrameRateId" class="form-control-label"></label>
-				<select asp-for="Catalog.SystemFrameRateId" asp-items="@Model.AvailableSystemFrameRates" class="form-control"></select>
-			</form-group>
-		</div>
-		<div class="col-lg-6">
-			<form-group>
+		<column lg="6">
+			<fieldset>
+				<label asp-for="Catalog.System"></label>
+				<select asp-for="Catalog.System" asp-items="Model.AvailableSystems" data-id="system" data-return-url="@HttpContext.CurrentPathToReturnUrl()"></select>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Catalog.SystemFramerate"></label>
+				<select asp-for="Catalog.SystemFramerate" asp-items="@Model.AvailableSystemFrameRates" data-id="system-framerate"></select>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Catalog.Emulator"></label>
+				<input asp-for="Catalog.Emulator" />
+				<span asp-validation-for="Catalog.Emulator"></span>
+			</fieldset>
+			<fieldset>
+				<div class="form-check">
+					<input class="form-check-input" type="checkbox" asp-for="Catalog.SyncVerified" disabled="@(!Model.Catalog.CanSyncVerify)">
+					<label class="form-check-label" asp-for="Catalog.SyncVerified">
+						Sync verified
+					</label>
+					<p condition="Model.Catalog.SyncVerified">Verified <timezone-convert asp-for="Catalog.SyncVerifiedOn"/> by @Model.Catalog.SyncedBy</p>
+				</div>
+			</fieldset>
+		</column>
+		<column lg="6">
+			<fieldset>
 				<fullrow>
-					<label asp-for="Catalog.GameId" class="form-control-label"></label>
+					<label asp-for="Catalog.Game"></label>
 				</fullrow>
 				<row>
 					<div class="col-10">
-						<select asp-for="Catalog.GameId" asp-items="@UiDefaults.DefaultEntry.Concat(Model.AvailableGames)" class="form-control"></select>
+						<select asp-for="Catalog.Game" asp-items="@UiDefaults.DefaultEntry.Concat(Model.AvailableGames)" data-id="game"></select>
 					</div>
 					<div class="col-2">
 						<button id="create-game" type="button" class="btn btn-primary">New</button>
 					</div>
 				</row>
-			</form-group>
-			<form-group>
+			</fieldset>
+			<fieldset>
 				<fullrow>
-					<label asp-for="Catalog.RomId" class="form-control-label"></label>
+					<label asp-for="Catalog.GameVersion"></label>
 				</fullrow>
 				<row>
 					<div class="col-10">
-						<select asp-for="Catalog.RomId" asp-items="@UiDefaults.DefaultEntry.Concat(Model.AvailableRoms)" class="form-control"></select>
+						<select asp-for="Catalog.GameVersion" asp-items="@UiDefaults.DefaultEntry.Concat(Model.AvailableVersions)" data-id="version"></select>
 					</div>
 					<div class="col-2">
-						<button 
-							disable="!Model.Catalog.GameId.HasValue || Model.Catalog.GameId == -1" 
-							id="create-rom" 
-							type="button" 
+						<button
+							disable="Model.Catalog.Game is null or -1"
+							id="create-version"
+							type="button"
 							class="btn btn-primary">New</button>
 					</div>
 				</row>
-			</form-group>
-		</div>
+			</fieldset>
+			<fieldset>
+				<fullrow>
+					<label asp-for="Catalog.Goal"></label>
+				</fullrow>
+				<row>
+					<div class="col-10">
+						<select asp-for="Catalog.Goal" asp-items="@UiDefaults.DefaultEntry.Concat(Model.AvailableGoals)" data-id="goal"></select>
+						<span asp-validation-for="Catalog.Goal"></span>
+					</div>
+					<div class="col-2">
+						<button
+							disable="Model.Catalog.Game is null or -1"
+							id="create-goal"
+							type="button"
+							class="btn btn-primary">Manage</button>
+					</div>
+				</row>
+			</fieldset>
+		</column>
 	</row>
-	<hr />
-	<fullrow class="text-center">
-		<button id="submit-btn" type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Update</button>
-		<a class="btn btn-secondary" asp-page="View" asp-route-id="@Model.Id"><i class="fa fa-times"></i> Cancel</a>
+	<fullrow>
+		<label>Additional Sync notes</label><br/>
+		<small>Enter any additional information not contained in the movie file that is necessary to sync this movie. This includes custom emulator settings or steps. If there is a verification movie not included in the submission, link it here.</small>
+		<textarea asp-for="Catalog.AdditionalSyncNotes" class="form-control" rows="4"></textarea>
 	</fullrow>
+	<form-button-bar>
+		<submit-button></submit-button>
+		<cancel-link asp-page="View" asp-route-id="@Model.Id"></cancel-link>
+		<minor-edit></minor-edit>
+	</form-button-bar>
 </form>
 
 @section Scripts {
-	<partial name="_ValidationScriptsPartial" />
 	<script src="/js/catalog.js"></script>
-	<script>
-		enableCataloging(
-			"@Html.IdFor(m => m.Catalog.SystemId)",
-			"@Html.IdFor(m => m.Catalog.SystemFrameRateId)",
-			"@Html.IdFor(m => m.Catalog.GameId)",
-			"@Html.IdFor(m => m.Catalog.RomId)",
-			"@HttpContext.CurrentPathToReturnUrl()");
-	</script>
 }

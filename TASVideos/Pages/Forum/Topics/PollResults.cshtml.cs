@@ -1,48 +1,31 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Forum.Topics.Models;
-
-namespace TASVideos.Pages.Forum.Topics;
+﻿namespace TASVideos.Pages.Forum.Topics;
 
 [RequirePermission(PermissionTo.SeePollResults)]
-public class PollResultsModel : BasePageModel
+public class PollResultsModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public PollResultsModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
-	public PollResultModel Poll { get; set; } = new();
+	public PollResult Poll { get; set; } = null!;
 
 	public async Task<IActionResult> OnGet()
 	{
-		var poll = await _db.ForumPolls
+		var poll = await db.ForumPolls
 			.Where(p => p.Id == Id)
-			.Select(p => new PollResultModel
-			{
-				TopicTitle = p.Topic!.Title,
-				TopicId = p.TopicId,
-				Question = p.Question,
-				Votes = p.PollOptions
+			.Select(p => new PollResult(
+				p.Topic!.Title,
+				p.TopicId,
+				p.Question,
+				p.PollOptions
 					.SelectMany(po => po.Votes)
-					.Select(v => new PollResultModel.VoteResult
-					{
-						UserId = v.UserId,
-						UserName = v.User!.UserName,
-						Ordinal = v.PollOption!.Ordinal,
-						OptionText = v.PollOption.Text,
-						CreateTimestamp = v.CreateTimestamp,
-						IpAddress = v.IpAddress
-					})
-					.ToList()
-			})
+					.Select(v => new VoteResult(
+						v.UserId,
+						v.User!.UserName,
+						v.PollOption!.Ordinal,
+						v.PollOption.Text,
+						v.CreateTimestamp,
+						v.IpAddress))
+					.ToList()))
 			.SingleOrDefaultAsync();
 
 		if (poll is null)
@@ -61,7 +44,7 @@ public class PollResultsModel : BasePageModel
 			return AccessDenied();
 		}
 
-		var poll = await _db.ForumPolls
+		var poll = await db.ForumPolls
 			.Include(p => p.PollOptions)
 			.ThenInclude(o => o.Votes)
 			.Where(p => p.Id == Id)
@@ -77,9 +60,12 @@ public class PollResultsModel : BasePageModel
 			.Where(v => v.UserId == userId)
 			.ToList();
 
-		_db.ForumPollOptionVotes.RemoveRange(votes);
+		db.ForumPollOptionVotes.RemoveRange(votes);
 
-		await ConcurrentSave(_db, "Poll reset", "Unable to reset poll");
+		SetMessage(await db.TrySaveChanges(), "Poll reset", "Unable to reset poll");
 		return RedirectToPage("PollResults", new { Id });
 	}
+
+	public record PollResult(string TopicTitle, int TopicId, string Question, List<VoteResult> Votes);
+	public record VoteResult(int UserId, string UserName, int Ordinal, string OptionText, DateTime CreateTimestamp, string? IpAddress);
 }

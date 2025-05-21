@@ -1,24 +1,13 @@
-﻿using System.Net.Mime;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
+﻿using TASVideos.Core.Services.Wiki;
+using TASVideos.MovieParsers;
 using TASVideos.MovieParsers.Result;
-using TASVideos.Pages.Submissions.Models;
 
 namespace TASVideos.Pages.Submissions;
 
 [AllowAnonymous]
-public class ViewModel : BasePageModel
+public class ViewModel(ApplicationDbContext db, IWikiPages wikiPages, IFileService fileService, IMovieParser parser)
+	: SubmitPageModelBase(parser, fileService)
 {
-	private readonly ApplicationDbContext _db;
-
-	public ViewModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
@@ -28,50 +17,13 @@ public class ViewModel : BasePageModel
 
 	public bool CanEdit { get; set; }
 
-	public SubmissionDisplayModel Submission { get; set; } = new();
+	public SubmissionDisplay Submission { get; set; } = new();
 
 	public async Task<IActionResult> OnGet()
 	{
-		var submission = await _db.Submissions
+		var submission = await db.Submissions
 			.Where(s => s.Id == Id)
-			.Select(s => new SubmissionDisplayModel // It is important to use a projection here to avoid querying the file data which is not needed and can be slow
-			{
-				StartType = (MovieStartType?)s.MovieStartType,
-				SystemDisplayName = s.System!.DisplayName,
-				SystemCode = s.System.Code,
-				GameName = s.GameId != null ? s.Game!.DisplayName : s.GameName,
-				GameVersion = s.GameVersion,
-				RomName = s.RomName,
-				Branch = s.Branch,
-				Emulator = s.EmulatorVersion,
-				FrameCount = s.Frames,
-				FrameRate = s.SystemFrameRate!.FrameRate,
-				RerecordCount = s.RerecordCount,
-				Submitted = s.CreateTimestamp,
-				Submitter = s.Submitter!.UserName,
-				LastUpdateTimestamp = s.WikiContent!.LastUpdateTimestamp,
-				LastUpdateUser = s.WikiContent.LastUpdateUserName,
-				Status = s.Status,
-				EncodeEmbedLink = s.EncodeEmbedLink,
-				Judge = s.Judge != null ? s.Judge.UserName : "",
-				Title = s.Title,
-				ClassName = s.IntendedClass != null ? s.IntendedClass.Name : "",
-				Publisher = s.Publisher != null ? s.Publisher.UserName : "",
-				SystemId = s.SystemId,
-				SystemFrameRateId = s.SystemFrameRateId,
-				GameId = s.GameId,
-				RomId = s.RomId,
-				RejectionReasonDisplay = s.RejectionReasonId.HasValue
-					? s.RejectionReason!.DisplayName
-					: null,
-				Authors = s.SubmissionAuthors
-					.Where(sa => sa.SubmissionId == Id)
-					.OrderBy(sa => sa.Ordinal)
-					.Select(sa => sa.Author!.UserName)
-					.ToList(),
-				AdditionalAuthors = s.AdditionalAuthors,
-				TopicId = s.TopicId
-			})
+			.ToSubmissionDisplayModel()
 			.SingleOrDefaultAsync();
 
 		if (submission is null)
@@ -80,30 +32,74 @@ public class ViewModel : BasePageModel
 		}
 
 		Submission = submission;
-		CanEdit = !string.IsNullOrWhiteSpace(User.Name())
-			&& (User.Name() == Submission.Submitter
-				|| Submission.Authors.Contains(User.Name()));
+		var submissionPage = await wikiPages.SubmissionPage(Id);
+		if (submissionPage is not null)
+		{
+			Submission.LastUpdateTimestamp = submissionPage.CreateTimestamp;
+			Submission.LastUpdateUser = submissionPage.AuthorName;
+		}
 
+		CanEdit = CanEditSubmission(Submission.Submitter, Submission.Authors);
 		if (Submission.Status == SubmissionStatus.Published)
 		{
-			PublicationId = (await _db.Publications.SingleOrDefaultAsync(p => p.SubmissionId == Id))?.Id ?? 0;
+			PublicationId = await db.Publications.Where(p => p.SubmissionId == Id).Select(p => p.Id).SingleOrDefaultAsync();
 		}
 
 		return Page();
 	}
 
-	public async Task<IActionResult> OnGetDownload()
+	public async Task<IActionResult> OnGetDownload() => ZipFile(await fileService.GetSubmissionFile(Id));
+
+	public class SubmissionDisplay : ISubmissionDisplay
 	{
-		var submissionFile = await _db.Submissions
-			.Where(s => s.Id == Id)
-			.Select(s => s.MovieFile)
-			.SingleOrDefaultAsync();
+		public bool IsCataloged => SystemId.HasValue
+			&& SystemFrameRateId.HasValue
+			&& GameId > 0
+			&& GameVersionId > 0
+			&& GameGoalId > 0;
 
-		if (submissionFile is null)
-		{
-			return NotFound();
-		}
+		public MovieStartType? StartType { get; init; }
+		public string? ClassName { get; init; }
+		public string? SystemDisplayName { get; init; }
+		public string? GameName { get; init; }
+		public string? SubmittedGameName { get; init; }
+		public string? GameVersion { get; init; }
+		public string? SubmittedGameVersion { get; init; }
+		public string? SubmittedRomName { get; init; }
+		public string? SubmittedBranch { get; init; }
+		public string? Goal { get; init; }
+		public string? Emulator { get; init; }
 
-		return File(submissionFile, MediaTypeNames.Application.Octet, $"submission{Id}.zip");
+		[Url]
+		public string? EncodeEmbedLink { get; init; }
+		public int FrameCount { get; init; }
+		public long? CycleCount { get; init; }
+		public double FrameRate { get; init; }
+		public int RerecordCount { get; init; }
+		public List<string> Authors { get; init; } = [];
+		public string? Submitter { get; init; }
+		public DateTime Date { get; init; }
+		public DateTime LastUpdateTimestamp { get; set; }
+		public string? LastUpdateUser { get; set; }
+		public SubmissionStatus Status { get; init; }
+		public string? Judge { get; init; }
+		public string? Publisher { get; init; }
+		public string? Annotations { get; init; }
+		public string? RejectionReasonDisplay { get; init; }
+		public string Title { get; init; } = "";
+		public string? AdditionalAuthors { get; init; }
+		public bool WarnStartType => StartType.HasValue && StartType != MovieStartType.PowerOn;
+		public int? TopicId { get; init; }
+		public int? GameId { get; init; }
+		public string? Warnings { get; init; }
+		internal int? SystemId { get; init; }
+		internal int? SystemFrameRateId { get; init; }
+		public int? GameVersionId { get; init; }
+		internal int? GameGoalId { get; init; }
+		public string? SyncedBy { get; init; }
+		public DateTime? SyncedOn { get; init; }
+		public string? AdditionalSyncNotes { get; init; }
+		public string? HashType { get; init; }
+		public string? Hash { get; init; }
 	}
 }

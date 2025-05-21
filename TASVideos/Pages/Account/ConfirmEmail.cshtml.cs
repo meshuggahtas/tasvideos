@@ -1,30 +1,14 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-
-namespace TASVideos.Pages.Account;
+﻿namespace TASVideos.Pages.Account;
 
 [AllowAnonymous]
-public class ConfirmEmailModel : BasePageModel
+public class ConfirmEmailModel(
+	ISignInManager signInManager,
+	IUserManager userManager,
+	IExternalMediaPublisher publisher,
+	IUserMaintenanceLogger userMaintenanceLogger,
+	ITASVideoAgent tasVideoAgent)
+	: BasePageModel
 {
-	private readonly UserManager _userManager;
-	private readonly SignInManager _signInManager;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly IUserMaintenanceLogger _userMaintenanceLogger;
-
-	public ConfirmEmailModel(
-		UserManager userManager,
-		SignInManager signInManager,
-		ExternalMediaPublisher publisher,
-		IUserMaintenanceLogger userMaintenanceLogger)
-	{
-		_userManager = userManager;
-		_signInManager = signInManager;
-		_publisher = publisher;
-		_userMaintenanceLogger = userMaintenanceLogger;
-	}
-
 	public async Task<IActionResult> OnGet(string? userId, string? code)
 	{
 		if (userId is null || code is null)
@@ -32,7 +16,7 @@ public class ConfirmEmailModel : BasePageModel
 			return Home();
 		}
 
-		var user = await _userManager.FindByIdAsync(userId);
+		var user = await userManager.FindById(userId);
 		if (user is null)
 		{
 			return Home();
@@ -40,24 +24,22 @@ public class ConfirmEmailModel : BasePageModel
 
 		if (user.EmailConfirmed)
 		{
-			// If user has already clicked the email link, no reason to do all the work of confirming
+			// If the user has already clicked the email link, no reason to do all the work of confirming
 			return Home();
 		}
 
-		var result = await _userManager.ConfirmEmailAsync(user, code);
+		var result = await userManager.ConfirmEmail(user, code);
 		if (!result.Succeeded)
 		{
 			return RedirectToPage("/Error");
 		}
 
-		await _userManager.AddStandardRoles(user.Id);
-		await _userManager.AddUserPermissionsToClaims(user);
-		await _signInManager.SignInAsync(user, isPersistent: false);
-		await _publisher.SendUserManagement(
-			$"User {user.UserName} activated",
-			"",
-			$"Users/Profile/{user.UserName}");
-		await _userMaintenanceLogger.Log(user.Id, $"User activated from {IpAddress}");
+		await userManager.AddStandardRoles(user.Id);
+		await userManager.AddUserPermissionsToClaims(user);
+		await signInManager.SignIn(user, isPersistent: false);
+		await publisher.SendUserManagement($"User [{user.UserName}]({{0}}) activated", user.UserName);
+		await userMaintenanceLogger.Log(user.Id, $"User activated from {IpAddress}");
+		await tasVideoAgent.SendWelcomeMessage(user.Id);
 		return Page();
 	}
 }

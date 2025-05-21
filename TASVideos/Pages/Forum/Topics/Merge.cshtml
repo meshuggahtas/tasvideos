@@ -1,51 +1,41 @@
 ﻿@page "{id}"
 @model MergeModel
 @{
-	ViewData["Title"] = $"Merging Topic: {Model.Topic.Title}";
+	ViewData.SetTitle($"Merging Topic: {Model.Topic.Title}");
 }
-<partial Name="_ForumHeader" />
-<h4>
+
+@section PageTitle {
 	Merging Topic:
 	<a asp-page="/Forum/Subforum/Index" asp-route-id="@Model.Topic.ForumId">@Model.Topic.ForumName</a> →
 	<a asp-page="/Forum/Topics/Index" asp-route-id="@Model.Id">@Model.Topic.Title</a>
-</h4>
-<hr />
-<div asp-validation-summary="All" class="text-danger"></div>
-<form method="post">
+}
+
+<partial Name="_ForumHeader" />
+<form client-side-validation="true" method="post">
 	<row>
 		<column md="6">
+			<input type="hidden" asp-for="Id" />
 			<input type="hidden" asp-for="Topic.ForumName" />
 			<input type="hidden" asp-for="Topic.ForumId" />
 			<input type="hidden" asp-for="Topic.Title" />
-			<form-group>
-				<label asp-for="Topic.DestinationForumId"></label>
-				<select asp-for="Topic.DestinationForumId" asp-items="Model.AvailableForums.OrderBy(f => f.Text)" class="form-control"></select>
-				<span asp-validation-for="Topic.DestinationForumId" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Topic.DestinationTopicId"></label>
-				<select asp-for="Topic.DestinationTopicId" asp-items="Model.AvailableTopics.OrderBy(f => f.Text)" class="form-control"></select>
-				<span asp-validation-for="Topic.DestinationTopicId" class="text-danger"></span>
-			</form-group>
+			<fieldset>
+				<label asp-for="Topic.DestinationForumId">Forum To Merge In to</label>
+				<select asp-for="Topic.DestinationForumId" data-id="destination-forum-id" asp-items="Model.AvailableForums.OrderBy(f => f.Text)"></select>
+				<span asp-validation-for="Topic.DestinationForumId"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Topic.DestinationTopicId">Topic To Merge In to</label>
+				<select asp-for="Topic.DestinationTopicId" data-id="destination-topic-id" asp-items="Model.AvailableTopics.OrderBy(f => f.Text)"></select>
+				<span asp-validation-for="Topic.DestinationTopicId"></span>
+			</fieldset>
 		</column>
 	</row>
-	<div class="text-center mt-2">
-		<button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Merge</button>
-		<a asp-page="/Forum/Topics/Index" asp-route-id="@Model.Id" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</div>
+	<form-button-bar>
+		<submit-button><i class="fa fa-save"></i> Merge</submit-button>
+		<cancel-link asp-page="/Forum/Topics/Index" asp-route-id="@Model.Id"></cancel-link>
+	</form-button-bar>
 </form>
 
 @section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-	<script>
-		{
-			let forumModel = document.getElementById('@Html.IdFor(m => m.Topic.DestinationForumId)');
-			let topicModel = document.getElementById('@Html.IdFor(m => m.Topic.DestinationTopicId)');
-
-			forumModel.onchange = function () {
-				const url = `/Forum/Topics/Merge/@(Model.Id)?handler=TopicsForForum&forumId=${this.value}`;
-				fetch(url).then(r => r.text()).then(t => topicModel.innerHTML = t);
-			}
-		}
-	</script>
+	<script src="/js/topic-merge.js"></script>
 }

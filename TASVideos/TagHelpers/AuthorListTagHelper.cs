@@ -1,13 +1,10 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using Microsoft.AspNetCore.Razor.TagHelpers;
-using TASVideos.Extensions;
+﻿using Microsoft.AspNetCore.Razor.TagHelpers;
 
 namespace TASVideos.TagHelpers;
 
 public class AuthorListTagHelper : TagHelper
 {
-	public IEnumerable<string>? Authors { get; set; } = new List<string>();
+	public IEnumerable<string>? Authors { get; set; } = [];
 	public string? AdditionalAuthors { get; set; }
 
 	public override void Process(TagHelperContext context, TagHelperOutput output)
@@ -18,7 +15,7 @@ public class AuthorListTagHelper : TagHelper
 
 	private string GetAuthorString()
 	{
-		var authors = Authors ?? Enumerable.Empty<string>();
+		var authors = Authors ?? [];
 		return string.Join(", ", authors.Concat((AdditionalAuthors ?? "").SplitWithEmpty(","))).LastCommaToAmpersand();
 	}
 }

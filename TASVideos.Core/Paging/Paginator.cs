@@ -1,6 +1,5 @@
 ﻿using System.Linq.Expressions;
 using System.Reflection;
-using Microsoft.EntityFrameworkCore;
 
 namespace TASVideos.Core;
 
@@ -12,19 +11,28 @@ public static class Paginator
 	/// </summary>
 	/// <param name="query">The query to paginate and run.</param>
 	/// <param name="paging">The paging data to use.</param>
-	/// <typeparam name="T">The result type of the query.</typeparam>
-	public static async Task<PageOf<T>> SortedPageOf<T>(this IQueryable<T> query, PagingModel paging)
-		where T : class
+	/// <typeparam name="TItem">The result type of the query.</typeparam>
+	public static async Task<PageOf<TItem>> SortedPageOf<TItem>(this IQueryable<TItem> query, PagingModel paging)
+		where TItem : class
 	{
 		return await query
 			.SortBy(paging)
 			.PageOf(paging);
 	}
 
-	public static async Task<PageOf<T>> PageOf<T>(
-		this IQueryable<T> query,
+	public static async Task<PageOf<TItem, TRequest>> SortedPageOf<TItem, TRequest>(this IQueryable<TItem> query, TRequest paging)
+		where TItem : class
+		where TRequest : PagingModel
+	{
+		return await query
+			.SortBy(paging)
+			.PageOf(paging);
+	}
+
+	public static async Task<PageOf<TItem>> PageOf<TItem>(
+		this IQueryable<TItem> query,
 		PagingModel paging)
-		where T : class
+		where TItem : class
 	{
 		int rowsToSkip = paging.Offset();
 
@@ -34,18 +42,45 @@ public static class Paginator
 
 		if (paging.PageSize.HasValue)
 		{
-			newQuery = newQuery.Take(paging.PageSize.Value);
+			int pageSize = Math.Max(paging.PageSize.Value, 1);
+			newQuery = newQuery.Take(pageSize);
 		}
 
-		IEnumerable<T> results = await newQuery
+		IEnumerable<TItem> results = await newQuery
 			.ToListAsync();
 
-		var pageOf = new PageOf<T>(results)
+		var pageOf = new PageOf<TItem>(results, paging)
 		{
-			PageSize = paging.PageSize,
-			CurrentPage = paging.CurrentPage,
 			RowCount = rowCount,
-			Sort = paging.Sort
+		};
+
+		return pageOf;
+	}
+
+	public static async Task<PageOf<TItem, TRequest>> PageOf<TItem, TRequest>(
+		this IQueryable<TItem> query,
+		TRequest paging)
+		where TItem : class
+		where TRequest : PagingModel
+	{
+		int rowsToSkip = paging.Offset();
+
+		int rowCount = await query.CountAsync();
+
+		var newQuery = query.Skip(rowsToSkip);
+
+		if (paging.PageSize.HasValue)
+		{
+			int pageSize = Math.Max(paging.PageSize.Value, 1);
+			newQuery = newQuery.Take(pageSize);
+		}
+
+		IEnumerable<TItem> results = await newQuery
+			.ToListAsync();
+
+		var pageOf = new PageOf<TItem, TRequest>(results, paging)
+		{
+			RowCount = rowCount,
 		};
 
 		return pageOf;
@@ -59,39 +94,44 @@ public static class Paginator
 	{
 		if (string.IsNullOrWhiteSpace(request?.Sort))
 		{
-			return source;
+			// per below, can't noop
+			return ApplyDefaultSort(source);
 		}
 
 		var columns = request.Sort.SplitWithEmpty(",").Select(s => s.Trim());
-
+		var anySortApplied = false;
 		bool thenBy = false;
 		foreach (var column in columns)
 		{
-			source = SortByParam(source, column, thenBy);
+			source = SortByParam(source, column, thenBy, out var sortApplied);
+			anySortApplied |= sortApplied;
 			thenBy = true;
 		}
 
-		return source;
+		// if we haven't added an `OrderBy` to the chain yet, we need to do that now or bad things happen
+		// the caller is expecting us to, and if they go on to call `Take`/`Skip`, it hits UB
+		return anySortApplied ? source : ApplyDefaultSort(source);
 	}
 
-	private static IQueryable<T> SortByParam<T>(IQueryable<T> query, string? column, bool thenBy)
+	private static IQueryable<T> SortByParam<T>(IQueryable<T> query, string? column, bool thenBy, out bool sortApplied)
 	{
-		bool desc = column?.StartsWith("-") ?? false;
+		bool desc = column?.StartsWith('-') ?? false;
 
 		column = column?.Trim('-').Trim('+').ToLower() ?? "";
 
 		var prop = typeof(T).GetProperties().FirstOrDefault(p => p.Name.ToLower() == column);
-
-		if (prop is null)
+		if (prop?.GetCustomAttribute<SortableAttribute>() is null)
 		{
+			sortApplied = false;
 			return query;
 		}
 
-		if (prop.GetCustomAttribute(typeof(SortableAttribute)) is null)
-		{
-			return query;
-		}
+		sortApplied = true;
+		return SortByParamInner(query, prop, column, desc: desc, thenBy: thenBy);
+	}
 
+	private static IQueryable<T> SortByParamInner<T>(IQueryable<T> query, PropertyInfo prop, string column, bool desc, bool thenBy)
+	{
 		string orderBy;
 		if (thenBy)
 		{
@@ -115,7 +155,7 @@ public static class Paginator
 		// REFLECTION: source.OrderBy(x => x.Property)
 		var orderByMethod = typeof(Queryable).GetMethods().First(x => x.Name == orderBy && x.GetParameters().Length == 2);
 		var orderByGeneric = orderByMethod.MakeGenericMethod(typeof(T), property.Type);
-		var result = orderByGeneric.Invoke(null, new object[] { query, lambda });
+		var result = orderByGeneric.Invoke(null, [query, lambda]);
 
 		if (result is null)
 		{
@@ -123,5 +163,25 @@ public static class Paginator
 		}
 
 		return (IQueryable<T>)result;
+	}
+
+	private static IQueryable<T> ApplyDefaultSort<T>(IQueryable<T> query)
+	{
+		var allProps = typeof(T).GetProperties();
+		var idProp = allProps.SingleOrDefault(x => string.Equals(x.Name, "id", StringComparison.OrdinalIgnoreCase));
+		if (idProp?.GetCustomAttribute<SortableAttribute>() is not null)
+		{
+			return SortByParamInner(query, idProp, idProp.Name, desc: false, thenBy: false);
+		}
+
+		// worst case, just do everything
+		var thenBy = false;
+		foreach (var pi in allProps.Where(pi => pi.GetCustomAttribute<SortableAttribute>() is not null))
+		{
+			query = SortByParamInner(query, pi, pi.Name.ToLowerInvariant(), desc: false, thenBy: thenBy);
+			thenBy = true;
+		}
+
+		return query;
 	}
 }

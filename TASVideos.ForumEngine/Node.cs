@@ -1,6 +1,9 @@
-﻿using System.Text;
+﻿using System.Globalization;
+using System.Text;
 using System.Web;
 using TASVideos.Common;
+using TASVideos.Extensions;
+using RawAttrNameVal = (string Name, string Value);
 
 namespace TASVideos.ForumEngine;
 
@@ -9,6 +12,18 @@ namespace TASVideos.ForumEngine;
 /// </summary>
 public interface IWriterHelper
 {
+	/// <summary>
+	/// Get the title (display name) of a game.
+	/// </summary>
+	/// <returns>`null` if not found</returns>
+	Task<string?> GetGameTitle(int id);
+
+	/// <summary>
+	/// Get the title (name) of a game group.
+	/// </summary>
+	/// <returns>`null` if not found</returns>
+	Task<string?> GetGameGroupTitle(int id);
+
 	/// <summary>
 	/// Get the title of a movie.
 	/// </summary>
@@ -20,12 +35,21 @@ public interface IWriterHelper
 	/// </summary>
 	/// <returns>`null` if not found</returns>
 	Task<string?> GetSubmissionTitle(int id);
+
+	/// <summary>
+	/// Get the title of a topic.
+	/// </summary>
+	/// <returns>`null` if not found</returns>
+	Task<string?> GetTopicTitle(int id);
 }
 
 public class NullWriterHelper : IWriterHelper
 {
+	public Task<string?> GetGameTitle(int id) => Task.FromResult<string?>(null);
+	public Task<string?> GetGameGroupTitle(int id) => Task.FromResult<string?>(null);
 	public Task<string?> GetMovieTitle(int id) => Task.FromResult<string?>(null);
 	public Task<string?> GetSubmissionTitle(int id) => Task.FromResult<string?>(null);
+	public Task<string?> GetTopicTitle(int id) => Task.FromResult<string?>(null);
 
 	private NullWriterHelper()
 	{
@@ -37,6 +61,8 @@ public class NullWriterHelper : IWriterHelper
 public interface INode
 {
 	Task WriteHtml(HtmlWriter w, IWriterHelper h);
+
+	Task WriteMetaDescription(StringBuilder sb, IWriterHelper h);
 }
 
 public class Text : INode
@@ -47,14 +73,63 @@ public class Text : INode
 		w.Text(Content);
 		return Task.CompletedTask;
 	}
+
+	public Task WriteMetaDescription(StringBuilder sb, IWriterHelper h)
+	{
+		if (sb.Length >= SiteGlobalConstants.MetaDescriptionLength)
+		{
+			return Task.CompletedTask;
+		}
+
+		sb.Append(Content.RemoveUrls());
+		return Task.CompletedTask;
+	}
 }
 
 public class Element : INode
 {
+	private static void AddStockAttrsToHyperlink(HtmlWriter w, string targetURI)
+	{
+		if (UriString.IsToExternalDomain(targetURI))
+		{
+			w.Attribute("rel", "noopener external"); // for browsers which pre-date `Cross-Origin-Opener-Policy` response header; see https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a#security_and_privacy
+		}
+	}
+
+	/// <seealso cref="WriteHref"/>
+	private static void WriteHyperlink(HtmlWriter w, string labelText, string targetURI, params RawAttrNameVal[] attrs)
+	{
+		w.OpenTag("a");
+		w.Attribute("href", targetURI);
+		foreach (var attr in attrs)
+		{
+			w.Attribute(attr.Name, attr.Value);
+		}
+
+		AddStockAttrsToHyperlink(w, targetURI); // done last so `attrs` can override (as the first has precedence when there are duplicates)
+		w.Text(labelText);
+		w.CloseTag("a");
+	}
+
+	/// <seealso cref="WriteHref"/>
+	private static void WriteHyperlink(HtmlWriter w, Action writeContents, string targetURI, params RawAttrNameVal[] attrs)
+	{
+		w.OpenTag("a");
+		w.Attribute("href", targetURI);
+		foreach (var attr in attrs)
+		{
+			w.Attribute(attr.Name, attr.Value);
+		}
+
+		AddStockAttrsToHyperlink(w, targetURI); // done last so `attrs` can override (as the first has precedence when there are duplicates)
+		writeContents();
+		w.CloseTag("a");
+	}
+
 #pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
 	public string Name { get; set; } = "";
 	public string Options { get; set; } = "";
-	public List<INode> Children { get; set; } = new();
+	public List<INode> Children { get; set; } = [];
 	private string GetChildText()
 	{
 		var sb = new StringBuilder();
@@ -122,23 +197,30 @@ public class Element : INode
 		}
 	}
 
-	private async Task WriteHref(HtmlWriter w, IWriterHelper h, Func<string, string> transformUrl, Func<string, Task<string>> transformUrlText)
+	/// <seealso cref="WriteHyperlink"/>
+	private async Task WriteHref(HtmlWriter w, IWriterHelper h, Func<string, string> transformUrl, Func<string, Task<string>>? transformUrlText)
 	{
-		w.OpenTag("a");
-		var href = transformUrl(Options != "" ? Options : GetChildText());
-		w.Attribute("href", href);
 		if (Options != "")
 		{
-			await WriteChildren(w, h);
+			WriteHyperlink(
+				w,
+				writeContents: async () => await WriteChildren(w, h),
+				targetURI: transformUrl(Options),
+				attrs: transformUrlText is not null ? [
+					("title", await transformUrlText(Options))
+				] : []);
 		}
 		else
 		{
 			// these were all parsed as ChildTagsIfParam, so we're guaranteed to have zero or one text children.
 			var text = Children.Cast<Text>().SingleOrDefault()?.Content ?? "";
-			w.Text(await transformUrlText(text));
-		}
+			if (transformUrlText != null)
+			{
+				text = await transformUrlText(text);
+			}
 
-		w.CloseTag("a");
+			WriteHyperlink(w, labelText: text, targetURI: transformUrl(GetChildText()));
+		}
 	}
 
 	public async Task WriteHtml(HtmlWriter w, IWriterHelper h)
@@ -155,6 +237,7 @@ public class Element : INode
 			case "table":
 			case "tr":
 			case "td":
+			case "th":
 				await WriteSimpleTag(w, h, Name);
 				break;
 			case "*":
@@ -219,20 +302,21 @@ public class Element : INode
 					var osplit = Options.Split('.', StringSplitOptions.RemoveEmptyEntries);
 					if (osplit.Length == 2)
 					{
-						w.OpenTag("a");
-						w.Attribute("class", "btn bg-info text-dark code-download");
-						w.Attribute("href", "data:text/plain," + Uri.EscapeDataString(GetChildText()));
-						w.Attribute("download", Options);
-						w.Text("Download ");
-						w.Text(Options);
-						w.CloseTag("a");
+						WriteHyperlink(
+							w,
+							labelText: $"Download {Options}",
+							targetURI: $"data:text/plain,{Uri.EscapeDataString(GetChildText())}",
+							[
+								("class", "btn btn-info code-download"),
+								("download", Options),
+							]);
 					}
 
 					w.OpenTag("pre");
 
 					// "text" is not a supported language for prism,
 					// so it will just get the same text formatting as languages, but no syntax highlighting.
-					var lang = osplit.Length > 0 ? osplit[^1] : "text";
+					var lang = PrismNames.FixLanguage(osplit.Length > 0 ? osplit[^1] : "text");
 
 					if (lang != "text")
 					{
@@ -273,16 +357,34 @@ public class Element : INode
 
 				break;
 			case "url":
-				await WriteHref(w, h, s => s, async s => s);
+				await WriteHref(w, h, s => s, null);
 				break;
 			case "email":
-				await WriteHref(w, h, s => "mailto:" + s, async s => s);
+				await WriteHref(w, h, s => "mailto:" + s, null);
 				break;
 			case "thread":
-				await WriteHref(w, h, s => "/Forum/Topics/" + s, async s => "Thread #" + s);
+				await WriteHref(
+					w,
+					h,
+					url => "/Forum/Topics/" + url,
+					async text => (int.TryParse(text, out var id) ? $"Thread #{text}: {await h.GetTopicTitle(id)}" : null) ?? "Thread #" + text);
 				break;
 			case "post":
 				await WriteHref(w, h, s => "/Forum/Posts/" + s, async s => "Post #" + s);
+				break;
+			case "game":
+				await WriteHref(
+					w,
+					h,
+					s => "/" + s + "G",
+					async s => (int.TryParse(s, out var id) ? await h.GetGameTitle(id) : null) ?? "Game #" + s);
+				break;
+			case "gamegroup":
+				await WriteHref(
+					w,
+					h,
+					s => "/GameGroups/" + s,
+					async s => (int.TryParse(s, out var id) ? await h.GetGameGroupTitle(id) : null) ?? "Game group #" + s);
 				break;
 			case "movie":
 				await WriteHref(
@@ -301,9 +403,6 @@ public class Element : INode
 			case "userfile":
 				await WriteHref(w, h, s => "/userfiles/info/" + s, async s => "User movie #" + s);
 				break;
-			case "wip":
-				await WriteHref(w, h, s => "/userfiles/info/" + s, async s => "WIP #" + s);
-				break;
 			case "wiki":
 				await WriteHref(w, h, s => "/" + s, async s => "Wiki: " + s);
 				break;
@@ -314,7 +413,7 @@ public class Element : INode
 					var fps = 60.0;
 					if (ss.Length > 1)
 					{
-						double.TryParse(ss[1], out fps);
+						double.TryParse(ss[1], NumberStyles.Float | NumberStyles.AllowThousands, NumberFormatInfo.InvariantInfo, out fps);
 					}
 
 					if (fps <= 0)
@@ -355,16 +454,18 @@ public class Element : INode
 			case "size":
 				w.OpenTag("span");
 
+				w.Attribute("class", "fontsize");
+
 				// TODO: More fully featured anti-style injection
 				var sizeStr = Options.Split(';')[0];
-				if (double.TryParse(sizeStr, out var sizeDouble))
+				if (double.TryParse(sizeStr, NumberStyles.Float | NumberStyles.AllowThousands, NumberFormatInfo.InvariantInfo, out var sizeDouble))
 				{
 					// default font size of the old site was 12px, so if size was given without a unit, divide by 12 and use em
-					w.Attribute("style", $"font-size: {sizeDouble / 12}em");
+					w.Attribute("style", $"--fs: {(sizeDouble / 12).ToString(CultureInfo.InvariantCulture)}em");
 				}
 				else
 				{
-					w.Attribute("style", $"font-size: {sizeStr}");
+					w.Attribute("style", $"--fs: {sizeStr}");
 				}
 
 				await WriteChildren(w, h);
@@ -379,17 +480,17 @@ public class Element : INode
 			case "google":
 				if (Options == "images")
 				{
-					w.OpenTag("a");
-					w.Attribute("href", "//www.google.com/images?q=" + Uri.EscapeDataString(GetChildText()));
-					w.Text("Google Images Search: " + GetChildText());
-					w.CloseTag("a");
+					WriteHyperlink(
+						w,
+						labelText: $"Google Images Search: {GetChildText()}",
+						targetURI: $"//www.google.com/images?q={Uri.EscapeDataString(GetChildText())}");
 				}
 				else
 				{
-					w.OpenTag("a");
-					w.Attribute("href", "//www.google.com/search?q=" + Uri.EscapeDataString(GetChildText()));
-					w.Text("Google Search: " + GetChildText());
-					w.CloseTag("a");
+					WriteHyperlink(
+						w,
+						labelText: $"Google Search: {GetChildText()}",
+						targetURI: $"//www.google.com/search?q={Uri.EscapeDataString(GetChildText())}");
 				}
 
 				break;
@@ -422,16 +523,13 @@ public class Element : INode
 							pp.Height = height;
 						}
 
-						// Bit of a hack:  Since the videowriter uses the htmlwriter's base writer, we need to get it into
+						// A bit of a hack:  Since the videowriter uses the HtmlWriter's base writer, we need to get it into
 						// the right state first
 						w.Text("");
 						WriteVideo.Write(w.BaseWriter, pp);
 					}
 
-					w.OpenTag("a");
-					w.Attribute("href", href);
-					w.Text("Link to video");
-					w.CloseTag("a");
+					WriteHyperlink(w, labelText: "Link to video", targetURI: href);
 					break;
 				}
 
@@ -451,6 +549,95 @@ public class Element : INode
 
 			default:
 				throw new InvalidOperationException("Internal error on tag " + Name);
+		}
+	}
+
+	private async Task WriteMetaDescriptionTransformOrContent(StringBuilder sb, IWriterHelper h, Func<string, Task<string>> transformUrlText)
+	{
+		if (Options == "")
+		{
+			var text = Children.Cast<Text>().SingleOrDefault()?.Content ?? "";
+			sb.Append((await transformUrlText(text)).RemoveUrls());
+		}
+		else
+		{
+			foreach (var child in Children)
+			{
+				await child.WriteMetaDescription(sb, h);
+			}
+		}
+	}
+
+	public async Task WriteMetaDescription(StringBuilder sb, IWriterHelper h)
+	{
+		if (sb.Length >= SiteGlobalConstants.MetaDescriptionLength)
+		{
+			return;
+		}
+
+		switch (Name)
+		{
+			case "quote":
+			case "code":
+			case "img":
+			case "email":
+				break;
+			case "thread":
+				await WriteMetaDescriptionTransformOrContent(sb, h, async text => (int.TryParse(text, out var id) ? $"Thread #{text}: {await h.GetTopicTitle(id)}" : null) ?? "Thread #" + text);
+				break;
+			case "post":
+				await WriteMetaDescriptionTransformOrContent(sb, h, async s => "Post #" + s);
+				break;
+			case "game":
+				await WriteMetaDescriptionTransformOrContent(sb, h, async s => (int.TryParse(s, out var id) ? await h.GetGameTitle(id) : null) ?? "Game #" + s);
+				break;
+			case "gamegroup":
+				await WriteMetaDescriptionTransformOrContent(sb, h, async s => (int.TryParse(s, out var id) ? await h.GetGameGroupTitle(id) : null) ?? "Game group #" + s);
+				break;
+			case "movie":
+				await WriteMetaDescriptionTransformOrContent(sb, h, async s => (int.TryParse(s, out var id) ? await h.GetMovieTitle(id) : null) ?? "Movie #" + s);
+				break;
+			case "submission":
+				await WriteMetaDescriptionTransformOrContent(sb, h, async s => (int.TryParse(s, out var id) ? await h.GetSubmissionTitle(id) : null) ?? "Submission #" + s);
+				break;
+			case "userfile":
+				await WriteMetaDescriptionTransformOrContent(sb, h, async s => "User movie #" + s);
+				break;
+			case "wiki":
+				await WriteMetaDescriptionTransformOrContent(sb, h, async s => "Wiki: " + s);
+				break;
+			case "frames":
+				{
+					var ss = GetChildText().Split('@');
+					int.TryParse(ss[0], out var n);
+					var fps = 60.0;
+					if (ss.Length > 1)
+					{
+						double.TryParse(ss[1], NumberStyles.Float | NumberStyles.AllowThousands, NumberFormatInfo.InvariantInfo, out fps);
+					}
+
+					if (fps <= 0)
+					{
+						fps = 60.0;
+					}
+
+					var timeable = new Timeable
+					{
+						FrameRate = fps,
+						Frames = n
+					};
+					var time = timeable.Time().ToStringWithOptionalDaysAndHours();
+					sb.Append(time);
+					break;
+				}
+
+			default:
+				foreach (var child in Children)
+				{
+					await child.WriteMetaDescription(sb, h);
+				}
+
+				break;
 		}
 	}
 #pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously

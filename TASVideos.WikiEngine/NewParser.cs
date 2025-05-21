@@ -2,20 +2,15 @@
 
 namespace TASVideos.WikiEngine;
 
-public class NewParser
+public partial class NewParser
 {
-	public class SyntaxException : Exception
+	public class SyntaxException(string msg, int textLocation) : Exception(msg)
 	{
-		public int TextLocation { get; }
-		public SyntaxException(string msg, int textLocation)
-			: base(msg)
-		{
-			TextLocation = textLocation;
-		}
+		public int TextLocation { get; } = textLocation;
 	}
 
-	private readonly List<INode> _output = new();
-	private readonly List<INodeWithChildren> _stack = new();
+	private readonly List<INode> _output = [];
+	private readonly List<INodeWithChildren> _stack = [];
 	private readonly StringBuilder _currentText = new();
 	private int _currentTextStart = -1;
 	private readonly string _input;
@@ -304,7 +299,7 @@ public class NewParser
 			if (e.Type == NodeType.Element)
 			{
 				var tag = ((Element)e).Tag;
-				if (tag == "htabs" || tag == "vtabs")
+				if (tag is "htabs" or "vtabs")
 				{
 					return false;
 				}
@@ -475,30 +470,7 @@ public class NewParser
 		_parsingInline = false;
 	}
 
-	private static readonly Regex Url = new(@"\G
-			https?:\/\/
-			(
-				[A-Za-z0-9\-._~!$&'()*+,;=:@\/]
-				|
-				%[A-Fa-f0-9]{2}
-			)+
-			(
-				\?
-				(
-					[A-Za-z0-9\-._~!$&'()*+,;=:@\/]
-					|
-					%[A-Fa-f0-9]{2}
-				)+
-			)?
-			(
-				\#
-				(
-					[A-Za-z0-9\-._~!$&'()*+,;=:@\/]
-					|
-					%[A-Fa-f0-9]{2}
-				)+
-			)?
-		", RegexOptions.IgnorePatternWhitespace);
+	private static readonly Regex Url = UrlRegex();
 
 	private void ParseInlineText()
 	{
@@ -884,7 +856,7 @@ public class NewParser
 			var e = new Element(_index, "code");
 			if (lang != "")
 			{
-				e.Attributes["class"] = "language-" + lang;
+				e.Attributes["class"] = "language-" + PrismNames.FixLanguage(lang);
 			}
 
 			e.Children.Add(new Text(_index, EatSrcEmbedText()) { CharEnd = _index });
@@ -962,7 +934,7 @@ public class NewParser
 			e => Builtins.MakeToc(n, e.CharStart));
 	}
 
-	private static readonly Regex AllowedIdChars = new("[^a-zA-Z0-9 ]+");
+	private static readonly Regex AllowedIdChars = AllowedIdCharsRegex();
 
 	private static void AddIdsToHeadings(IEnumerable<INode> n)
 	{
@@ -982,7 +954,8 @@ public class NewParser
 
 		var headings = NodeUtils.Find(
 				n,
-				e => e.Type == NodeType.Element && Builtins.TocHeadings.Contains(((Element)e).Tag))
+				e => e.Type == NodeType.Element && Builtins.TocHeadings.Contains(((Element)e).Tag),
+				ancestor => ancestor is Element parentElement && parentElement.Tag == "tab")
 			.Cast<Element>();
 		var ids = new HashSet<string>();
 
@@ -1019,10 +992,40 @@ public class NewParser
 	{
 		var p = new NewParser(content);
 		p.ParseLoop();
-		ReplaceTabs(p._output);
 		AddIdsToHeadings(p._output);
 		ReplaceTocs(p._output);
+		ReplaceTabs(p._output);
 		ReplacePees(p._output);
 		return p._output;
 	}
+
+	[GeneratedRegex("""
+		\G
+		https?:\/\/
+		(
+			[A-Za-z0-9\-._~!$&'()*+,;=:@\/]
+			|
+			%[A-Fa-f0-9]{2}
+		)+
+		(
+			\?
+			(
+				[A-Za-z0-9\-._~!$&'()*+,;=:@\/]
+				|
+				%[A-Fa-f0-9]{2}
+			)+
+		)?
+		(
+			\#
+			(
+				[A-Za-z0-9\-._~!$&'()*+,;=:@\/]
+				|
+				%[A-Fa-f0-9]{2}
+			)+
+		)?
+		""", RegexOptions.IgnorePatternWhitespace)]
+	private static partial Regex UrlRegex();
+
+	[GeneratedRegex("[^a-zA-Z0-9 ]+")]
+	private static partial Regex AllowedIdCharsRegex();
 }

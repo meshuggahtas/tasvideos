@@ -17,10 +17,8 @@ public class IrcDistributor : IPostDistributor
 		ILogger<IrcDistributor> logger)
 	{
 		_settings = settings.Irc;
-
-		if (string.IsNullOrWhiteSpace(settings.Irc.Password))
+		if (!_settings.IsEnabled())
 		{
-			logger.Log(LogLevel.Warning, "Irc bot password not provided. Bot initialization skipped");
 			return;
 		}
 
@@ -30,7 +28,7 @@ public class IrcDistributor : IPostDistributor
 		}
 	}
 
-	public IEnumerable<PostType> Types => new[] { PostType.Administrative, PostType.General, PostType.Announcement };
+	public IEnumerable<PostType> Types => [PostType.Administrative, PostType.General, PostType.Announcement];
 
 	public async Task Post(IPostable post)
 	{
@@ -103,7 +101,7 @@ public class IrcDistributor : IPostDistributor
 					}
 
 					// split the lines sent from the server by spaces (seems to be the easiest way to parse them)
-					string[] splitInput = inputLine.Split(new[] { ' ' });
+					string[] splitInput = inputLine.Split(' ');
 
 					if (splitInput[0] == "PING")
 					{

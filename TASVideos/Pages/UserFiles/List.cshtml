@@ -1,0 +1,27 @@
+﻿@page
+@model TASVideos.Pages.UserFiles.ListModel
+@{
+	ViewData.SetTitle("User File List");
+}
+
+<partial name="_Pager" model="Model.UserFiles" />
+<standard-table>
+	<sortable-table-head sorting="@Model.Search" model-type="typeof(ListModel.UserFileEntry)" />
+	@foreach (var userFile in Model.UserFiles)
+	{
+		<tr>
+			<td>
+				<a asp-page="Info" asp-route-id="@userFile.Id">@(string.IsNullOrWhiteSpace(userFile.Title) ? userFile.FileName : userFile.Title)</a>
+			</td>
+			<td><a asp-page="ForUser" asp-route-username="@userFile.Author">@userFile.Author</a></td>
+			<td>
+				<a asp-page="Game" condition="userFile.GameId is not null" asp-route-id="@userFile.GameId">@userFile.Game</a>
+			</td>
+			<td>@userFile.Frames</td>
+			<td>@userFile.Rerecords</td>
+			<td>@userFile.Comments</td>
+			<td class="text-nowrap"><timezone-convert asp-for="@userFile.Uploaded" /></td>
+		</tr>
+	}
+</standard-table>
+<partial name="_Pager" model="Model.UserFiles" />

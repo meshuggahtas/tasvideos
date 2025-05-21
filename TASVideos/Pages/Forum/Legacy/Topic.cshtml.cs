@@ -1,21 +1,9 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
-
-namespace TASVideos.Pages.Forum.Legacy;
+﻿namespace TASVideos.Pages.Forum.Legacy;
 
 // Handles legacy forum links to viewTopic.php
 [AllowAnonymous]
-public class TopicModel : BaseForumModel
+public class TopicModel(IForumService forumService) : BaseForumModel
 {
-	private readonly IForumService _forumService;
-
-	public TopicModel(IForumService forumService)
-	{
-		_forumService = forumService;
-	}
-
 	[FromQuery]
 	public int? P { get; set; }
 
@@ -34,7 +22,7 @@ public class TopicModel : BaseForumModel
 
 		if (P.HasValue)
 		{
-			var model = await _forumService.GetPostPosition(P.Value, User.Has(PermissionTo.SeeRestrictedForums));
+			var model = await forumService.GetPostPosition(P.Value, User.Has(PermissionTo.SeeRestrictedForums));
 			if (model is null)
 			{
 				return NotFound();

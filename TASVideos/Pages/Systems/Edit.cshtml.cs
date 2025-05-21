@@ -1,38 +1,26 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Game;
-
-namespace TASVideos.Pages.Systems;
+﻿namespace TASVideos.Pages.Systems;
 
 [RequirePermission(PermissionTo.GameSystemMaintenance)]
-public class EditModel : BasePageModel
+public class EditModel(IGameSystemService systemService) : BasePageModel
 {
-	private readonly IGameSystemService _systemService;
-
-	public EditModel(IGameSystemService systemService)
-	{
-		_systemService = systemService;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
 	[BindProperty]
-	public GameSystem System { get; set; } = new();
+	public SystemsResponse System { get; set; } = null!;
 
 	public bool InUse { get; set; } = true;
 
 	public async Task<IActionResult> OnGet()
 	{
-		var system = await _systemService.GetById(Id);
+		var system = await systemService.GetById(Id);
 		if (system is null)
 		{
 			return NotFound();
 		}
 
 		System = system;
-		InUse = await _systemService.InUse(Id);
+		InUse = await systemService.InUse(Id);
 		return Page();
 	}
 
@@ -43,7 +31,7 @@ public class EditModel : BasePageModel
 			return Page();
 		}
 
-		var result = await _systemService.Edit(Id, System.Code, System.DisplayName);
+		var result = await systemService.Edit(Id, System.Code, System.DisplayName);
 
 		switch (result)
 		{
@@ -65,7 +53,7 @@ public class EditModel : BasePageModel
 
 	public async Task<IActionResult> OnPostDelete()
 	{
-		var result = await _systemService.Delete(Id);
+		var result = await systemService.Delete(Id);
 		switch (result)
 		{
 			case SystemDeleteResult.InUse:

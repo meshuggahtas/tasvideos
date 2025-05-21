@@ -1,7 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-
-namespace TASVideos.Core.Services.PublicationChain;
+﻿namespace TASVideos.Core.Services;
 
 public interface IPublicationHistory
 {
@@ -10,37 +7,39 @@ public interface IPublicationHistory
 	/// grouped by non-obsolete publications as the parent node
 	/// </summary>
 	Task<PublicationHistoryGroup?> ForGame(int gameId);
+
+	/// <summary>
+	/// Returns the publication history for a game associated with the given publication id.
+	/// Note that this returns all publications for a game, not just the publication's chain
+	/// </summary>
+	Task<PublicationHistoryGroup?> ForGameByPublication(int publicationId);
 }
 
-internal class PublicationHistory : IPublicationHistory
+internal class PublicationHistory(ApplicationDbContext db) : IPublicationHistory
 {
-	private readonly ApplicationDbContext _db;
-
-	public PublicationHistory(ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
 	public async Task<PublicationHistoryGroup?> ForGame(int gameId)
 	{
-		var game = await _db.Games
-			.SingleOrDefaultAsync(g => g.Id == gameId);
+		var game = await db.Games.FindAsync(gameId);
 
 		if (game is null)
 		{
 			return null;
 		}
 
-		var publications = await _db.Publications
+		var publications = await db.Publications
 			.Where(p => p.GameId == gameId)
 			.Select(p => new PublicationHistoryNode
 			{
 				Id = p.Id,
 				Title = p.Title,
-				Branch = p.Branch,
+				Goal = p.GameGoal!.DisplayName,
 				CreateTimestamp = p.CreateTimestamp,
 				ObsoletedById = p.ObsoletedById,
-				ClassIconPath = p.PublicationClass!.IconPath
+				Class = p.PublicationClass!.Name,
+				ClassIconPath = p.PublicationClass!.IconPath,
+				Flags = p.PublicationFlags
+					.Select(pf => new PublicationHistoryNode.FlagEntry(
+						pf.Flag!.IconPath, pf.Flag!.LinkPath, pf.Flag!.Name))
 			})
 			.ToListAsync();
 
@@ -54,9 +53,55 @@ internal class PublicationHistory : IPublicationHistory
 		return new PublicationHistoryGroup
 		{
 			GameId = gameId,
-			Branches = publications
+			GameDisplayName = game.DisplayName,
+			Goals = publications
 				.Where(p => !p.ObsoletedById.HasValue)
 				.ToList()
 		};
 	}
+
+	public async Task<PublicationHistoryGroup?> ForGameByPublication(int publicationId)
+	{
+		var pub = await db.Publications
+			.Where(p => p.Id == publicationId)
+			.Select(p => new { p.GameId })
+			.SingleOrDefaultAsync();
+
+		if (pub is null)
+		{
+			return null;
+		}
+
+		return await ForGame(pub.GameId);
+	}
+}
+
+public class PublicationHistoryGroup
+{
+	public int GameId { get; init; }
+	public string GameDisplayName { get; init; } = "";
+
+	public IEnumerable<PublicationHistoryNode> Goals { get; init; } = [];
+}
+
+public class PublicationHistoryNode
+{
+	public int Id { get; init; }
+	public string Title { get; init; } = "";
+	public string? Goal { get; init; }
+	public DateTime CreateTimestamp { get; init; }
+
+	public string Class { get; init; } = "";
+
+	public string? ClassIconPath { get; init; }
+
+	public IEnumerable<FlagEntry> Flags { get; init; } = [];
+
+	public IEnumerable<PublicationHistoryNode> Obsoletes => ObsoleteList;
+
+	public int? ObsoletedById { get; internal init; }
+
+	internal List<PublicationHistoryNode> ObsoleteList { get; set; } = [];
+
+	public record FlagEntry(string? IconPath, string? LinkPath, string Name);
 }

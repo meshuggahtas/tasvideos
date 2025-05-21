@@ -1,83 +1,70 @@
 ﻿@page "{forumId}/{handler?}"
 @model CreateModel
 @{
-	ViewData["Title"] = $"Creating topic for: {Model.Topic.ForumName}";
+	ViewData.SetTitle($"Creating topic for: {Model.ForumName}");
+	ViewData.UseStringList(); // Hack for now, partial views use a different viewDataDictionary, so the component will not work
 }
-<partial Name="_ForumHeader" />
-<h4>Creating topic for: <a asp-page="/Forum/Subforum/Index" asp-route-id="@Model.ForumId">@Model.Topic.ForumName</a></h4>
 
-<form method="post">
+@section PageTitle {
+	Creating topic for: <a asp-page="/Forum/Subforum/Index" asp-route-id="@Model.ForumId">@Model.ForumName</a>
+}
+
+<partial Name="_ForumHeader" />
+<span id="backup-submission-determinator" class="d-none">@Model.BackupSubmissionDeterminator</span>
+<form client-side-validation="true" method="post">
 	<div permission="CreateForumPolls">
 		<button id="add-poll-btn" type="button" class="btn btn-primary btn-sm">Add Poll</button>
-		<div id="poll-container" class="alert alert-dark d-none">
+		<div id="poll-container" class="alert alert-dark @(Model.Poll.HasAnyField ? "" : "d-none")">
 			<button id="poll-close" type="button" class="btn-close float-end" aria-label="Close"></button>
 			<h4>Poll</h4>
-			<partial name="_PollCreate" model="new PollCreateModel()" />
+			<partial name="_PollCreate" model="Model.Poll" />
 		</div>
-		<script>
-			{
-				let pollContainer = document.getElementById('poll-container');
-				document.getElementById('add-poll-btn').onclick = function () {
-					document.getElementById('add-poll-btn').classList.add('d-none');
-					pollContainer.classList.remove('d-none');
-					Array.from(pollContainer.querySelectorAll('input'))
-						.forEach(element => element.disabled = false);
-				}
-
-				document.getElementById('poll-close').onclick = function () {
-					document.getElementById('add-poll-btn').classList.remove('d-none');
-					pollContainer.classList.add('d-none');
-					Array.from(pollContainer.querySelectorAll('input'))
-						.forEach(element => element.disabled = true);
-				}
-			}
-		</script>
 		<hr />
 	</div>
-
-	<input type="hidden" asp-for="Topic.ForumName" />
+	<input type="hidden" asp-for="ForumName" />
 	<row>
 		<column md="6">
-			<label asp-for="Topic.Title" class="form-control-label"></label>
-			<input type="text" asp-for="Topic.Title" class="form-control" autocomplete="off" />
-			<span asp-validation-for="Topic.Title" class="text-danger"></span>
+			<label asp-for="Title"></label>
+			<input asp-for="Title" autocomplete="off" />
+			<span asp-validation-for="Title"></span>
 		</column>
 		<column permission="SetTopicType" md="6">
-			<label asp-for="Topic.Type" class="form-control-label"></label>
-			<select asp-for="Topic.Type" asp-items="Model.TopicTypes" class="form-control"></select>
-			<span asp-validation-for="Topic.Type" class="text-danger"></span>
+			<label asp-for="Type"></label>
+			<select asp-for="Type" asp-items="Model.TopicTypes"></select>
+			<span asp-validation-for="Type"></span>
 		</column>
 	</row>
 	<row>
 		<column md="4">
-			<label asp-for="Topic.Mood" class="form-control-label"></label>
-			<select asp-for="Topic.Mood" asp-items="@Model.Moods" class="form-control"></select>
-			<span asp-validation-for="Topic.Mood" class="text-danger"></span>
+			<label asp-for="Mood"></label>
+			<select asp-for="Mood" asp-items="@Model.Moods" data-id="avatar-dropdown"></select>
+			<span asp-validation-for="Mood"></span>
 		</column>
 		<column md="2">
-			<partial name="_AvatarPreview" model="(Html.IdFor(m => m.Topic.Mood), Model.Topic.Mood, Model.UserAvatars)"/>
+			<mood-preview current-mood="@Model.Mood" avatar="@Model.UserAvatars"></mood-preview>
 		</column>
 	</row>
-	<fullrow class="mt-3">
-		<partial name="_CreatePostHelper" model="@("Topic_Post")" />
+	<post-helper class="mt-2"></post-helper>
+	<fieldset>
+		<forum-textarea asp-for="Post" rows="20" backup-content="true" data-backup-key="backup-topic-@Model.ForumId"></forum-textarea>
+		<span asp-validation-for="Post"></span>
+	</fieldset>
+	<fullrow id="backup-restore" class="d-none">
+		<button id="backup-restore-button" type="button" class="btn btn-secondary">Restore Text</button>
+		<label class="text-body-tertiary">from <span id="backup-time"></span></label>
 	</fullrow>
-	<form-group>
-		<textarea asp-for="Topic.Post" class="form-control" rows="20"></textarea>
-		<span asp-validation-for="Topic.Post" class="text-danger"></span>
-	</form-group>
 	<fullrow class="mt-3">
 		<input asp-for="WatchTopic" />
-		<label asp-for="WatchTopic"></label>
+		<label asp-for="WatchTopic">Watch Topic for Replies</label>
 	</fullrow>
-	<div class="text-center">
-		<button type="button" class="btn btn-secondary" id="preview-button"><i class="fa fa-eye"></i> Preview</button>
-		<button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Save</button>
-		<a asp-page="/Forum/Subforum/Index" asp-route-id="@Model.ForumId" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</div>
+	<form-button-bar>
+		<preview-button></preview-button>
+		<submit-button><i class="fa fa-plus"></i> Post</submit-button>
+		<cancel-link asp-page="/Forum/Subforum/Index" asp-route-id="@Model.ForumId"></cancel-link>
+	</form-button-bar>
 </form>
-
-<partial name="_PreviewWindow" model="@(("Topic_Post", "/Forum/Preview"))" />
-
+<forum-preview></forum-preview>
 @section Scripts {
-	<partial name="_ValidationScriptsPartial" />
+	<script src="/js/topic-create.js"></script>
+	<script src="/js/forum-poll.js"></script>
 }

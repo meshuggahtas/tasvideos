@@ -1,14 +1,14 @@
 ﻿@page "{id}/{handler?}/{publicationFileId?}"
 @model AdditionalMoviesModel
 @{
-	ViewData["Title"] = $"Additional Movie Files For {Model.PublicationTitle}";
+	ViewData.SetTitle($"Additional Movie Files For {Model.PublicationTitle}");
 }
 
 <h4>Additional Movie Files:</h4>
 <label condition="!Model.AvailableMovieFiles.Any()"><i>No additional movie files</i></label>
 <row condition="Model.AvailableMovieFiles.Any()">
 	<div class="col-lg-4 col-sm-6">
-		<table class="table table-bordered">
+		<standard-table>
 			<tr>
 				<td>Filename</td>
 				<td>Display Name</td>
@@ -20,43 +20,35 @@
 					<td>@file.FileName</td>
 					<td>@file.Description</td>
 					<td>
-						<delete-button warning-message="Are you sure you want to remove this movie file?"
-									   asp-href="/Publications/AdditionalMovies/@Model.Id/Delete/@file.Id">
-							<span class="fa fa-times"></span> Delete
-						</delete-button>
+						<delete-button class="btn-sm" warning-message="Are you sure you want to remove this movie file?"
+							asp-href="/Publications/AdditionalMovies/@Model.Id/Delete/@file.Id"></delete-button>
 					</td>
 				</tr>
 			}
-		</table>
-		
+		</standard-table>
 	</div>
 </row>
 <hr />
 <h4>Add a movie file</h4>
-<hr />
-<form method="post" enctype="multipart/form-data">
+<form client-side-validation="true" method="post" enctype="multipart/form-data">
 	<input type="hidden" asp-for="PublicationTitle" />
 	<row>
 		<column lg="6">
-			<form-group>
+			<fieldset>
 				<label asp-for="DisplayName"></label>
-				<input type="text" asp-for="DisplayName" maxlength="50" class="form-control" />
-				<span asp-validation-for="DisplayName" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="AdditionalMovieFile"></label>
-				<input type="file" asp-for="AdditionalMovieFile" class="form-control"/>
-				<div>@Html.DescriptionFor(m => m.AdditionalMovieFile)</div>
-				<span asp-validation-for="AdditionalMovieFile" class="text-danger"></span>
-			</form-group>
-			<div class="text-center mt-3">
-				<submit-button class="btn btn-primary"><span class="fa fa-plus"></span> Add</submit-button>
-				<a asp-page="Edit" asp-route-id="@Model.Id" class="btn btn-secondary"><span class="fa fa-arrow-left"></span> Back To Edit</a>
-			</div>
+				<input asp-for="DisplayName" maxlength="50" />
+				<span asp-validation-for="DisplayName"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="AdditionalMovieFile">Add an additional movie file</label>
+				<input asp-for="AdditionalMovieFile" />
+				<div>Your movie packed in a ZIP file (max size: @SiteGlobalConstants.MaximumMovieSizeHumanReadable)</div>
+				<span asp-validation-for="AdditionalMovieFile"></span>
+			</fieldset>
+			<form-button-bar>
+				<submit-button><span class="fa fa-plus"></span> Add</submit-button>
+				<cancel-link asp-page="Edit" asp-route-id="@Model.Id"></cancel-link>
+			</form-button-bar>
 		</column>
 	</row>
 </form>
-
-@section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-}

@@ -1,0 +1,13 @@
+﻿@model PlayerPointsTable
+<standard-table>
+	<table-head columns="Post,Player,Points,Player Rank"></table-head>
+	@foreach (var item in Model.Authors)
+	{
+		<tr>
+			<td>@item.Position</td>
+			<td>@item.Player</td>
+			<td>@item.Points</td>
+			<td>@item.Rank</td>
+		</tr>
+	}
+</standard-table>

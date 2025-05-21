@@ -1,26 +1,16 @@
 ﻿@page "{id}"
 @model PollResultsModel
 @{
-	ViewData["Title"] = $"Poll Results for {Model.Poll.TopicTitle}";
+	ViewData.SetTitle($"Poll Results for {Model.Poll.TopicTitle}");
 }
 <partial Name="_ForumHeader" />
-<div>
-	<a asp-page="/Forum/Topics/Index" asp-route-id="@Model.Poll.TopicId" class="btn btn-secondary"><span class="fa fa-arrow-left"></span> Back</a>
-</div>
-<hr />
-
-<div>
-	<forum-markup markup=@Model.Poll.Question enable-bb-code=true></forum-markup>
-</div>
-<hr />
-<table class="table table-bordered table-striped">
-	<tr>
-		<th>@Html.DisplayNameFor(m => m.Poll.Votes.First().OptionText)</th>
-		<th>@Html.DisplayNameFor(m => m.Poll.Votes.First().UserName)</th>
-		<th>@Html.DisplayNameFor(m => m.Poll.Votes.First().CreateTimestamp)</th>
-		<th>@Html.DisplayNameFor(m => m.Poll.Votes.First().IpAddress)</th>
-		<th permission="ResetPollResults">Reset</th>
-	</tr>
+<top-button-bar>
+	<back-link asp-page="/Forum/Topics/Index" asp-route-id="@Model.Poll.TopicId"></back-link>
+</top-button-bar>
+<forum-markup class="my-3" markup="@Model.Poll.Question" enable-bb-code="true"></forum-markup>
+<standard-table>
+	<table-head condition="!User.Has(PermissionTo.ResetPollResults)" columns="Option,User,Vote On,IP Address"></table-head>
+	<table-head permission="ResetPollResults" columns="Option,User,Vote On,IP Address,Reset"></table-head>
 	@foreach(var vote in Model.Poll.Votes
 		.OrderBy(v => v.Ordinal)
 		.ThenBy(v => v.UserName))
@@ -33,14 +23,10 @@
 			<td permission="ResetPollResults">
 				<form method="post">
 					<input type="hidden" name="userId" value="@vote.UserId" />
-					<button
-						type="submit"
-						class="btn btn-danger"
-						asp-page-handler="ResetVote">
-						<i class="fa fa-remove"></i>
+					<button type="submit" class="btn btn-danger" asp-page-handler="ResetVote"><i class="fa fa-remove"></i>
 					</button>
 				</form>
 			</td>
 		</tr>
 	}
-</table>
+</standard-table>

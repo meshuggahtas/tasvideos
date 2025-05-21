@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.StaticFiles;
-using Serilog;
 using TASVideos.Core.Settings;
 using TASVideos.Middleware;
 
@@ -17,22 +16,11 @@ public static class ApplicationBuilderExtensions
 			});
 	}
 
-	public static IApplicationBuilder UseExceptionHandlers(this IApplicationBuilder app, IHostEnvironment env)
+	public static WebApplication UseExceptionHandlers(this WebApplication app, IHostEnvironment env)
 	{
-		if (env.IsDevelopment())
-		{
-			app.UseDeveloperExceptionPage();
-		}
-		else
-		{
-			app.UseExceptionHandler("/Error");
-		}
-
-		// TODO: we want to use some middle ware so we can dynamically decide to return json for the API
-		// However, registering this in combination with the pages above causes a request to happen a second time
-		// when there is is an unhandled exception, which is very bad
+		app.UseExceptionHandler("/Error");
+		app.UseStatusCodePagesWithReExecute("/Error");
 		return app;
-		////.UseMiddleware(typeof(ErrorHandlingMiddleware));
 	}
 
 	public static IApplicationBuilder UseGzipCompression(this IApplicationBuilder app, AppSettings settings)
@@ -45,23 +33,71 @@ public static class ApplicationBuilderExtensions
 		return app;
 	}
 
-	public static IApplicationBuilder UseStaticFilesWithExtensionMapping(this IApplicationBuilder app)
+	public static IApplicationBuilder UseStaticFilesWithExtensionMapping(this IApplicationBuilder app, IWebHostEnvironment env)
 	{
-		var provider = new FileExtensionContentTypeProvider();
-		provider.Mappings[".avif"] = "image/avif";
-		return app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = provider });
+		var contentTypeProvider = new FileExtensionContentTypeProvider();
+		var staticFileOptions = new StaticFileOptions
+		{
+			ContentTypeProvider = contentTypeProvider,
+			ServeUnknownFileTypes = true,
+			DefaultContentType = "text/plain"
+		};
+
+		if (env.IsDevelopment())
+		{
+			staticFileOptions.FileProvider = new DevFallbackFileProvider(env.WebRootFileProvider);
+		}
+
+		return app.UseStaticFiles(staticFileOptions);
 	}
 
-	public static IApplicationBuilder UseMvcWithOptions(this IApplicationBuilder app, IHostEnvironment env)
+	public static IApplicationBuilder UseMvcWithOptions(this IApplicationBuilder app, IHostEnvironment env, AppSettings settings)
 	{
+		string[] trustedJsHosts = [
+			"https://cdn.jsdelivr.net",
+			"https://cdnjs.cloudflare.com",
+			"https://code.jquery.com",
+			"https://embed.nicovideo.jp/watch/",
+			"https://www.google.com/recaptcha/",
+			"https://www.gstatic.com/recaptcha/",
+			"https://www.youtube.com",
+		];
+		string[] cspDirectives = [
+			"base-uri 'none'", // neutralises the `<base/>` footgun
+			"default-src 'self'", // fallback for other `*-src` directives
+			"font-src 'self' https://cdnjs.cloudflare.com/ajax/libs/font-awesome/", // CSS `font: url();` and `@font-face { src: url(); }` will be blocked unless they're from one of these domains (this also blocks nonstandard fonts installed on the system maybe)
+			"form-action 'self'", // domains allowed for `<form action/>` (POST target page)
+			"frame-src data: 'self' https://embed.nicovideo.jp/watch/ https://www.google.com/recaptcha/ https://www.youtube.com/embed/ https://archive.org/embed/", // allow these domains in <iframe/>
+			"img-src * data:", // allow hotlinking images from any domain in UGC (not great)
+			$"script-src 'self' {string.Join(' ', trustedJsHosts)}", // `<script/>`s will be blocked unless they're from one of these domains
+			"style-src 'unsafe-inline' 'self' https://cdnjs.cloudflare.com/ajax/libs/font-awesome/", // allow `<style/>`, and `<link rel="stylesheet"/>` if it's from our domain or trusted CDN
+			"upgrade-insecure-requests", // browser should automagically replace links to any `http://tasvideos.org/...` URL (in UGC, for example) with HTTPS
+		];
+		var contentSecurityPolicyValue = string.Join("; ", cspDirectives);
+		var permissionsPolicyValue = string.Join(", ", [
+			"camera=()", // defaults to `self`
+			"display-capture=()", // defaults to `self`
+			"fullscreen=()", // defaults to `self`
+			"geolocation=()", // defaults to `self`
+			"microphone=()", // defaults to `self`
+			"publickey-credentials-get=()", // defaults to `self`
+			"screen-wake-lock=()", // defaults to `self`
+			"web-share=()", // defaults to `self`
+
+			// ...and that's all the non-experimental options listed on MDN as of 2024-04
+		]);
 		app.Use(async (context, next) =>
 		{
-			context.Response.Headers["X-Xss-Protection"] = "1; mode=block";
-			context.Response.Headers["X-Frame-Options"] = "DENY";
-			context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+			context.Response.Headers["Cross-Origin-Embedder-Policy"] = "unsafe-none"; // this is as unsecure as before, but can't use `credentialless`, due to breaking YouTube Embeds, see https://github.com/TASVideos/tasvideos/issues/1852
+			context.Response.Headers["Cross-Origin-Opener-Policy"] = "same-origin";
+			context.Response.Headers["Cross-Origin-Resource-Policy"] = "cross-origin"; // TODO this is as unsecure as before; should be `same-site` or `same-origin` when serving auth-gated responses
+			context.Response.Headers["Permissions-Policy"] = permissionsPolicyValue;
+			context.Response.Headers.XXSSProtection = "1; mode=block";
+			context.Response.Headers.XFrameOptions = "DENY";
+			context.Response.Headers.XContentTypeOptions = "nosniff";
 			context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
-			context.Response.Headers["x-powered-by"] = "";
-			context.Response.Headers["Content-Security-Policy"] = "upgrade-insecure-requests";
+			context.Response.Headers.XPoweredBy = "";
+			context.Response.Headers.ContentSecurityPolicy = contentSecurityPolicyValue;
 			await next();
 		});
 
@@ -70,8 +106,9 @@ public static class ApplicationBuilderExtensions
 			Secure = CookieSecurePolicy.Always
 		});
 
-		app.UseRouting();
-		app.UseAuthorization();
+		app
+			.UseRouting()
+			.UseAuthorization();
 
 		if (!env.IsProduction() && !env.IsStaging())
 		{
@@ -81,34 +118,14 @@ public static class ApplicationBuilderExtensions
 		return app.UseEndpoints(endpoints =>
 		{
 			endpoints.MapRazorPages();
-			endpoints.MapControllers();
+
+			if (settings.EnableMetrics)
+			{
+				endpoints.MapPrometheusScrapingEndpoint().RequireAuthorization(builder =>
+				{
+					builder.RequireClaim(CustomClaimTypes.Permission, ((int)PermissionTo.SeeDiagnostics).ToString());
+				});
+			}
 		});
-	}
-
-	public static IApplicationBuilder UseSwaggerUi(
-		this IApplicationBuilder app,
-		IHostEnvironment env)
-	{
-		// Append environment to app name when in non-production environments
-		var appName = "TASVideos";
-		if (!env.IsProduction())
-		{
-			appName += $" ({env.EnvironmentName})";
-		}
-
-		// Enable middleware to serve generated Swagger as a JSON endpoint.
-		app.UseSwagger();
-
-		// Enable middleware to serve swagger-ui (HTML, JS, CSS, etc.), specifying the Swagger JSON endpoint.
-		return app.UseSwaggerUI(c =>
-		{
-			c.SwaggerEndpoint("/swagger/v1/swagger.json", appName);
-			c.RoutePrefix = "api";
-		});
-	}
-
-	public static IApplicationBuilder UseLogging(this IApplicationBuilder app)
-	{
-		return app.UseSerilogRequestLogging();
 	}
 }

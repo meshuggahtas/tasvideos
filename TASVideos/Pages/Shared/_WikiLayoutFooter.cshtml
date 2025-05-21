@@ -1,28 +1,32 @@
-﻿@model WikiPage
-@{
-	bool canEdit = WikiHelper.UserCanEditWikiPage(Model!.PageName, User.Name(), User.Permissions());
-}
+﻿@using TASVideos.TagHelpers
+@using Microsoft.AspNetCore.Mvc.TagHelpers
+@model TASVideos.Core.Services.Wiki.IWikiPage
 
 @if (Model.IsSystemPage())
 {
-	@await Component.SystemPageFooter(Model)
+	<info-alert>
+		@await Html.RenderWiki(SystemWiki.SystemFooter)
+	</info-alert>
 }
 else if (Model.IsGameResourcesPage())
 {
-	@await Component.GameResourcesFooter(Model)
+	<partial name="_ListSubPages" model="Model" />
+	<div role="alert" class="alert alert-info">
+		@await Html.RenderWiki(SystemWiki.GameResourcesFooter)
+	</div>
 }
 else
 {
-	@await Component.ListSubPages(Model, true)
+	<partial name="_ListSubPages" model="Model" />
 }
 
 <hr />
 <small>
-	@Model.PageName last edited by @Model.LastUpdateUserName <timezone-convert asp-for="@Model.LastUpdateTimestamp" in-line="true" />
+	@Model.PageName last edited by @Model.AuthorName <timezone-convert asp-for="@Model.CreateTimestamp" in-line="true" />
 </small>
 <br />
 
-<a condition="@canEdit"
+<a condition="@User.CanEditWiki(Model.PageName)"
    asp-page="/Wiki/Edit"
    asp-route-path="@Model.PageName"
    class="btn btn-primary btn-sm">
@@ -36,11 +40,12 @@ else
 </a>
 <delete-button permission="DeleteWikiPages"
 			   asp-href="/Wiki/DeletedPages/DeletePage?path=@Model.PageName"
-			   warning-message="Are you sure you want to delete this page?"
+				warning-message="Are you sure you want to delete this page?"
+				ask-reason="true"
 			   class="btn btn-danger btn-sm">
-	<i class="fa fa-times"></i> Delete
+	<i class="fa fa-remove"></i> Delete
 </delete-button>
-<a class="btn bg-info text-dark btn-sm" asp-page="/Wiki/PageHistory" asp-route-path="@Model.PageName"><i class="fa fa-history"></i> Page History</a>
-<a class="btn bg-info text-dark btn-sm" asp-page="/Wiki/Diff" asp-route-path="@Model.PageName">Latest diff</a>
-<a class="btn bg-info text-dark btn-sm" asp-page="/Wiki/Referrers" asp-route-path="@Model.PageName">List referrers</a>
-<a class="btn bg-info text-dark btn-sm" asp-page="/Wiki/ViewSource" asp-route-path="@Model.PageName"><i class="fa fa-paragraph"></i> View Source</a>
+<a class="btn btn-info btn-sm" asp-page="/Wiki/PageHistory" asp-route-path="@Model.PageName"><i class="fa fa-history"></i> Page History</a>
+<a class="btn btn-info btn-sm" asp-page="/Wiki/PageHistory" asp-route-path="@Model.PageName" asp-route-latest="true">Latest diff</a>
+<a class="btn btn-info btn-sm" asp-page="/Wiki/Referrers" asp-route-path="@Model.PageName">List referrers</a>
+<a class="btn btn-info btn-sm" asp-page="/Wiki/ViewSource" asp-route-path="@Model.PageName" asp-route-revision="@(Model.IsCurrent() ? null : Model.Revision)"><i class="fa fa-paragraph"></i> View Source</a>

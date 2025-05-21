@@ -1,39 +1,37 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Activity.Model;
-
-namespace TASVideos.Pages.Activity;
+﻿namespace TASVideos.Pages.Activity;
 
 [AllowAnonymous]
-public class JudgesModel : PageModel
+public class JudgesModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public JudgesModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
+	public List<SubmissionEntry> Submissions { get; set; } = [];
 
 	[FromRoute]
 	public string UserName { get; set; } = "";
 
-	public ICollection<SubmissionEntryModel> Submissions { get; set; } = new List<SubmissionEntryModel>();
-
-	public async Task OnGet()
+	public async Task<IActionResult> OnGet()
 	{
-		Submissions = await _db.Submissions
+		if (string.IsNullOrWhiteSpace(UserName))
+		{
+			return NotFound();
+		}
+
+		var user = await db.Users.SingleOrDefaultAsync(u => u.UserName == UserName);
+		if (user is null)
+		{
+			return NotFound();
+		}
+
+		Submissions = await db.Submissions
 			.ThatHaveBeenJudgedBy(UserName)
-			.Select(s => new SubmissionEntryModel
-			{
-				Id = s.Id,
-				CreateTimestamp = s.CreateTimestamp,
-				Title = s.Title,
-				Status = s.Status
-			})
+			.Select(s => new SubmissionEntry(
+				s.Id,
+				s.CreateTimestamp,
+				s.Title,
+				s.Status))
 			.ToListAsync();
+
+		return Page();
 	}
+
+	public record SubmissionEntry(int Id, DateTime CreateTimestamp, string Title, SubmissionStatus Status);
 }

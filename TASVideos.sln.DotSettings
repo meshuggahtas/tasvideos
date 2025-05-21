@@ -2,14 +2,20 @@
 	<s:Boolean x:Key="/Default/CodeEditing/TypingAssist/FormatBlockOnRBrace/@EntryValue">False</s:Boolean>
 	<s:Boolean x:Key="/Default/CodeEditing/TypingAssist/FormatStatementOnSemicolon/@EntryValue">False</s:Boolean>
 	<s:String x:Key="/Default/CodeInspection/Browsers/Browsers/@EntryValue">C60+,E12+,FF41+,IE11+,O13+,S8+</s:String>
+	<s:String x:Key="/Default/CodeInspection/ExcludedFiles/FilesAndFoldersToSkip2/=B386F775_002D4453_002D4ADB_002D906F_002DF081FE8459EF_002Fd_003Awwwroot_002Fd_003Ajs_002Ff_003Adiff_005Fmatch_005Fpatch_002Ejs/@EntryIndexedValue">ExplicitlyExcluded</s:String>
+	<s:String x:Key="/Default/CodeInspection/ExcludedFiles/FilesAndFoldersToSkip2/=B386F775_002D4453_002D4ADB_002D906F_002DF081FE8459EF_002Fd_003Awwwroot_002Fd_003Ajs_002Ff_003Adiff_005Fview_002Ejs/@EntryIndexedValue">ExplicitlyExcluded</s:String>
 	<s:String x:Key="/Default/CodeInspection/ExcludedFiles/GeneratedFilesAndFolders/=B386F775_002D4453_002D4ADB_002D906F_002DF081FE8459EF_002Fd_003Awwwroot_002Fd_003Acss_002Ff_003Adiffview_002Ecss/@EntryIndexedValue">B386F775-4453-4ADB-906F-F081FE8459EF/d:wwwroot/d:css/f:diffview.css</s:String>
 	<s:String x:Key="/Default/CodeInspection/ExcludedFiles/GeneratedFilesAndFolders/=B386F775_002D4453_002D4ADB_002D906F_002DF081FE8459EF_002Fd_003Awwwroot_002Fd_003Acss_002Ff_003Aprism_002Ecss/@EntryIndexedValue">B386F775-4453-4ADB-906F-F081FE8459EF/d:wwwroot/d:css/f:prism.css</s:String>
 	<s:String x:Key="/Default/CodeInspection/ExcludedFiles/GeneratedFilesAndFolders/=B386F775_002D4453_002D4ADB_002D906F_002DF081FE8459EF_002Fd_003Awwwroot_002Fd_003Ajs_002Ff_003Adifflib_002Ejs/@EntryIndexedValue">B386F775-4453-4ADB-906F-F081FE8459EF/d:wwwroot/d:js/f:difflib.js</s:String>
 	<s:String x:Key="/Default/CodeInspection/ExcludedFiles/GeneratedFilesAndFolders/=B386F775_002D4453_002D4ADB_002D906F_002DF081FE8459EF_002Fd_003Awwwroot_002Fd_003Ajs_002Ff_003Adiffview_002Ejs/@EntryIndexedValue">B386F775-4453-4ADB-906F-F081FE8459EF/d:wwwroot/d:js/f:diffview.js</s:String>
 	<s:String x:Key="/Default/CodeInspection/ExcludedFiles/GeneratedFilesAndFolders/=B386F775_002D4453_002D4ADB_002D906F_002DF081FE8459EF_002Fd_003Awwwroot_002Fd_003Ajs_002Ff_003Aprism_002Ejs/@EntryIndexedValue">B386F775-4453-4ADB-906F-F081FE8459EF/d:wwwroot/d:js/f:prism.js</s:String>
 	<s:String x:Key="/Default/CodeInspection/ExcludedFiles/GeneratedFilesAndFolders/=B386F775_002D4453_002D4ADB_002D906F_002DF081FE8459EF_002Fd_003Awwwroot_002Fd_003Amedia/@EntryIndexedValue">B386F775-4453-4ADB-906F-F081FE8459EF/d:wwwroot/d:media</s:String>
+	<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=ArrangeObjectCreationWhenTypeEvident/@EntryIndexedValue">DO_NOT_SHOW</s:String>
+	<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=ArrangeObjectCreationWhenTypeNotEvident/@EntryIndexedValue">DO_NOT_SHOW</s:String>
 	<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=ArrangeThisQualifier/@EntryIndexedValue">DO_NOT_SHOW</s:String>
 	<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=CheckNamespace/@EntryIndexedValue">DO_NOT_SHOW</s:String>
+	<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=CoercedEqualsUsing/@EntryIndexedValue">DO_NOT_SHOW</s:String>
+	<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=CoercedEqualsUsingWithNullUndefined/@EntryIndexedValue">WARNING</s:String>
 	<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator/@EntryIndexedValue">DO_NOT_SHOW</s:String>
 	<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=Html_002EPathError/@EntryIndexedValue">HINT</s:String>
 	<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=MissingHasOwnPropertyInForeach/@EntryIndexedValue">HINT</s:String>
@@ -22,8 +28,9 @@
 	<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=VariableCanBeMadeConst/@EntryIndexedValue">WARNING</s:String>
 	<s:String x:Key="/Default/CodeInspection/Highlighting/InspectionSeverities/=VariableCanBeMadeLet/@EntryIndexedValue">WARNING</s:String>
 	<s:Boolean x:Key="/Default/CodeInspection/Highlighting/ReadSettingsFromFileLevel/@EntryValue">True</s:Boolean>
-	<s:String x:Key="/Default/CodeInspection/JsInspections/LanguageLevel/@EntryValue">ECMAScript 2015</s:String>
+	<s:String x:Key="/Default/CodeInspection/JsInspections/LanguageLevel/@EntryValue">ECMAScript 2016</s:String>
 	<s:String x:Key="/Default/CodeStyle/CodeFormatting/CommonFormatter/ALIGNMENT_TAB_FILL_STYLE/@EntryValue">USE_TABS_ONLY</s:String>
+	<s:String x:Key="/Default/CodeStyle/CodeFormatting/CSharpCodeStyle/MODIFIERS_ORDER/@EntryValue">public private protected internal file static new abstract virtual sealed readonly override extern unsafe volatile async required</s:String>
 	<s:String x:Key="/Default/CodeStyle/CodeFormatting/CSharpCodeStyle/ThisQualifier/INSTANCE_MEMBERS_QUALIFY_DECLARED_IN/@EntryValue">0</s:String>
 	<s:String x:Key="/Default/CodeStyle/CodeFormatting/CSharpCodeStyle/ThisQualifier/INSTANCE_MEMBERS_QUALIFY_MEMBERS/@EntryValue">None</s:String>
 	<s:String x:Key="/Default/CodeStyle/CodeFormatting/CSharpFormat/ALIGNMENT_TAB_FILL_STYLE/@EntryValue">USE_TABS_ONLY</s:String>
@@ -42,6 +49,7 @@
 	<s:String x:Key="/Default/CodeStyle/CodeFormatting/CssFormatter/ALIGNMENT_TAB_FILL_STYLE/@EntryValue">USE_TABS_ONLY</s:String>
 	<s:String x:Key="/Default/CodeStyle/CodeFormatting/HtmlFormatter/ALIGNMENT_TAB_FILL_STYLE/@EntryValue">USE_TABS_ONLY</s:String>
 	<s:String x:Key="/Default/CodeStyle/CodeFormatting/JavaScriptCodeFormatting/ALIGNMENT_TAB_FILL_STYLE/@EntryValue">USE_TABS_ONLY</s:String>
+	<s:String x:Key="/Default/CodeStyle/CodeFormatting/JavaScriptCodeFormatting/QUOTE_STYLE/@EntryValue">SingleQuoted</s:String>
 	<s:String x:Key="/Default/CodeStyle/CodeFormatting/ProtobufCodeFormatting/ALIGNMENT_TAB_FILL_STYLE/@EntryValue">USE_TABS_ONLY</s:String>
 	<s:String x:Key="/Default/CodeStyle/CodeFormatting/ResxFormatter/ALIGNMENT_TAB_FILL_STYLE/@EntryValue">USE_TABS_ONLY</s:String>
 	<s:String x:Key="/Default/CodeStyle/CodeFormatting/VBFormat/ALIGNMENT_TAB_FILL_STYLE/@EntryValue">USE_TABS_ONLY</s:String>
@@ -53,6 +61,8 @@
 	<s:String x:Key="/Default/CodeStyle/Naming/CSharpNaming/Abbreviations/=TAS/@EntryIndexedValue">TAS</s:String>
 	<s:String x:Key="/Default/CodeStyle/Naming/CSharpNaming/PredefinedNamingRules/=PrivateInstanceFields/@EntryIndexedValue">&lt;Policy Inspect="True" Prefix="_" Suffix="" Style="aaBb" /&gt;</s:String>
 	<s:String x:Key="/Default/CodeStyle/Naming/CSharpNaming/PredefinedNamingRules/=PrivateStaticFields/@EntryIndexedValue">&lt;Policy Inspect="True" Prefix="_" Suffix="" Style="aaBb" /&gt;</s:String>
+	<s:String x:Key="/Default/CodeStyle/Naming/CSharpNaming/UserRules/=4a98fdf6_002D7d98_002D4f5a_002Dafeb_002Dea44ad98c70c/@EntryIndexedValue">&lt;Policy&gt;&lt;Descriptor Staticness="Instance" AccessRightKinds="Private" Description="Instance fields (private)"&gt;&lt;ElementKinds&gt;&lt;Kind Name="FIELD" /&gt;&lt;Kind Name="READONLY_FIELD" /&gt;&lt;/ElementKinds&gt;&lt;/Descriptor&gt;&lt;Policy Inspect="True" Prefix="_" Suffix="" Style="aaBb" /&gt;&lt;/Policy&gt;</s:String>
+	<s:String x:Key="/Default/CodeStyle/Naming/CSharpNaming/UserRules/=f9fce829_002De6f4_002D4cb2_002D80f1_002D5497c44f51df/@EntryIndexedValue">&lt;Policy&gt;&lt;Descriptor Staticness="Static" AccessRightKinds="Private" Description="Static fields (private)"&gt;&lt;ElementKinds&gt;&lt;Kind Name="FIELD" /&gt;&lt;/ElementKinds&gt;&lt;/Descriptor&gt;&lt;Policy Inspect="True" Prefix="_" Suffix="" Style="aaBb" /&gt;&lt;/Policy&gt;</s:String>
 	<s:String x:Key="/Default/CodeStyle/Naming/JavaScriptNaming/UserRules/=JS_005FBLOCK_005FSCOPE_005FCONSTANT/@EntryIndexedValue">&lt;Policy Inspect="True" Prefix="" Suffix="" Style="aaBb" /&gt;</s:String>
 	<s:String x:Key="/Default/CodeStyle/Naming/JavaScriptNaming/UserRules/=JS_005FBLOCK_005FSCOPE_005FFUNCTION/@EntryIndexedValue">&lt;Policy Inspect="True" Prefix="" Suffix="" Style="aaBb" /&gt;</s:String>
 	<s:String x:Key="/Default/CodeStyle/Naming/JavaScriptNaming/UserRules/=JS_005FBLOCK_005FSCOPE_005FVARIABLE/@EntryIndexedValue">&lt;Policy Inspect="True" Prefix="" Suffix="" Style="aaBb" /&gt;</s:String>
@@ -127,6 +137,7 @@
 	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002ECSharp_002ECodeStyle_002ESettingsUpgrade_002ECSharpPlaceAttributeOnSameLineMigration/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002ECSharp_002ECodeStyle_002ESettingsUpgrade_002EMigrateBlankLinesAroundFieldToBlankLinesAroundProperty/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002ECSharp_002ECodeStyle_002ESettingsUpgrade_002EMigrateThisQualifierSettings/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002ECSharp_002ECodeStyle_002ESettingsUpgrade_002EPredefinedNamingRulesToUserRulesUpgrade/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002EFormat_002ESettingsUpgrade_002EAlignmentTabFillStyleMigration/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002EJavaScript_002ECodeStyle_002ESettingsUpgrade_002EJsParsFormattingSettingsUpgrader/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/Environment/SettingsMigration/IsMigratorApplied/=JetBrains_002EReSharper_002EPsi_002EJavaScript_002ECodeStyle_002ESettingsUpgrade_002EJsWrapperSettingsUpgrader/@EntryIndexedValue">True</s:Boolean>
@@ -135,26 +146,40 @@
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Addr/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=addslashes/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=adelikat/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=anonymize/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=anonymized/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Antiforgery/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=asyncify/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=attoseconds/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Bbcode/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=bisqwit/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Bleh/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=bluesky/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Builtins/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Cardbody/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Cardfooter/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Cardheader/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Cgb/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=CIDR/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Citra/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=codepoints/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Coleco/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Collapsable/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=COPPA/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Ctm/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Debouncer/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Dendy/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=deprecator/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Determinator/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=difflib/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=diffview/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=diskinfo/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=downloadable/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Dsi/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Dtos/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Endian/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Fbm/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=fffr/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=flashblock/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=flink/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Framerate/@EntryIndexedValue">True</s:Boolean>
@@ -163,16 +188,25 @@
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Frontpage/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Fullrow/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Gambatte/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Gbmv/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=GDPR/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=gkey/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Gmail/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Gmv/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=greenzone/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=gvalue/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=hackiest/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=hacky/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Hexen/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=hrefs/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=htmlwriter/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=htmlwriter_0027s/@EntryIndexedValue">False</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Intellivision/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=intlink/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Ints/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=iquery/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Jpc/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Jpcrr/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Jrsr/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=kopernical/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=kopernical_0027s/@EntryIndexedValue">False</s:Boolean>
@@ -182,7 +216,8 @@
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=lithven/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Lsmv/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Majora/@EntryIndexedValue">True</s:Boolean>
-	<s:Boolean x:Key="/Default/UserDictionary/Words/=Majora_0027s/@EntryIndexedValue">False</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Majora_0027s/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=mednafen/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=moodreport/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Morimoto/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Mupen/@EntryIndexedValue">True</s:Boolean>
@@ -193,15 +228,23 @@
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=nonlf/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=noparse/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=NTSC/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Nyma/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=nymashock/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Obsoletion/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Obsoletions/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=octoshock/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=olist/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=omr/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=opcodes/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Paginator/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Perma/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Psx/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Pcfx/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=phpbb/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Postable/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=postbody/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=preminified/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=previewable/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=priv/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Referes/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Requestable/@EntryIndexedValue">True</s:Boolean>
@@ -212,14 +255,20 @@
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Screenshot/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Sentbox/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Serilog/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Sg/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Sgb/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=shortname/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=SNES/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=SRAM/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Subforum/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Subforums/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=subgbhawk/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Subpage/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=subpages/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=supercedes/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Svi/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=tabset/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Tasproj/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Tasvideos/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=textbox/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Timeable/@EntryIndexedValue">True</s:Boolean>
@@ -227,12 +276,19 @@
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Tocs/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=toggler/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Trackable/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=ttkey/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=tttkey/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=tttvalue/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=ttvalue/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=tvalue/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=TVG_0027s/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Uncataloged/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=unclaiming/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Undelete/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Undeleted/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Undeletes/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Undeleting/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Unformat/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Unlist/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Unmirrored/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Unpublish/@EntryIndexedValue">True</s:Boolean>
@@ -243,9 +299,14 @@
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=username/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=username_0027s/@EntryIndexedValue">False</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Usings/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=uze/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=vbm/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Vectrex/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=videowriter/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Vimeo/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=Warpless/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=wikilink/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=xmlhttp/@EntryIndexedValue">True</s:Boolean>
-	<s:Boolean x:Key="/Default/UserDictionary/Words/=Zelda/@EntryIndexedValue">True</s:Boolean></wpf:ResourceDictionary>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=xxxx/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=Zelda/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=zxspectrum/@EntryIndexedValue">True</s:Boolean></wpf:ResourceDictionary>

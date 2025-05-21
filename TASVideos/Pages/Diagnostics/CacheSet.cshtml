@@ -1,8 +1,9 @@
 ﻿@page
 @model CacheSetModel
 @{
-	ViewData["Title"] = "Set a cache value (only works on strings!)";
+	ViewData.SetTitle("Set a cache value (only works on strings!)");
 }
+
 <ul>
 	<li><a asp-page="Index">Diagnostics</a></li>
 	<li><a asp-page="CacheControl" class="mt-2">Cache Control</a></li>
@@ -10,16 +11,16 @@
 <row>
 	<column md="6">
 		<form method="post">
-			<form-group>
-				<label asp-for="CacheEntry.Key"></label>
-				<input asp-for="CacheEntry.Key" type="text" placeholder="key" class="form-control" required />
-			</form-group>
-			<form-group>
-				<label asp-for="CacheEntry.Value"></label>
-				<input asp-for="CacheEntry.Value" type="text" placeholder="value" class="form-control" required />
-			</form-group>
+			<fieldset>
+				<label asp-for="Key"></label>
+				<input asp-for="Key" type="text" placeholder="key" required />
+			</fieldset>
+			<fieldset>
+				<label asp-for="Value"></label>
+				<input asp-for="Value" type="text" placeholder="value" required />
+			</fieldset>
 			<form-button-bar>
-				<button type="submit" class="btn btn-primary">Set</button>
+				<submit-button>Set</submit-button>
 			</form-button-bar>
 		</form>
 	</column>

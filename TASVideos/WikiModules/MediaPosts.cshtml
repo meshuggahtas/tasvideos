@@ -1,0 +1,17 @@
+﻿@model MediaPosts
+<partial name="_Pager" model="Model.Posts" />
+<standard-table>
+	<table-head columns="Title,User,Group,Body,Link,Type/Group,Posted"></table-head>
+	@foreach (var post in Model.Posts)
+	{
+		<tr>
+			<td>@post.Title</td>
+			<td>@post.User</td>
+			<td>@post.Group</td>
+			<td>@post.Body</td>
+			<td><a href="@post.Link">@post.Link</a></td>
+			<td>@post.Type (@post.Group)</td>
+			<td>@post.CreateTimestamp</td>
+		</tr>
+	}
+</standard-table>

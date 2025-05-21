@@ -1,22 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Forum;
+﻿using TASVideos.Data.Entity.Forum;
 
 namespace TASVideos.Pages.Forum.Topics;
 
 [RequirePermission(PermissionTo.SetTopicType)]
-public class SetTypeModel : BaseForumModel
+public class SetTypeModel(ApplicationDbContext db) : BaseForumModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public SetTypeModel(
-		ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
 	[FromRoute]
 	public int TopicId { get; set; }
 
@@ -36,7 +24,7 @@ public class SetTypeModel : BaseForumModel
 	{
 		var seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
 
-		var topic = await _db.ForumTopics
+		var topic = await db.ForumTopics
 			.Include(t => t.Forum)
 			.ExcludeRestricted(seeRestricted)
 			.Where(t => t.Id == TopicId)
@@ -61,10 +49,8 @@ public class SetTypeModel : BaseForumModel
 			return Page();
 		}
 
-		var seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
-
-		var topic = await _db.ForumTopics
-			.ExcludeRestricted(seeRestricted)
+		var topic = await db.ForumTopics
+			.ExcludeRestricted(UserCanSeeRestricted)
 			.Where(t => t.Id == TopicId)
 			.SingleOrDefaultAsync();
 
@@ -75,7 +61,7 @@ public class SetTypeModel : BaseForumModel
 
 		topic.Type = Type;
 
-		await ConcurrentSave(_db, $"Topic set to {Type}", "Unable to set the topic type");
+		SetMessage(await db.TrySaveChanges(), $"Topic set to {Type}", "Unable to set the topic type");
 		return RedirectToPage("Index", new { topic.Id });
 	}
 }

@@ -9,19 +9,10 @@ public static class HttpRequestExtensions
 	private const string XmlHttpRequest = "XMLHttpRequest";
 
 	public static bool IsAjaxRequest(this HttpRequest request)
-	{
-		if (request is null)
-		{
-			throw new ArgumentNullException(nameof(request));
-		}
-
-		return request.Headers[RequestedWithHeader] == XmlHttpRequest;
-	}
+		=> request.Headers[RequestedWithHeader] == XmlHttpRequest;
 
 	public static bool IsRobotsTxt(this HttpRequest? request)
-	{
-		return request?.Path.Value?.EndsWith("robots.txt") ?? false;
-	}
+		=> request?.Path.Value?.EndsWith("robots.txt") ?? false;
 
 	public static string ReturnUrl(this HttpRequest? request)
 	{
@@ -76,6 +67,47 @@ public static class HttpRequestExtensions
 		return null;
 	}
 
+	public static bool? QueryStringBoolValue(this HttpRequest? request, string key)
+	{
+		var val = request.QueryStringValue(key);
+		if (string.IsNullOrWhiteSpace(val))
+		{
+			return null;
+		}
+
+		if (bool.TryParse(val, out bool parsedBool))
+		{
+			return parsedBool;
+		}
+
+		return null;
+	}
+
+	private static bool FormBoolValue(this HttpRequest? request, string key)
+	{
+		if (request is null || !request.HasFormContentType)
+		{
+			return false;
+		}
+
+		if (request.Form.TryGetValue(key, out var val))
+		{
+			if (val == "on")
+			{
+				return true;
+			}
+
+			if (bool.TryParse(val, out var parsedBool))
+			{
+				return parsedBool;
+			}
+		}
+
+		return false;
+	}
+
+	public static bool MinorEdit(this HttpRequest? request) => request.FormBoolValue("MinorEdit");
+
 	public static IPAddress? ActualIpAddress(this HttpContext context)
 	{
 		var forwardedIp = context.Request.Headers["X-Forwarded-For"];
@@ -92,12 +124,8 @@ public static class HttpRequestExtensions
 	}
 
 	public static string ToBaseUrl(this HttpRequest request)
-	{
-		return $"https://{request.Host}{request.PathBase}";
-	}
+		=> $"https://{request.Host}{request.PathBase}";
 
 	public static string ToUrl(this HttpRequest request)
-	{
-		return $"https://{request.Host}{request.PathBase}{request.Path}";
-	}
+		=> $"https://{request.Host}{request.PathBase}{request.Path}";
 }

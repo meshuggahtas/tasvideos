@@ -1,19 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
-
-namespace TASVideos.Pages.PublicationClasses;
+﻿namespace TASVideos.Pages.PublicationClasses;
 
 [RequirePermission(PermissionTo.ClassMaintenance)]
-public class CreateModel : BasePageModel
+public class CreateModel(IClassService classService) : BasePageModel
 {
-	private readonly IClassService _classService;
-
-	public CreateModel(IClassService classService)
-	{
-		_classService = classService;
-	}
-
 	[BindProperty]
 	public PublicationClass PublicationClass { get; set; } = new();
 
@@ -24,7 +13,7 @@ public class CreateModel : BasePageModel
 			return Page();
 		}
 
-		var (_, result) = await _classService.Add(PublicationClass);
+		var (_, result) = await classService.Add(PublicationClass);
 		switch (result)
 		{
 			default:

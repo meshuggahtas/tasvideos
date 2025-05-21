@@ -1,36 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFramework>net6.0</TargetFramework>
-		<CodeAnalysisRuleSet>$(ProjectDir)../Common.ruleset</CodeAnalysisRuleSet>
+		<TargetFramework>net8.0</TargetFramework>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 	</ItemGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-		<DocumentationFile>bin\Debug\netcoreapp2.0\TASVideos.Api.xml</DocumentationFile>
-	</PropertyGroup>
-
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-	  <DocumentationFile>bin\Release\netcoreapp2.0\TASVideos.Api.xml</DocumentationFile>
-	</PropertyGroup>
-
 	<ItemGroup>
-		<PackageReference Include="AutoMapper" Version="10.1.1" />
-		<PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="8.1.1" />
-		<PackageReference Include="StyleCop.Analyzers" Version="1.1.118">
-		  <PrivateAssets>all</PrivateAssets>
-		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
+		<PackageReference Include="FluentValidation" />
+		<PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+		<PackageReference Include="Swashbuckle.AspNetCore" />
+		<PackageReference Include="Swashbuckle.AspNetCore.Annotations" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\TASVideos.Core\TASVideos.Core.csproj" />
-		<ProjectReference Include="..\TASVideos.Data\TASVideos.Data.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<AdditionalFiles Include="$(ProjectDir)../.stylecop.json" />
 	</ItemGroup>
 </Project>

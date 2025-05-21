@@ -1,44 +1,38 @@
 ﻿@page
 @model WatchedTopicsModel
 @{
-	ViewData["Title"] = "My Watched Topics";
+	ViewData.SetTitle("My Watched Topics");
 	ViewData.AddActivePage(ProfileNavPages.Topics);
 }
 
 <h3 class="mb-3">
-	You Are Watching the following @Model.Watches.Count() Topics:
+	You Are Watching @Model.Watches.RowCount Topics:
 	<delete-button
-		class="pull-right"
+		class="float-end"
 		asp-href="/Profile/WatchedTopics?handler=StopAllWatching"
 		warning-message="Are you sure you want to remove all topic watches?"><i class="fa fa-remove"></i> All</delete-button>
 </h3>
-
-<div class="table-container">
-	<table class="table table-striped">
-		<tr>
-			<th>Forum</th>
-			<th>Topic</th>
-			<th>Stop Watching</th>
+<partial name="_Pager" model="Model.Watches" />
+<standard-table>
+	<sortable-table-head sorting="@Model.Search" model-type="typeof(WatchedTopic)" action-column-name="Stop Watching"/>
+	@foreach (var watch in Model.Watches)
+	{
+		<tr style="@(watch.IsNotified ? "font-style: italic" : "")">
+			<td>
+				<a asp-page="/Forum/Subforum/Index" asp-route-id="@watch.ForumId">@watch.Forum</a>
+			</td>
+			<td>
+				<i condition="watch.IsNotified" title="This topic has new replies" class="fa fa-exclamation"></i>
+				<a asp-page="/Forum/Topics/Index" asp-route-id="@watch.TopicId">@watch.Topic</a>
+			</td>
+			<td>
+				<timezone-convert asp-for="@watch.LastPostedOn" date-only="true"/>
+			</td>
+			<td-action-column>
+				<delete-button warning-message="Are you sure you want to stop watching this topic?"
+								asp-href="/Profile/WatchedTopics?topicId=@(watch.TopicId)&handler=StopWatching"></delete-button>
+			</td-action-column>
 		</tr>
-		@foreach (var watch in Model.Watches
-		   .OrderBy(tw => !tw.IsNotified)
-		   .ThenByDescending(tw => tw.TopicCreateTimestamp))
-		{
-			<tr style="@(watch.IsNotified ? "font-style: italic" : "")">
-				<td>
-					<a asp-page="/Forum/Subforum/Index" asp-route-id="@watch.ForumId">@watch.ForumTitle</a>
-				</td>
-				<td>
-					<i condition="watch.IsNotified" title="This topic has new replies" class="fa fa-exclamation"></i>
-					<a asp-page="/Forum/Topics/Index" asp-route-id="@watch.TopicId">@watch.TopicTitle</a>
-				</td>
-				<td>
-					<delete-button warning-message="Are you sure you want to stop watching this topic?"
-								   asp-href="/Profile/WatchedTopics?topicId=@(watch.TopicId)&handler=StopWatching">
-						<i class="fa fa-remove"></i>
-					</delete-button>
-				</td>
-			</tr>
-		}
-	</table>
-</div>
+	}
+</standard-table>
+<partial name="_Pager" model="Model.Watches" />

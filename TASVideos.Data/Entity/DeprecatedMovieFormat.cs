@@ -1,10 +1,12 @@
-﻿namespace TASVideos.Data.Entity;
+﻿using TASVideos.Data.AutoHistory;
 
+namespace TASVideos.Data.Entity;
+
+[IncludeInAutoHistory]
 public class DeprecatedMovieFormat : BaseEntity
 {
 	public int Id { get; set; }
 
-	[Required]
 	public string FileExtension { get; set; } = "";
 
 	public bool Deprecated { get; set; } = true;

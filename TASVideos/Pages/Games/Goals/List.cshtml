@@ -1,0 +1,83 @@
+﻿@page "/Games/{gameId}/Goals/List"
+@model ListModel
+@{
+	ViewData.SetTitle($"Goals for {Model.Game}");
+	var canCreate = User.Has(PermissionTo.CatalogMovies);
+}
+@section PageTitle {
+	Goals for <a asp-page="/Games/Index" asp-route-id="@Model.GameId">@Model.Game</a>
+}
+
+<top-button-bar condition="!string.IsNullOrWhiteSpace(HttpContext.Request.ReturnUrl())">
+	<back-link></back-link>
+</top-button-bar>
+<standard-table>
+	<table-head columns="Name,Publications,Submissions,Actions"></table-head>
+	@foreach (var goal in Model.Goals
+		.OrderByDescending(g => g.Name == "baseline")
+		.ThenByDescending(g => g.Publications.Any(p => !p.Obs))
+		.ThenBy(g => g.Name.Length)
+		.ThenBy(g => g.Name))
+	{
+		var canDelete = User.Has(PermissionTo.CatalogMovies) && !goal.Publications.Any() && !goal.Submissions.Any() && goal.Name != "baseline";
+		<tr id="goal-@goal.Id">
+			<td condition="@(goal.Id == Model.GoalToEdit && goal.Name != "baseline")">
+				<form method="post" class="d-flex gap-2" asp-page-handler="Edit">
+					<fullrow>
+						<input type="hidden" name="gameGoalId" value="@Model.GoalToEdit" />
+						<input type="text" name="newGoalName" class="form-control" value="@goal.Name" />
+						<submit-button class="btn-sm mt-1"></submit-button>
+						<cancel-link asp-page="List" asp-fragment="goal-@goal.Id" asp-route-gameId="@Model.GameId" class="btn-sm mt-1"></cancel-link>
+					</fullrow>
+				</form>
+			</td>
+			<td condition="@(goal.Id != Model.GoalToEdit || goal.Name == "baseline")">
+				@goal.Name</td>
+			<td>
+				<ul>
+					@foreach (var pub in goal.Publications.OrderBy(p => p.Obs).ThenByDescending(p => p.Id))
+					{
+						<li>
+							<small condition="pub.Obs">(Obsolete)</small>
+							<pub-link id="@pub.Id">
+								[@pub.Id] @pub.Title
+							</pub-link>
+						</li>
+					}
+				</ul>
+			</td>
+			<td>
+				<ul>
+					@foreach (var sub in goal.Submissions.OrderByDescending(s => s.Id))
+					{
+						<li>
+							<sub-link id="@sub.Id">@sub.Title</sub-link>
+						</li>
+					}
+				</ul>
+			</td>
+			<td-action-column>
+				<a asp-page="List"
+				   asp-fragment="goal-@goal.Id"
+				   asp-route-gameId="@Model.GameId"
+				   asp-route-goalToEdit="@goal.Id"
+				   permission="CatalogMovies"
+				   condition="@(goal.Id != Model.GoalToEdit && goal.Name != "baseline")"
+				   class="btn btn-sm btn-primary">
+				   <i class="fa fa-pencil"></i> Edit
+				</a>
+				<a condition="canDelete" asp-page-handler="Delete" asp-route-gameGoalId="@goal.Id" class="btn btn-sm btn-danger"><i class="fa fa-remove"></i> Delete</a>
+			</td-action-column>
+		</tr>
+	}
+	<tr condition="canCreate">
+		<form method="post">
+			<td colspan="3">
+				<input name="goalToCreate" required class="form-control" />
+			</td>
+			<td>
+				<submit-button class="text-nowrap" edit="false"></submit-button>
+			</td>
+		</form>
+	</tr>
+</standard-table>

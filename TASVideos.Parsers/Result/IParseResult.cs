@@ -7,7 +7,7 @@
 public interface IParseResult
 {
 	/// <summary>
-	/// Gets a value indicating whether or not the movie was successfully parsed
+	/// Gets a value indicating whether the movie was successfully parsed
 	/// If not successful the <see cref="Errors"/> property will contain at least one error.
 	/// </summary>
 	bool Success { get; }
@@ -68,4 +68,16 @@ public interface IParseResult
 	/// Gets the cycle count provided in the movie file, if available. Only certain formats store this information.
 	/// </summary>
 	long? CycleCount { get; }
+
+	/// <summary>
+	/// Gets the annotations. These can be general comments, or other user entered descriptions supported by the file format.
+	/// </summary>
+	string? Annotations { get; }
+
+	Dictionary<HashType, string> Hashes { get; }
+}
+
+public enum HashType
+{
+	Md5, Sha1, Sha256, Crc32
 }

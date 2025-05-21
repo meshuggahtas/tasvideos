@@ -1,73 +1,45 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core;
-using TASVideos.Core.Services;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Users.Models;
-
-namespace TASVideos.Pages.Users;
+﻿namespace TASVideos.Pages.Users;
 
 [AllowAnonymous]
-public class ListModel : BasePageModel
+public class ListModel(ApplicationDbContext db, ICacheService cache, IUserManager userManager) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly ICacheService _cache;
-
-	public ListModel(
-		ApplicationDbContext db,
-		ICacheService cache)
-	{
-		_db = db;
-		_cache = cache;
-	}
-
 	[FromQuery]
 	public PagingModel Search { get; set; } = new();
 
-	public PageOf<UserListModel> Users { get; set; } = PageOf<UserListModel>.Empty();
+	public PageOf<UserEntry> Users { get; set; } = new([], new());
 
 	public async Task OnGet()
 	{
 		if (string.IsNullOrWhiteSpace(Search.Sort))
 		{
-			Search.Sort = $"-{nameof(UserListModel.CreateTimestamp)}";
+			Search.Sort = $"-{nameof(UserEntry.Created)}";
 		}
 
-		Users = await _db.Users
-			.Select(u => new UserListModel
+		Users = await db.Users
+			.Select(u => new UserEntry
 			{
 				Id = u.Id,
 				UserName = u.UserName,
-				CreateTimestamp = u.CreateTimestamp,
-				Roles = u.UserRoles
-					.Select(ur => ur.Role!.Name)
-					.ToList()
+				Created = u.CreateTimestamp,
+				Roles = u.UserRoles.Select(ur => ur.Role!.Name)
 			})
 			.SortedPageOf(Search);
 	}
 
 	public async Task<IActionResult> OnGetSearch(string partial)
 	{
-		if (!string.IsNullOrWhiteSpace(partial) && partial.Length > 2)
+		if (string.IsNullOrWhiteSpace(partial) || partial.Length <= 2)
 		{
-			var matches = await GetUsersByPartial(partial);
-			return new JsonResult(matches);
+			return Json(new List<string>());
 		}
 
-		return new JsonResult(new List<string>());
+		var matches = await GetUsersByPartial(partial);
+		return Json(matches);
 	}
 
-	public async Task<IActionResult> OnGetVerifyUniqueUserName(string userName)
+	public async Task<IActionResult> OnGetCanRenameUser(string oldUserName, string newUserName)
 	{
-		if (string.IsNullOrWhiteSpace(userName))
-		{
-			return new JsonResult(false);
-		}
-
-		var exists = await _db.Users.Exists(userName);
-		return new JsonResult(exists);
+		return Json(await userManager.CanRenameUser(oldUserName, newUserName));
 	}
 
 	private async ValueTask<IEnumerable<string>> GetUsersByPartial(string partialUserName)
@@ -75,18 +47,32 @@ public class ListModel : BasePageModel
 		var upper = partialUserName.ToUpper();
 		var cacheKey = nameof(GetUsersByPartial) + upper;
 
-		if (_cache.TryGetValue(cacheKey, out List<string> list))
+		if (cache.TryGetValue(cacheKey, out List<string> list))
 		{
 			return list;
 		}
 
-		list = await _db.Users
+		list = await db.Users
 			.ThatPartiallyMatch(upper)
 			.Select(u => u.UserName)
 			.ToListAsync();
 
-		_cache.Set(cacheKey, list, Durations.OneMinuteInSeconds);
+		cache.Set(cacheKey, list, Durations.OneMinute);
 
 		return list;
+	}
+
+	public class UserEntry
+	{
+		[Sortable]
+		public int Id { get; init; }
+
+		[Sortable]
+		public string? UserName { get; init; }
+
+		public IEnumerable<string> Roles { get; init; } = [];
+
+		[Sortable]
+		public DateTime Created { get; init; }
 	}
 }

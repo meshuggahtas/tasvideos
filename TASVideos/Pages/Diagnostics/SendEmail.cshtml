@@ -1,0 +1,20 @@
+﻿@page
+@model SendEmail
+@{
+	ViewData.SetTitle("Send an Email");
+}
+
+<top-button-bar>
+	<back-link asp-page="Index"></back-link>
+</top-button-bar>
+<form method="post">
+	<label asp-for="To"></label>
+	<input asp-for="To" rows="10" class="mb-2" maxlength="100" />
+	<label asp-for="Subject"></label>
+	<input asp-for="Subject" rows="10" class="mb-2" maxlength="100"/>
+	<label asp-for="Text"></label>
+	<textarea asp-for="Text" rows="10" maxlength="280"></textarea>
+	<form-button-bar>
+		<submit-button>Submit</submit-button>
+	</form-button-bar>
+</form>

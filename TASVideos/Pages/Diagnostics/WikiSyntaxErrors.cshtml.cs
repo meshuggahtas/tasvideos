@@ -1,61 +1,18 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
-using TASVideos.WikiEngine;
+﻿using TASVideos.WikiEngine;
 
 namespace TASVideos.Pages.Diagnostics;
 
 [RequirePermission(PermissionTo.SeeDiagnostics)]
-public class WikiSyntaxErrorsModel : PageModel
+public class WikiSyntaxErrorsModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly IWikiPages _wikiPages;
+	public List<Row> Rows { get; set; } = [];
 
-	public WikiSyntaxErrorsModel(IWikiPages wikiPages)
+	public async Task OnGet()
 	{
-		_wikiPages = wikiPages;
-	}
-
-	public class Row
-	{
-		public string PageName { get; set; } = "";
-		public string Markup { get; set; } = "";
-		public int ErrorLocation { get; set; }
-		public string? ErrorMessage { get; set; }
-		public string ExcerptBefore
-		{
-			get
-			{
-				var from = Math.Max(ErrorLocation - 20, 0);
-				var to = ErrorLocation;
-				return Markup.Substring(from, to - from);
-			}
-		}
-
-		public string ExcerptAfter
-		{
-			get
-			{
-				var from = ErrorLocation;
-				var to = Math.Min(ErrorLocation + 20, Markup.Length);
-				return Markup.Substring(from, to - from);
-			}
-		}
-	}
-
-	public ICollection<Row> Rows { get; set; } = new List<Row>();
-
-	public async Task<IActionResult> OnGet()
-	{
-		var pages = await _wikiPages.Query
+		var pages = await db.WikiPages
 			.ThatAreNotDeleted()
-			.WithNoChildren()
-			.Select(p => new
-			{
-				p.PageName,
-				p.Markup
-			})
+			.ThatAreCurrent()
+			.Select(p => new { p.PageName, p.Markup })
 			.ToListAsync();
 		Rows = pages
 			.Select(p => new
@@ -72,7 +29,32 @@ public class WikiSyntaxErrorsModel : PageModel
 				ErrorMessage = a.err.Message
 			})
 			.ToList();
+	}
 
-		return Page();
+	public class Row
+	{
+		public string PageName { get; init; } = "";
+		public string Markup { get; init; } = "";
+		public int ErrorLocation { get; init; }
+		public string? ErrorMessage { get; init; }
+		public string ExcerptBefore
+		{
+			get
+			{
+				var from = Math.Max(ErrorLocation - 20, 0);
+				var to = ErrorLocation;
+				return Markup[from..to];
+			}
+		}
+
+		public string ExcerptAfter
+		{
+			get
+			{
+				var from = ErrorLocation;
+				var to = Math.Min(ErrorLocation + 20, Markup.Length);
+				return Markup[from..to];
+			}
+		}
 	}
 }

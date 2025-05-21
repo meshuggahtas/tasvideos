@@ -1,28 +1,27 @@
 @page
 @model MoveModel
 @{
-	ViewData["Title"] = $"Moving: {Model.Move.OriginalPageName}";
+	ViewData.SetTitle($"Moving: {Model.OriginalPageName}");
 }
-<form method="post">
-	<input type="hidden" asp-for="Move.OriginalPageName" />
+
+<form client-side-validation="true" method="post">
+	<input type="hidden" asp-for="OriginalPageName" />
 	<row>
-		<div class="col-lg-6">
-			<form-group>
-				<label class="form-control-label">Original Name</label>
-				<label class="form-control">@Model.Move.OriginalPageName</label>
-			</form-group>
-			<form-group>
-				<label asp-for="Move.DestinationPageName" class="form-control-label"></label>
-				<input type="text" asp-for="Move.DestinationPageName" class="form-control" />
-				<span asp-validation-for="Move.DestinationPageName" class="text-danger"></span>
-			</form-group>
-			<div class="text-center">
-				<submit-button class="btn btn-primary"><i class="fa fa-save"></i> Move</submit-button>
-				<a href="/@Model.Move.OriginalPageName" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-			</div>
-		</div>
+		<column lg="6">
+			<fieldset>
+				<label>Original Name</label>
+				<label class="form-control">@Model.OriginalPageName</label>
+			</fieldset>
+			<fieldset>
+				<label asp-for="DestinationPageName"></label>
+				<input asp-for="DestinationPageName" />
+				<span asp-validation-for="DestinationPageName"></span>
+			</fieldset>
+			<form-button-bar>
+				<submit-button><i class="fa fa-save"></i> Move</submit-button>
+				<cancel-link href="/@Model.OriginalPageName"></cancel-link>
+			</form-button-bar>
+		</column>
 	</row>
 </form>
-@section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-}
+

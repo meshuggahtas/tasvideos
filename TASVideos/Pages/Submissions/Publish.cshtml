@@ -1,10 +1,10 @@
 ﻿@page "{id}"
 @model PublishModel
 @{
-	ViewData["Title"] = $"Publishing Submission #{Model.Submission.Title}";
+	ViewData.SetTitle($"Publishing Submission {Model.Submission.Title}");
 }
-<card>
-	<cardbody>
+<card class="mb-3">
+	<card-body>
 		<div class="card-title">
 			<a class="btn btn-primary " asp-page="Catalog" asp-route-id="@Model.Id">Catalog</a>
 		</div>
@@ -12,183 +12,143 @@
 			<column lg="6">
 				<row>
 					<label class="col-sm-3" asp-for="Submission.PublicationClass"></label>
-					<span class="col-sm-9"><a href="/@Model.Submission.PublicationClass">@Html.DisplayFor(m => m.Submission.PublicationClass)</a></span>
+					<span class="col-sm-9"><a href="/@Model.Submission.PublicationClass">@Model.Submission.PublicationClass</a></span>
 				</row>
 				<row>
-					<label class="col-sm-3" asp-for="Submission.SystemCode"></label>
-					<span class="col-sm-9">@Html.DisplayFor(m => m.Submission.SystemCode)</span>
+					<label class="col-sm-3" asp-for="Submission.System"></label>
+					<span class="col-sm-9">@Model.Submission.System</span>
 				</row>
 				<row>
-					<label class="col-sm-3" asp-for="Submission.SystemRegion"></label>
-					<span class="col-sm-9">@Html.DisplayFor(m => m.Submission.SystemRegion)</span>
+					<label class="col-sm-3" asp-for="Submission.Region"></label>
+					<span class="col-sm-9">@Model.Submission.Region</span>
 				</row>
 				<row>
 					<label class="col-sm-3" asp-for="Submission.EmulatorVersion"></label>
-					<span class="col-sm-9">@Html.DisplayFor(m => m.Submission.EmulatorVersion)</span>
+					<span class="col-sm-9">@Model.Submission.EmulatorVersion</span>
 				</row>
 			</column>
 			<column lg="6">
 				<row>
 					<label class="col-sm-3" asp-for="Submission.Game"></label>
-					<span class="col-sm-9"><a asp-page="/Games/Index" asp-route-id="@Model.Submission.GameId">@Html.DisplayFor(m => m.Submission.Game)</a></span>
+					<span class="col-sm-9"><a asp-page="/Games/Index" asp-route-id="@Model.Submission.GameId">@Model.Submission.Game</a></span>
 				</row>
 				<row>
-					<label class="col-sm-3" asp-for="Submission.Rom"></label>
+					<label class="col-sm-3" asp-for="Submission.GameVersion"></label>
 					<span class="col-sm-9">
-						<a asp-page="/Games/Roms/Edit" asp-route-gameId="@Model.Submission.GameId" asp-route-id="@Model.Submission.RomId">
-							<span class="col-sm-9">@Html.DisplayFor(m => m.Submission.Rom)</span>
+						<a asp-page="/Games/Versions/Edit" asp-route-gameId="@Model.Submission.GameId" asp-route-id="@Model.Submission.VersionId">
+							@Model.Submission.GameVersion
 						</a>
 					</span>
 				</row>
 				<row>
-					<label class="col-sm-3" asp-for="Submission.Branch"></label>
-					<span class="col-sm-9">@Html.DisplayFor(m => m.Submission.Branch)</span>
+					<label class="col-sm-3" asp-for="Submission.Goal"></label>
+					<span class="col-sm-9">@Model.Submission.Goal</span>
 				</row>
 			</column>
 		</row>
-	</cardbody>
+	</card-body>
 </card>
-<hr />
-<form method="post" enctype="multipart/form-data">
+<form client-side-validation="true" method="post" enctype="multipart/form-data">
 	<input type="hidden" asp-for="Submission.SystemId" />
+	<input type="hidden" asp-for="Id" />
 	<row>
 		<input type="hidden" asp-for="Submission.MovieExtension" />
 		<column lg="6">
-			<form-group>
-				<label asp-for="Submission.MovieToObsolete" class="form-control-label"></label>
-				<input asp-for="Submission.MovieToObsolete" class="form-control" />
-				<span asp-validation-for="Submission.MovieToObsolete" class="text-danger"></span>
+			<fieldset>
+				<label asp-for="Submission.MovieToObsolete">Select movie to be obsoleted</label>
+				<input asp-for="Submission.MovieToObsolete" data-id="obsolete" />
+				<span asp-validation-for="Submission.MovieToObsolete"></span>
 				<span id="obsoleted-by"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Submission.OnlineWatchingUrl" class="form-control-label"></label>
-				<input type="text" asp-for="Submission.OnlineWatchingUrl" class="form-control" />
-				<span asp-validation-for="Submission.OnlineWatchingUrl" class="text-danger"></span>
-				<label asp-for="Submission.OnlineWatchUrlName" class="form-control-label"></label>
-				<input type="text" asp-for="Submission.OnlineWatchUrlName" class="form-control"/>
-				<span asp-validation-for="Submission.OnlineWatchUrlName" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Submission.MirrorSiteUrl" class="form-control-label"></label>
-				<input type="text" asp-for="Submission.MirrorSiteUrl" class="form-control" />
-				<span asp-validation-for="Submission.MirrorSiteUrl" class="text-danger"></span>
-			</form-group>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Submission.OnlineWatchingUrl">Online-watching URL</label>
+				<input asp-for="Submission.OnlineWatchingUrl" />
+				<span asp-validation-for="Submission.OnlineWatchingUrl"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Submission.MirrorSiteUrl">Mirror site URL</label>
+				<input asp-for="Submission.MirrorSiteUrl" />
+				<span asp-validation-for="Submission.MirrorSiteUrl"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Submission.AlternateOnlineWatchingUrl">Alternative Online-watching URL (optional)</label>
+				<input asp-for="Submission.AlternateOnlineWatchingUrl" />
+				<span asp-validation-for="Submission.AlternateOnlineWatchingUrl"></span>
+				<label asp-for="Submission.AlternateOnlineWatchUrlName">Alternative Online-watching URL Display Name (optional)</label>
+				<input asp-for="Submission.AlternateOnlineWatchUrlName" />
+				<span asp-validation-for="Submission.AlternateOnlineWatchUrlName"></span>
+			</fieldset>
 		</column>
 		<column lg="6">
-			<form-group>
-				<label asp-for="Submission.MovieFileName" class="form-control-label"></label>
+			<fieldset>
+				<label asp-for="Submission.MovieFilename"></label>
 				<div class="input-group">
-					<input type="text" asp-for="Submission.MovieFileName" class="form-control" />
+					<input asp-for="Submission.MovieFilename" />
 					<div class="input-group-append">
 						<span class="input-group-text">
 							.@Model.Submission.MovieExtension
 						</span>
 					</div>
 				</div>
-				<div>@Html.DescriptionFor(m => m.Submission.MovieFileName)</div>
-				<span asp-validation-for="Submission.MovieFileName" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Submission.Screenshot" class="form-control-label"></label>
-				<input type="file" asp-for="Submission.Screenshot" class="form-control" />
+				<div>Please follow the convention: xxxv#-yyy where xxx is author name, # is version and yyy is game name. Special characters such as "&amp;" and "/" and "." and spaces must not occur in the filename.</div>
+				<span asp-validation-for="Submission.MovieFilename"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Submission.Screenshot"></label>
+				<input asp-for="Submission.Screenshot" />
 				<span>
 					Must be JPEG or PNG
 					<br />
 					(Please read <a href="/PublisherGuidelines">Publisher guidelines</a> for guidelines regarding screenshot selection.)
 				</span>
-				<span asp-validation-for="Submission.Screenshot" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Submission.ScreenshotDescription"></label>
-				<input asp-for="Submission.ScreenshotDescription" type="text" class="form-control" />
-				<div>@Html.DescriptionFor(m => m.Submission.ScreenshotDescription)</div>
-				<span asp-validation-for="Submission.ScreenshotDescription" class="text-danger"></span>
-			</form-group>
+				<span asp-validation-for="Submission.Screenshot"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Submission.ScreenshotDescription">Description</label>
+				<input asp-for="Submission.ScreenshotDescription" />
+				<div>Caption, describe what happens in the screenshot</div>
+				<span asp-validation-for="Submission.ScreenshotDescription"></span>
+			</fieldset>
 		</column>
 	</row>
 	<hr />
 	<row>
 		<column lg="6">
-			<form-group>
-				<label asp-for="Submission.MovieMarkup" class="form-control-label"></label>
-				<textarea asp-for="Submission.MovieMarkup" class="form-control" rows="10"></textarea>
-				<span asp-validation-for="Submission.MovieMarkup" class="text-danger"></span>
-			</form-group>
+			<wiki-edit-helper></wiki-edit-helper>
+			<fieldset>
+				<label asp-for="Submission.MovieDescription"></label>
+				<wiki-textarea asp-for="Submission.MovieDescription" rows="10"></wiki-textarea>
+				<span asp-validation-for="Submission.MovieDescription"></span>
+			</fieldset>
 		</column>
 		<column lg="6">
-			<form-group>
-				<label asp-for="Submission.Markup" class="form-control-label"></label>
-				<textarea readonly class="form-control" rows="10" asp-for="Submission.Markup"></textarea>
-			</form-group>
+			<fieldset>
+				<label asp-for="Markup">Submission description (for quoting, reference, etc)</label>
+				<textarea readonly rows="10" asp-for="Markup"></textarea>
+			</fieldset>
 		</column>
 	</row>
-	<button id="preview-button" type="button" class="btn btn-secondary"><span class="fa fa-eye"></span> Preview</button>
-	<partial name="_PreviewWindow" model="@(Html.IdFor(m => m.Submission.MovieMarkup), "/Wiki/Preview")" />
+	<preview-button></preview-button>
+	<wiki-preview></wiki-preview>
 	<hr />
 	<fullrow>
-		<two-column-select id-list="Submission.SelectedFlags" available-list="AvailableFlags" />
-		<two-column-select id-list="Submission.SelectedTags" available-list="AvailableTags" />
+		<fieldset>
+			<label asp-for="Submission.SelectedFlags"></label>
+			<select asp-for="Submission.SelectedFlags" multiselect="true" asp-items="Model.AvailableFlags"></select>
+		</fieldset>
+		<fieldset>
+			<label asp-for="Submission.SelectedTags"></label>
+			<select asp-for="Submission.SelectedTags" data-id="tags" multiselect="true" asp-items="Model.AvailableTags"></select>
+		</fieldset>
 	</fullrow>
 	<hr />
-	@await Component.RenderWiki("System/FilesEditingHelp")
-	<fullrow class="text-center">
-		<submit-button class="btn btn-primary"><i class="fa fa-save"></i> Publish</submit-button>
-		<a asp-page="View" asp-route-id="@Model.Id" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</fullrow>
+	@await Html.RenderWiki(SystemWiki.FilesEditingHelp)
+	<form-button-bar>
+		<submit-button><i class="fa fa-save"></i> Publish</submit-button>
+		<cancel-link asp-page="View" asp-route-id="@Model.Id"></cancel-link>
+	</form-button-bar>
 </form>
 
 @section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-	<script>
-		const selectedFlagsId = "@Html.IdFor(m => m.Submission.SelectedFlags)";
-		const selectedTagsId = "@Html.IdFor(m => m.Submission.SelectedTags)";
-		let originalDescription = "@Model.Submission.MovieMarkup";
-		const obsoletionModel = document.getElementById("@Html.IdFor(m => m.Submission.MovieToObsolete)");
-		const descriptionModel = document.getElementById("@Html.IdFor(m => m.Submission.MovieMarkup)");
-		const dblClickEvent = new MouseEvent('dblclick', {
-			'view': window,
-			'bubbles': true,
-			'cancelable': true
-		});
-
-		descriptionModel.onchange = function() {
-			originalDescription = descriptionModel.value;
-		}
-
-		obsoletionModel.onchange = function() {
-			if (!obsoletionModel.value) {
-				descriptionModel.value = originalDescription;
-				return;
-			}
-
-			document.getElementById("obsoleted-by").innerHTML = "";
-			const url = `/Submissions/Publish/@(Model.Id)?handler=ObsoletePublication&publicationId=${obsoletionModel.value}`;
-			fetch(url)
-				.then(handleFetchErrors)
-				.then(r => r.json())
-				.then(t => {
-					const oldValue = originalDescription;
-					descriptionModel.value = t.markup;
-					originalDescription = oldValue;
-
-					document.getElementById(`${selectedFlagsId}removeAllBtn`).click();
-					document.getElementById(`${selectedTagsId}removeAllBtn`).click();
-					document.getElementById("obsoleted-by").innerHTML = t.title ? t.title : "Unknown publication";
-
-					for (let i in t.flags) {
-						const flagItem = document.querySelector(`[name='AvailableFlags'] option[value="${t.flags[i]}"]`);
-						flagItem.selected = true;
-					}
-
-					document.getElementById(`${selectedFlagsId}addBtn`).click();
-
-					for (let i in t.tags) {
-						const tagItem = document.querySelector(`[name='AvailableTags'] option[value="${t.tags[i]}"]`);
-						tagItem.selected = true;
-					}
-
-					document.getElementById(`${selectedTagsId}addBtn`).click();
-				});
-		}
-	</script>
+	<script src="/js/publish.js"></script>
 }

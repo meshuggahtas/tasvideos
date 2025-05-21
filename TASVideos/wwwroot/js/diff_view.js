@@ -1,10 +1,37 @@
+const left = document.querySelector('[data-diff="left"]');
+const right = document.querySelector('[data-diff="right"]');
+window.addEventListener("DOMContentLoaded", function () {
+	right?.addEventListener("input", generateDiff);
+});
+
+Array.from(document.querySelectorAll('[name="diff-type"]')).forEach(dt => {
+	dt.addEventListener('click', generateDiff);
+});
+
+document.querySelector('[name=context-size]')?.addEventListener('input', generateDiff);
+
+function generateDiff() {
+	const viewType = parseInt(document.querySelector('[name="diff-type"]:checked').value);
+	const contextSize = parseInt(document.querySelector('[name="context-size"]').value);
+	const diffElem = document.getElementById('diff-view');
+	diffElem.classList.remove('d-none');
+	document.getElementById('diff-options').classList.remove('d-none');
+
+	renderDiff(
+		{ text: left.value, name: left.dataset.diffLabel ?? 'Current' },
+		{ text: right.value, name: right.dataset.diffLabel ?? 'Pending' },
+		diffElem,
+		!!viewType,
+		contextSize
+	);
+}
 function renderDiff(from, to, destEl, inline, contextSize) {
 	function cleanCr(text) {
 		return text.replaceAll("\r", "");
 	}
 
 	const dmp = new diff_match_patch();
-	dmp.Diff_Timeout = 0;
+	dmp.Diff_Timeout = 5;
 	dmp.Diff_EditCost = 20;
 
 	const d = dmp.diff_main(cleanCr(from.text), cleanCr(to.text));
@@ -22,7 +49,7 @@ function renderDiff(from, to, destEl, inline, contextSize) {
 				rightLineNumber,
 				spans,
 				important: spans.some(s => s.type),
-				distance: 99999999,
+				distance: 99999999
 			});
 		}
 		for (const { 0: type, 1: text } of d) {
@@ -103,7 +130,7 @@ function renderDiff(from, to, destEl, inline, contextSize) {
 
 	const results = [];
 	if (inline) {
-		results.push(h("div"), h("div"), h("div", { class: "header" }, from.name + "⇒" + to.name));
+		results.push(h("div"), h("div"), h("div", { class: "header" }, from.name + " ⟶ " + to.name));
 	} else {
 		results.push(
 			h("div"),
@@ -155,7 +182,7 @@ function renderDiff(from, to, destEl, inline, contextSize) {
 				for (const line of lineOrSet) {
 					pushLine(line, " expanded");
 				}
-				results.push(h("button", { class: "contracter bottom", type: "button" }, "▲"))
+				results.push(h("button", { class: "contracter bottom", type: "button" }, "▲"));
 				leftNumber = undefined;
 				rightNumber = undefined;
 			} else {

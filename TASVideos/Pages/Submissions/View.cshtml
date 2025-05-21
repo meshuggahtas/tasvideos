@@ -2,36 +2,46 @@
 @inject IQueueService QueueService
 @model ViewModel
 @{
-	ViewData["Title"] = $"{Model.Submission.Title} - Submission #{Model.Id}";
+	ViewData.UseRedFavicon();
+	ViewData.SetTitle($"{Model.Submission.Title} - Submission #{Model.Id}");
+	ViewData.SetHeading($"Submission {Model.Submission.Title}");
+	ViewData.SetNavigation(Model.Id, "/{0}S");
 	bool hasEncode = !string.IsNullOrWhiteSpace(Model.Submission.EncodeEmbedLink);
-	bool canEdit = ViewData.UserHas(PermissionTo.EditSubmissions)
-		|| (Model.CanEdit && ViewData.UserHas(PermissionTo.SubmitMovies));
-	bool hasJudgeOrPublisher = !string.IsNullOrWhiteSpace(Model.Submission.Judge) || !string.IsNullOrWhiteSpace(Model.Submission.Publisher);
 	bool showPublicationClass = !string.IsNullOrWhiteSpace(Model.Submission.ClassName) && Model.Submission.Status != SubmissionStatus.Rejected && Model.Submission.ClassName != "Standard";
-	bool canPublish = ViewData.UserHas(PermissionTo.PublishMovies)
+	bool canPublish = User.Has(PermissionTo.PublishMovies)
 		&& Model.Submission.Status == SubmissionStatus.PublicationUnderway
 		&& Model.Submission.IsCataloged
-		&& (Model.Submission.Publisher == User.Name() || ViewData.UserHas(PermissionTo.OverrideSubmissionStatus));
+		&& (Model.Submission.Publisher == User.Name() || User.Has(PermissionTo.OverrideSubmissionConstraints))
+		&& Model.Submission.SyncedOn.HasValue;
 	string statusColor = StatusColor(Model.Submission.Status);
 
-	bool canClaimAsJudge = ViewData.UserHas(PermissionTo.JudgeSubmissions)
-		&& ViewData.UserHas(PermissionTo.EditSubmissions)
+	bool canClaimAsJudge = User.Has(PermissionTo.JudgeSubmissions)
+		&& User.Has(PermissionTo.EditSubmissions)
 		&& Model.Submission.Status == SubmissionStatus.New
 		&& Model.Submission.Authors.All(a => a != User.Name());
 
-	bool canClaimAsPublisher = ViewData.UserHas(PermissionTo.PublishMovies)
-		&& ViewData.UserHas(PermissionTo.EditSubmissions)
+	bool canClaimAsPublisher = User.Has(PermissionTo.PublishMovies)
+		&& User.Has(PermissionTo.EditSubmissions)
 		&& Model.Submission.Status == SubmissionStatus.Accepted;
-	string youtubeEmbedImage = "";
-	if (Model.Submission.EncodeEmbedLink is not null)
+
+	var youtubeEmbedImage = Model.Submission.EncodeEmbedLink is not null
+		? "https://i.ytimg.com/vi/" + Model.Submission.EncodeEmbedLink.Split('/').Last() + "/hqdefault.jpg"
+		: null;
+
+	var isNicoEmbed = hasEncode && Model.Submission.EncodeEmbedLink!.Contains("nicovideo");
+	var hoursRemaining = QueueService.HoursRemainingForJudging(Model.Submission);
+
+	ViewData.SetMetaTags(new MetaTag
 	{
-		youtubeEmbedImage = "https://i.ytimg.com/vi/" + Model.Submission.EncodeEmbedLink.Split('/').Last() + "/hqdefault.jpg";
-	}
-	string openGraphEmbedImage = string.IsNullOrWhiteSpace(youtubeEmbedImage) ? $"{HttpContext.Request.ToBaseUrl()}/images/logo-embed.png" : youtubeEmbedImage;
+		Title = Model.Submission.Title,
+		Description = $"Submission #{Model.Id} from {Model.Submission.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}",
+		Image = youtubeEmbedImage,
+		UseTwitterCard = !string.IsNullOrWhiteSpace(youtubeEmbedImage)
+	});
 }
 
 @functions{
-	string StatusColor(SubmissionStatus status)
+	static string StatusColor(SubmissionStatus status)
 	{
 		switch (status)
 		{
@@ -40,6 +50,7 @@
 			case SubmissionStatus.Accepted:
 			case SubmissionStatus.PublicationUnderway:
 			case SubmissionStatus.Published:
+			case SubmissionStatus.Playground:
 				return "success";
 			case SubmissionStatus.Rejected:
 				return "danger";
@@ -50,65 +61,12 @@
 	}
 }
 
-@section Header {
-	<meta property="og:type" content="website" />
-	<meta property="og:site_name" content="TASVideos" />
-	<meta property="og:title" content="@(Model.Submission.Title)" />
-	<meta property="og:description" content="@($"Submission #{Model.Id} from {Model.Submission.Submitted.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}")" />
-	<meta property="og:url" content="@HttpContext.Request.ToUrl()" />
-	<meta property="og:image" content="@openGraphEmbedImage" />
-	@if (!string.IsNullOrWhiteSpace(youtubeEmbedImage)) {
-		<meta property="twitter:card" content="summary_large_image" />
-	}
-}
-
-@section PageTitle {
-	<div class="container mb-2">
-		<h1 class="card card-header d-block">@($"Submission {Model.Submission.Title}")</h1>
-	</div>
-}
-
-<row class="mt-2">
-	<div class="col-lg-6" condition="hasEncode">
-		@*Boilerplate bootstrap stuff *@
-		<div class="ratio ratio-16x9">
-			<div id="ytplayer"></div>
-		</div>
-		<script>
-			const youtubeScriptId = 'youtube-api';
-			let youtubeScript = document.getElementById(youtubeScriptId);
-			let player;
-			@*Loads the scripts which run the Youtube Player API asynchronously*@
-			if (youtubeScript === null) {
-				let tag = document.createElement('script');
-				let firstScript = document.getElementsByTagName('script')[0];
-				
-				tag.src = 'https://www.youtube.com/iframe_api';
-				tag.id = youtubeScriptId;
-				firstScript.parentNode.insertBefore(tag, firstScript);
-			}
-			@*Populates the youtube player after the API script is ready*@
-			if (!player) {
-				window.onYouTubeIframeAPIReady = () => {
-					player = new YT.Player('ytplayer', {
-						videoId: "@Model.Submission.EncodeEmbedLink!.Split('/').Last()"
-					});
-				}
-			}
-		</script>
-		<a href="@Model.Submission.EncodeEmbedLink">(Link to video)</a>
-	</div>
-	<div class="@(hasEncode ? "col-lg-6" : "col-lg-12")">
-		<div class="alert alert-@(statusColor)" role="alert">
-			<h4 condition="!Model.IsPublished" class="alert-heading">
-				Status: @Model.Submission.Status.EnumDisplayName()
-				<small condition="@Model.Submission.Status == SubmissionStatus.Rejected">
-					<span condition="!string.IsNullOrWhiteSpace(Model.Submission.RejectionReasonDisplay)">(Reason: @Model.Submission.RejectionReasonDisplay)</span>
-				</small>
-			</h4>
-			<h4 condition="Model.IsPublished" class="alert-heading">Status: <a asp-page="/Publications/View" asp-route-id="@Model.PublicationId">@Model.Submission.Status.EnumDisplayName()</a></h4>
-			<div condition="QueueService.HoursRemainingForJudging(Model.Submission) > 0">
-				(Available for judging in @QueueService.HoursRemainingForJudging(Model.Submission) hours)
+<div class="alert alert-@(statusColor)" role="alert">
+	<div class="d-flex" style="justify-content: space-between">
+		<div>
+			<div condition="Model.IsPublished" class="lead">Status: <a asp-page="/Publications/View" asp-route-id="@Model.PublicationId">@Model.Submission.Status.EnumDisplayName()</a></div>
+			<div condition="hoursRemaining > 0">
+				(Available for judging in @hoursRemaining hours)
 			</div>
 			<span condition="@(!string.IsNullOrWhiteSpace(Model.Submission.Judge))">
 				<label asp-for="Submission.Judge"></label>:
@@ -118,47 +76,101 @@
 				<label asp-for="Submission.Publisher"></label>:
 				<profile-link username="@Model.Submission.Publisher"></profile-link>
 			</span>
-			<div condition="showPublicationClass">
-				<hr>
-				<p class="mb-0">
-					<label asp-for="Submission.ClassName" class="mb-0"></label>: <a href="/@Model.Submission.ClassName">@Model.Submission.ClassName</a>
-				</p>
+			@if (showPublicationClass)
+			{
+				<div class="mt-3">
+					<label>For Publication Class</label><span>: </span><a href="/@Model.Submission.ClassName">@Model.Submission.ClassName</a>
+				</div>
+			}
+			<div condition="!Model.IsPublished" class="lead">
+				Status: @Model.Submission.Status.EnumDisplayName()
+				<small condition="Model.Submission.Status == SubmissionStatus.Rejected">
+					<span condition="!string.IsNullOrWhiteSpace(Model.Submission.RejectionReasonDisplay)">(Reason: @Model.Submission.RejectionReasonDisplay)</span>
+				</small>
 			</div>
 		</div>
+		<div condition="@Model.Submission.SyncedOn.HasValue && !Model.IsPublished" class="float-end">
+			<div class="lead"><i class="fa fa-check-square"></i> Sync Verified</div>
+			<small>Verified <timezone-convert asp-for="Submission.SyncedOn"/> by <profile-link username="@Model.Submission.SyncedBy"></profile-link></small>
+		</div>
+	</div>
+</div>
 
-		<table class="table table-bordered table-condensed">
-			<tr>
-				<th>@Html.DisplayNameFor(m => m.Submission.SystemDisplayName)</th>
-				<td>@Model.Submission.SystemDisplayName</td>
-				<th>@Html.DisplayNameFor(m => m.Submission.Emulator)</th>
-				<td>@Model.Submission.Emulator</td>
-			</tr>
-			<tr>
-				<th>@Html.DisplayNameFor(m => m.Submission.GameVersion)</th>
-				<td>@Model.Submission.GameVersion</td>
-				<th>@Html.DisplayNameFor(m => m.Submission.FrameCount)</th>
-				<td>@Model.Submission.FrameCount</td>
-			</tr>
-			<tr>
-				<th>@Html.DisplayNameFor(m => m.Submission.RomName)</th>
-				<td>@Model.Submission.RomName</td>
-				<th>@Html.DisplayNameFor(m => m.Submission.FrameRate)</th>
-				<td>@Model.Submission.FrameRate</td>
-			</tr>
-			<tr>
-				<th>@Html.DisplayNameFor(m => m.Submission.Branch)</th>
-				<td>@Model.Submission.Branch</td>
-				<th>@Html.DisplayNameFor(m => m.Submission.RerecordCount)</th>
-				<td>@Model.Submission.RerecordCount</td>
-			</tr>
-			<tr>
-				<th><label asp-for="Submission.StartType"></label></th>
-				<td>
+<row class="mt-2 mb-3">
+	<div class="col-lg-6" condition="hasEncode">
+		<partial condition="!isNicoEmbed" name="_YoutubeEmbed" model="Model.Submission.EncodeEmbedLink" />
+		<partial condition="isNicoEmbed" name="_NicoEmbed" model="Model.Submission.EncodeEmbedLink" />
+	</div>
+	<div class="@(hasEncode ? "col-lg-6" : "col-lg-12")">
+		<div class="sub-info mb-2">
+			<div class="sub-info-cell">
+				<label>System</label>
+				<div>@Model.Submission.SystemDisplayName</div>
+			</div>
+			<div condition="Model.Submission.GameId.HasValue" class="sub-info-cell">
+				<label>Game</label>
+				<div><game-link id="Model.Submission.GameId!.Value">@Model.Submission.GameName</game-link></div>
+				<small condition="!string.IsNullOrWhiteSpace(Model.Submission.SubmittedGameName) && Model.Submission.SubmittedGameName != Model.Submission.GameName">(Submitted: @Model.Submission.SubmittedGameName)</small>
+			</div>
+			<div condition="!Model.Submission.GameId.HasValue" class="sub-info-cell">
+				<label>Game</label>
+				<div>@Model.Submission.SubmittedGameName</div>
+			</div>
+			<div condition="string.IsNullOrWhiteSpace(Model.Submission.Goal) && !string.IsNullOrWhiteSpace(Model.Submission.SubmittedBranch)" class="sub-info-cell">
+				<label>Submitted Goal</label>
+				<div>@Model.Submission.SubmittedBranch</div>
+			</div>
+			<div condition="!string.IsNullOrWhiteSpace(Model.Submission.Goal)" class="sub-info-cell">
+				<label>Goal</label>
+				<div>@Model.Submission.Goal</div>
+				<small condition="@(!string.IsNullOrWhiteSpace(Model.Submission.SubmittedBranch))">(Submitted: @Model.Submission.SubmittedBranch)</small>
+			</div>
+			<div condition="Model.Submission.GameVersionId > 0" class="sub-info-cell">
+				<label>Game Version</label>
+				<div>
+					<a
+						asp-page="/Games/Versions/View"
+						asp-route-id="@Model.Submission.GameVersionId"
+						asp-route-gameid="@Model.Submission.GameId"
+						asp-route-returnUrl="@HttpContext.CurrentPathToReturnUrl()">
+						@Model.Submission.GameVersion
+					</a>
+				</div>
+				(Submitted: @Model.Submission.SubmittedRomName @Model.Submission.SubmittedGameVersion)
+			</div>
+			<div class="sub-info-cell">
+				<label>Emulator</label>
+				<div>@Model.Submission.Emulator</div>
+			</div>
+			<div class="sub-info-cell">
+				<label>Frame Count</label>
+				<div>
+					@Model.Submission.FrameCount
+					<small condition="Model.Submission.CycleCount.HasValue">(cycle count @Model.Submission.CycleCount)</small>
+				</div>
+			</div>
+			<div class="sub-info-cell">
+				<label>Framerate</label>
+				<div>@Model.Submission.FrameRate</div>
+			</div>
+			<div class="sub-info-cell">
+				<label>Rerecord Count</label>
+				<div>@Model.Submission.RerecordCount</div>
+			</div>
+			<div class="sub-info-cell">
+				<label asp-for="Submission.StartType"></label>
+				<div>
 					<span condition="Model.Submission.WarnStartType" class="badge bg-warning text-dark">!</span>
 					@(Model.Submission.StartType?.ToString() ?? "Unknown")
-				</td>
-				<th>Authors</th>
-				<td>
+				</div>
+			</div>
+			<div condition="!string.IsNullOrWhiteSpace(Model.Submission.Warnings)" class="sub-info-cell">
+				<label>Warnings</label>
+				<div>@Model.Submission.Warnings</div>
+			</div>
+			<div class="sub-info-cell">
+				<label>Authors</label>
+				<div>
 					@foreach (var author in Model.Submission.Authors)
 					{
 						<profile-link username="@author"></profile-link><span condition="author != Model.Submission.Authors.Last()">,</span>
@@ -166,59 +178,98 @@
 					<small condition="!string.IsNullOrWhiteSpace(Model.Submission.AdditionalAuthors)">
 						<br />(Additionally: @(string.Join(", ",Model.Submission.AdditionalAuthors!.SplitWithEmpty(","))))
 					</small>
-				</td>
-			</tr>
-			<tr condition="Model.Submission.GameId.HasValue">
-				<th>Game</th>
-				<td><game-link id="Model.Submission.GameId!.Value">@Model.Submission.GameName</game-link></td>
-			</tr>
-		</table>
+				</div>
+			</div>
+			<div condition="!string.IsNullOrWhiteSpace(Model.Submission.SubmittedRomName) && !(Model.Submission.GameVersionId > 0)" class="sub-info-cell">
+				<label>Submitted ROM</label>
+				<div>@Model.Submission.SubmittedRomName</div>
+			</div>
+			<div condition="!string.IsNullOrWhiteSpace(Model.Submission.SubmittedGameVersion) && !(Model.Submission.GameVersionId > 0)" class="sub-info-cell">
+				<label>Submitted Game Version</label>
+				<div>@Model.Submission.SubmittedGameVersion</div>
+			</div>
+			<div condition="!string.IsNullOrWhiteSpace(Model.Submission.Hash)" class="sub-info-cell">
+				<label>@Model.Submission.HashType?.ToUpper() Hash</label>
+				<div>@Model.Submission.Hash</div>
+			</div>
+		</div>
+
+		<div condition="!string.IsNullOrWhiteSpace(Model.Submission.Annotations)" class="sub-info-cell mb-2">
+			<label>
+				<a class="collapsed text-body" data-bs-toggle="collapse" href="#collapse-content-annotations">
+					<i class="fa fa-chevron-circle-down"></i> Annotations
+				</a>
+			</label>
+			<pre id="collapse-content-annotations"
+				 class="collapse"
+				 style="white-space: pre-wrap">@Model.Submission.Annotations
+			</pre>
+		</div>
+
+		<div condition="!string.IsNullOrWhiteSpace(Model.Submission.AdditionalSyncNotes)" class="sub-info-cell mb-2">
+			<label>
+				<a class="collapsed text-body" data-bs-toggle="collapse" href="#collapse-content-syncnotes">
+					<i class="fa fa-chevron-circle-down"></i> Sync Notes
+				</a>
+			</label>
+			<pre id="collapse-content-syncnotes"
+			     class="collapse"
+			     style="white-space: pre-wrap">@Model.Submission.AdditionalSyncNotes
+			</pre>
+		</div>
+
 		<small>
-			Submitted by @Model.Submission.Submitter on @Model.Submission.Submitted
+			Submitted by @Model.Submission.Submitter on <timezone-convert asp-for="@Model.Submission.Date" relative-time="false" />
 		</small>
-		<div class="btn-toolbar">
-			<a condition="@canClaimAsJudge" asp-page="Edit" asp-route-id="@Model.Id" asp-page-handler="ClaimForJudging" class="btn btn-success mt-2 me-1">Claim</a>
-			<a condition="@canClaimAsPublisher" asp-page="Edit" asp-route-id="@Model.Id" asp-page-handler="ClaimForPublishing" class="btn btn-success mt-2 me-1">Claim</a>
-			<a asp-page="View" asp-page-handler="Download" asp-route-id="@Model.Id" class="btn btn-primary mt-2"><i class="fa fa-download"></i> Download</a>
-			<a condition="@Model.Submission.TopicId > 0" asp-page="/Forum/Topics/Index" asp-route-id="@Model.Submission.TopicId" class="btn btn-secondary ms-1 mt-2"><i class="fa fa-comments-o"></i> Discuss and Vote</a>
-			<span permission="EditSubmissions" class="btn-separator mt-2"></span>
-			<a condition="@canEdit" asp-page="Edit" asp-route-id="@Model.Id" class="btn btn-primary border border-warning mt-2"><i class="fa fa-pencil"></i> Edit</a>
-			<a permission="CatalogMovies" asp-page="Catalog" asp-route-id="@Model.Id" class="ms-1 btn bg-info text-dark border border-warning mt-2"><i class="fa fa-book"></i> Catalog</a>
-			<a condition="@canPublish" asp-page="Publish" asp-route-id="@Model.Id" class="ms-1 btn btn-warning mt-2">Publish</a>
-			<span class="btn-separator mt-2"></span>
-			<a asp-page="Index" class="btn btn-secondary mt-2"><i class="fa fa-arrow-left"></i> Back to Queue</a>
-			<a asp-page="Index" asp-route-user="@Model.Submission.Submitter" class="ms-1 mt-2 btn btn-secondary">All by this submitter</a>
+		<div class="btn-toolbar mt-2">
+			<a condition="@Model.Submission.TopicId > 0" asp-page="/Forum/Topics/Index" asp-route-id="@Model.Submission.TopicId" class="btn btn-secondary"><i class="fa-regular fa-comments"></i> Discuss and Vote</a>
+			<back-link asp-page="Index" name-override="Queue"></back-link>
+			<a asp-page="Index" asp-route-user="@Model.Submission.Submitter" class="btn btn-secondary">All by submitter</a>
+			<a asp-page="View" asp-page-handler="Download" asp-route-id="@Model.Id" class="btn btn-primary"><i class="fa fa-download"></i> Download</a>
+		</div>
+
+		<div class="btn-toolbar mt-2">
+			<a condition="@canClaimAsJudge" asp-page="Edit" asp-route-id="@Model.Id" asp-page-handler="ClaimForJudging" class="btn btn-success"><i class="fa fa-hand"></i> Claim</a>
+			<a condition="@canClaimAsPublisher" asp-page="Edit" asp-route-id="@Model.Id" asp-page-handler="ClaimForPublishing" class="btn btn-success"><i class="fa fa-hand"></i> Claim</a>
+			<edit-link condition="@Model.CanEdit" asp-page="Edit" asp-route-id="@Model.Id"></edit-link>
+			<a permission="CatalogMovies" asp-page="Catalog" asp-route-id="@Model.Id" class="btn btn-info"><i class="fa fa-book"></i> Catalog</a>
+			<a condition="@canPublish" asp-page="Publish" asp-route-id="@Model.Id" class="btn btn-warning">Publish</a>
 		</div>
 	</div>
 </row>
-<hr />
-<card>
+
+<card class="mb-2">
 	<h5 class="card-header">Submission Comments</h5>
-	<cardbody>
+	<card-body>
 		<div class="card-text">
-			@await Component.RenderWiki(LinkConstants.SubmissionWikiPage + Model.Id)
+			@await Html.RenderWiki(LinkConstants.SubmissionWikiPage + Model.Id)
 		</div>
-	</cardbody>
+	</card-body>
 </card>
-<hr />
+
 <small>
 	Last Edited by @Model.Submission.LastUpdateUser <timezone-convert asp-for="@Model.Submission.LastUpdateTimestamp" in-line="true" />
 </small>
 <br />
 <a asp-page="/Wiki/PageHistory"
    asp-route-path="@(LinkConstants.SubmissionWikiPage + Model.Id)"
-   class="btn bg-info text-dark btn-sm">
-	<i class="fa fa-history"></i> Page History
+   class="btn btn-info btn-sm">
+   <i class="fa fa-history"></i> Page History
 </a>
-<a
-	asp-page="/Wiki/Diff"
-	asp-route-path="@(LinkConstants.SubmissionWikiPage + Model.Id)"
-	class="btn bg-info text-dark btn-sm">
-	Latest diff
+<a asp-page="/Wiki/PageHistory"
+   asp-route-path="@(LinkConstants.SubmissionWikiPage + Model.Id)"
+   asp-route-latest="true"
+   class="btn btn-info btn-sm">
+   Latest diff
 </a>
-<a
-	asp-page="/Wiki/Referrers"
-	asp-route-path="@($"{Model.Id}S")"
-	class="btn bg-info text-dark btn-sm">
-	List Referrers
+<a asp-page="/Wiki/Referrers"
+   asp-route-path="@(Model.Id + "S")"
+   class="btn btn-info btn-sm">
+   List referrers
+</a>
+<a asp-page="/Logs/Index"
+   asp-route-table="Submissions"
+   asp-route-rowId="@Model.Id"
+   class="btn btn-info btn-sm">
+	<i class="fa fa-plus-minus"></i> Change Log
 </a>

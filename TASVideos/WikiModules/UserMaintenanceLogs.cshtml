@@ -1,0 +1,25 @@
+﻿@model UserMaintenanceLogs
+<div condition="@Model.Logs.Any()">
+	<partial name="_Pager" model="Model.Logs" />
+	<standard-table>
+		<sortable-table-head sorting="@Model.GetPaging()" model-type="typeof(UserMaintenanceLogs.LogEntry)" page-override="@Model.CurrentPage" />
+		@foreach(var entry in Model.Logs)
+		{
+			<tr>
+				<td>
+					<profile-link username="@entry.User"></profile-link>
+				</td>
+				<td>
+					<profile-link username="@entry.Editor"></profile-link>
+				</td>
+				<td>
+					<timezone-convert asp-for="@entry.TimeStamp" />
+				</td>
+				<td>
+					@entry.Log
+				</td>
+			</tr>
+		}
+	</standard-table>
+	<partial name="_Pager" model="Model.Logs" />
+</div>

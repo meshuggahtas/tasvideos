@@ -1,60 +1,53 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Settings;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.RssFeeds.Models;
+﻿using TASVideos.Core.Services.Wiki;
 
 namespace TASVideos.Pages.RssFeeds;
 
 [ResponseCache(Duration = 1200)]
-public class PublicationsModel : PageModel
+public class PublicationsModel(ApplicationDbContext db, IWikiPages wikiPages) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public PublicationsModel(
-		ApplicationDbContext db,
-		AppSettings settings)
-	{
-		_db = db;
-		BaseUrl = settings.BaseUrl;
-	}
-
-	public List<RssPublication> Publications { get; set; } = new();
-	public string BaseUrl { get; set; }
+	public List<RssPublication> Publications { get; set; } = [];
 	public async Task<IActionResult> OnGet()
 	{
 		var minTimestamp = DateTime.UtcNow.AddDays(-60);
-		Publications = await _db.Publications
+		Publications = await db.Publications
 			.ByMostRecent()
 			.Where(p => p.CreateTimestamp >= minTimestamp)
-			.Select(p => new RssPublication
-			{
-				Id = p.Id,
-				MovieFileSize = p.MovieFile.Length,
-				CreateTimestamp = p.CreateTimestamp,
-				Title = p.Title,
-				Wiki = p.WikiContent!,
-				TagNames = p.PublicationTags.Select(pt => pt.Tag!.DisplayName).ToList(),
-				Files = p.Files.Select(pf => new RssPublication.File
-				{
-					Path = pf.Path,
-					Type = pf.Type
-				}).ToList(),
-				StreamingUrls = p.PublicationUrls
+			.Select(p => new RssPublication(
+				p.Id,
+				p.MovieFile.Length,
+				p.CreateTimestamp,
+				p.Title,
+				p.PublicationTags.Select(pt => pt.Tag!.DisplayName).ToList(),
+				p.Files
+					.Select(pf => new PubFile(pf.Path, pf.Type))
+					.ToList(),
+				p.PublicationUrls
 					.Where(pu => pu.Type == PublicationUrlType.Streaming)
 					.Where(pu => pu.Url != null)
 					.Select(pu => pu.Url!)
 					.ToList(),
-				Ratings = p.PublicationRatings
+				p.PublicationRatings
 					.Select(pr => pr.Value)
-					.ToList()
-			})
+					.ToList()))
 			.ToListAsync();
 
-		PageResult pageResult = Page();
-		pageResult.ContentType = "application/rss+xml; charset=utf-8";
-		return pageResult;
+		foreach (var pub in Publications)
+		{
+			pub.Wiki = (await wikiPages.PublicationPage(pub.Id))!;
+		}
+
+		return Rss();
 	}
+
+	public record RssPublication(
+		int Id, int MovieFileSize, DateTime CreateTimestamp, string Title, List<string> TagNames, List<PubFile> Files, List<string> StreamingUrls, List<double> Ratings)
+	{
+		public IWikiPage? Wiki { get; set; }
+		public string ScreenshotPath => Files.First(f => f.Type == FileType.Screenshot).Path;
+		public double RatingMin => Ratings.Any() ? Ratings.Min() : 0;
+		public double RatingMax => Ratings.Any() ? Ratings.Max() : 0;
+		public double RatingAverage => Ratings.Any() ? Math.Round(Ratings.Average(), 2) : 0;
+	}
+
+	public record PubFile(string Path, FileType Type);
 }

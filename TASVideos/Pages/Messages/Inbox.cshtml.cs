@@ -1,44 +1,20 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Messages.Models;
-
-namespace TASVideos.Pages.Messages;
+﻿namespace TASVideos.Pages.Messages;
 
 [Authorize]
 [IgnoreAntiforgeryToken]
-public class InboxModel : BasePageModel
+public class InboxModel(IPrivateMessageService privateMessageService) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public InboxModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
+	[FromQuery]
+	public PagingModel Paging { get; set; } = new();
 
 	[FromRoute]
 	public int? Id { get; set; }
 
-	[BindProperty]
-	public IEnumerable<InboxEntry> Messages { get; set; } = new List<InboxEntry>();
+	public PageOf<InboxEntry> Messages { get; set; } = new([], new());
 
 	public async Task OnGet()
 	{
-		Messages = await _db.PrivateMessages
-			.ToUser(User.GetUserId())
-			.ThatAreNotToUserDeleted()
-			.ThatAreNotToUserSaved()
-			.Select(pm => new InboxEntry
-			{
-				Id = pm.Id,
-				Subject = pm.Subject,
-				SendDate = pm.CreateTimestamp,
-				FromUser = pm.FromUser!.UserName,
-				IsRead = pm.ReadOn.HasValue
-			})
-			.ToListAsync();
+		Messages = await privateMessageService.GetInbox(User.GetUserId(), Paging);
 	}
 
 	public async Task<IActionResult> OnPostSave()
@@ -48,16 +24,8 @@ public class InboxModel : BasePageModel
 			return NotFound();
 		}
 
-		var message = await _db.PrivateMessages
-			.ToUser(User.GetUserId())
-			.ThatAreNotToUserDeleted()
-			.SingleOrDefaultAsync(pm => pm.Id == Id);
-
-		if (message is not null)
-		{
-			message.SavedForToUser = true;
-			await _db.SaveChangesAsync();
-		}
+		var result = await privateMessageService.SaveMessage(User.GetUserId(), Id.Value);
+		SetMessage(result, "Message successfully saved", "Unable to save message");
 
 		return BasePageRedirect("Savebox");
 	}
@@ -69,16 +37,8 @@ public class InboxModel : BasePageModel
 			return NotFound();
 		}
 
-		var message = await _db.PrivateMessages
-			.ToUser(User.GetUserId())
-			.ThatAreNotToUserDeleted()
-			.SingleOrDefaultAsync(pm => pm.Id == Id);
-
-		if (message is not null)
-		{
-			message.DeletedForToUser = true;
-			await _db.SaveChangesAsync();
-		}
+		var result = await privateMessageService.DeleteMessage(User.GetUserId(), Id.Value);
+		SetMessage(result, "Message successfully deleted", "Unable to delete message");
 
 		return BasePageRedirect("Inbox");
 	}

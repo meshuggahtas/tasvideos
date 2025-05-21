@@ -1,26 +1,21 @@
 ﻿@page
 @model IndexModel
 @{
-	ViewData["Title"] = "Tag List";
+	ViewData.SetTitle("Tag List");
 }
-
-<a class="btn btn-primary float-end mb-3" asp-page="Create"><i class="fa fa-plus"></i> Create</a>
-<table class="table table-bordered table-striped table-sm">
-	<tr>
-		<th>Code</th>
-		<th>Display Name</th>
-		<th></th>
-	</tr>
-	@foreach (var tag in Model.Tags)
+<top-button-bar>
+	<add-link asp-page="Create"></add-link>
+</top-button-bar>
+<standard-table>
+	<table-head columns="Code,Display Name,"></table-head>
+	@foreach (var tag in Model.Tags.OrderBy(t => t.Code))
 	{
 		<tr>
 			<td>@tag.Code</td>
 			<td>@tag.DisplayName</td>
-			<td>
-				<a class="btn btn-primary" asp-page="Edit" asp-route-id="@tag.Id">
-					<i class="fa fa-pencil"></i> Edit
-				</a>
-			</td>
+			<td-action-column>
+				<edit-link asp-page="Edit" asp-route-id="@tag.Id"></edit-link>
+			</td-action-column>
 		</tr>
 	}
-</table>
+</standard-table>

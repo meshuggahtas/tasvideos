@@ -1,48 +1,38 @@
-﻿using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Forum;
+﻿using System.Text.Json;
 
 namespace TASVideos.Core.Services;
 
 public interface IForumService
 {
-	Task<PostPositionDto?> GetPostPosition(int postId, bool seeRestricted);
-	Task<ICollection<ForumCategoryDisplayDto>> GetAllCategories();
+	Task<PostPosition?> GetPostPosition(int postId, bool seeRestricted);
+	Task<IReadOnlyCollection<ForumCategoryDisplay>> GetAllCategories();
 	void CacheLatestPost(int forumId, int topicId, LatestPost post);
-	void CacheNewPostActivity(int forumId, int topicId, DateTime createTimestamp);
+	void CacheNewPostActivity(int forumId, int topicId, int postId, DateTime createTimestamp);
+	void CacheEditedPostActivity(int forumId, int topicId, int postId, DateTime createTimestamp);
 	void ClearLatestPostCache();
 	void ClearTopicActivityCache();
-	Task CreatePoll(ForumTopic topic, PollCreateDto poll);
-	Task<int> CreatePost(PostCreateDto post);
-	Task<Dictionary<int, DateTime>?> GetTopicsWithActivity(int subforumId);
+	Task CreatePoll(ForumTopic topic, PollCreate poll);
+	Task<int> CreatePost(PostCreate post);
 	Task<bool> IsTopicLocked(int topicId);
 	Task<AvatarUrls> UserAvatars(int userId);
+	Task<Dictionary<int, (string PostsCreated, string PostsEdited)>> GetPostActivityOfSubforum(int subforumId);
+	Task<int> GetTopicCountInForum(int userId, int topicId);
+	Task<int> GetPostCountInTopic(int userId, int topicId);
 }
 
-internal class ForumService : IForumService
+internal class ForumService(
+	ApplicationDbContext db,
+	ICacheService cacheService,
+	ITopicWatcher topicWatcher)
+	: IForumService
 {
 	internal const string LatestPostCacheKey = "Forum-LatestPost-Mapping";
-	internal const string TopicActivityCacheKey = "Forum-TopicActivity";
-	internal const string TopicActivityJsonCacheKey = "Forum-TopicActivityJson";
-	private readonly ApplicationDbContext _db;
-	private readonly ICacheService _cacheService;
-	private readonly ITopicWatcher _topicWatcher;
+	internal const string PostActivityOfTopicsCacheKey = "Forum-PostActivityOfTopics";
+	internal const string PostActivityOfSubforumsCacheKey = "Forum-PostActivityOfSubforums";
 
-	public ForumService(
-		ApplicationDbContext db,
-		ICacheService cacheService,
-		ITopicWatcher topicWatcher)
+	public async Task<PostPosition?> GetPostPosition(int postId, bool seeRestricted)
 	{
-		_db = db;
-		_cacheService = cacheService;
-		_topicWatcher = topicWatcher;
-	}
-
-	public async Task<PostPositionDto?> GetPostPosition(int postId, bool seeRestricted)
-	{
-		var post = await _db.ForumPosts
+		var post = await db.ForumPosts
 			.ExcludeRestricted(seeRestricted)
 			.SingleOrDefaultAsync(p => p.Id == postId);
 
@@ -51,29 +41,29 @@ internal class ForumService : IForumService
 			return null;
 		}
 
-		var posts = await _db.ForumPosts
+		var posts = await db.ForumPosts
 			.ForTopic(post.TopicId ?? -1)
 			.OldestToNewest()
 			.ToListAsync();
 
 		var position = posts.IndexOf(post);
-		return new PostPositionDto(
+		return new PostPosition(
 			(position / ForumConstants.PostsPerPage) + 1,
 			post.TopicId ?? 0);
 	}
 
-	public async Task<ICollection<ForumCategoryDisplayDto>> GetAllCategories()
+	public async Task<IReadOnlyCollection<ForumCategoryDisplay>> GetAllCategories()
 	{
 		var latestPostMappings = await GetAllLatestPosts();
-		var dto = await _db.ForumCategories
-			.Select(c => new ForumCategoryDisplayDto
+		var dto = await db.ForumCategories
+			.Select(c => new ForumCategoryDisplay
 			{
 				Id = c.Id,
 				Ordinal = c.Ordinal,
 				Title = c.Title,
 				Description = c.Description,
 				Forums = c.Forums
-					.Select(f => new ForumCategoryDisplayDto.Forum
+					.Select(f => new ForumCategoryDisplay.Forum
 					{
 						Id = f.Id,
 						Ordinal = f.Ordinal,
@@ -84,17 +74,18 @@ internal class ForumService : IForumService
 			})
 			.ToListAsync();
 
-		var activitySubforums = await GetSubforumsWithActivity();
+		var allActivityPosts = await GetPostActivityOfSubforums();
 
 		foreach (var forum in dto.SelectMany(c => c.Forums))
 		{
 			if (latestPostMappings.TryGetValue(forum.Id, out var lastPost))
 			{
 				forum.LastPost = lastPost;
-
 			}
-			activitySubforums.TryGetValue(forum.Id, out var activityTopics);
-			forum.ActivityTopics = activityTopics ?? "";
+
+			allActivityPosts.TryGetValue(forum.Id, out var activityPosts);
+			forum.ActivityPostsCreated = activityPosts.PostsCreated ?? "";
+			forum.ActivityPostsEdited = activityPosts.PostsEdited ?? "";
 		}
 
 		return dto;
@@ -102,55 +93,79 @@ internal class ForumService : IForumService
 
 	public void CacheLatestPost(int forumId, int topicId, LatestPost post)
 	{
-		if (_cacheService.TryGetValue(LatestPostCacheKey, out Dictionary<int, LatestPost?> dict))
+		if (cacheService.TryGetValue(LatestPostCacheKey, out Dictionary<int, LatestPost?> dict))
 		{
 			dict[forumId] = post;
-			_cacheService.Set(LatestPostCacheKey, dict, Durations.OneDayInSeconds);
+			cacheService.Set(LatestPostCacheKey, dict, Durations.OneDay);
 		}
 	}
 
-	public void CacheNewPostActivity(int forumId, int topicId, DateTime createTimestamp)
+	public void CacheNewPostActivity(int forumId, int topicId, int postId, DateTime createTimestamp)
 	{
-		if (_cacheService.TryGetValue(TopicActivityCacheKey, out Dictionary<int, Dictionary<int, DateTime>> forumActivity))
+		if (cacheService.TryGetValue(PostActivityOfTopicsCacheKey, out Dictionary<int, Dictionary<int, (string, string)>> forumActivity))
 		{
-			forumActivity.TryGetValue(forumId, out Dictionary<int, DateTime>? subforumActivity);
-			subforumActivity ??= new Dictionary<int, DateTime>();
-			subforumActivity[topicId] = createTimestamp;
+			forumActivity.TryGetValue(forumId, out Dictionary<int, (string, string)>? subforumActivity);
+			subforumActivity ??= [];
+			subforumActivity.TryGetValue(topicId, out (string, string) postActivity);
+			var createPostActivity = postActivity.Item1 == null ? [] : JsonSerializer.Deserialize<Dictionary<int, long>>(postActivity.Item1)!;
+			createPostActivity[postId] = createTimestamp.UnixTimestamp();
+			subforumActivity[topicId] = (JsonSerializer.Serialize(createPostActivity), postActivity.Item2);
 			forumActivity[forumId] = subforumActivity;
-			_cacheService.Set(TopicActivityCacheKey, forumActivity, Durations.OneDayInSeconds);
+			cacheService.Set(PostActivityOfTopicsCacheKey, forumActivity, Durations.OneDay);
 		}
-		if (_cacheService.TryGetValue(TopicActivityJsonCacheKey, out Dictionary<int, string> jsonForumActivity))
+
+		if (cacheService.TryGetValue(PostActivityOfSubforumsCacheKey, out Dictionary<int, (string, string)> fullSubforumActivity))
 		{
-			var dictSubforumActivity = new Dictionary<int, string>();
-			jsonForumActivity.TryGetValue(forumId, out string? jsonSubforumActivity);
-			if (jsonSubforumActivity != null)
-			{
-				dictSubforumActivity = JsonSerializer.Deserialize<Dictionary<int, string>>(jsonSubforumActivity) ?? new Dictionary<int, string>();
-			}
-			dictSubforumActivity[topicId] = createTimestamp.UnixTimestamp().ToString();
-			jsonForumActivity[forumId] = JsonSerializer.Serialize(dictSubforumActivity);
-			_cacheService.Set(TopicActivityJsonCacheKey, jsonForumActivity, Durations.OneDayInSeconds);
+			fullSubforumActivity.TryGetValue(forumId, out (string, string) postActivity);
+			var createPostActivity = postActivity.Item1 == null ? [] : JsonSerializer.Deserialize<Dictionary<int, long>>(postActivity.Item1)!;
+			createPostActivity[postId] = createTimestamp.UnixTimestamp();
+			fullSubforumActivity[forumId] = (JsonSerializer.Serialize(createPostActivity), postActivity.Item2);
+			cacheService.Set(PostActivityOfSubforumsCacheKey, fullSubforumActivity, Durations.OneDay);
+		}
+	}
+
+	public void CacheEditedPostActivity(int forumId, int topicId, int postId, DateTime editTimestamp)
+	{
+		if (cacheService.TryGetValue(PostActivityOfTopicsCacheKey, out Dictionary<int, Dictionary<int, (string, string)>> forumActivity))
+		{
+			forumActivity.TryGetValue(forumId, out Dictionary<int, (string, string)>? subforumActivity);
+			subforumActivity ??= [];
+			subforumActivity.TryGetValue(topicId, out (string, string) postActivity);
+			var editPostActivity = postActivity.Item2 == null ? [] : JsonSerializer.Deserialize<Dictionary<int, long>>(postActivity.Item2)!;
+			editPostActivity[postId] = editTimestamp.UnixTimestamp();
+			subforumActivity[topicId] = (postActivity.Item1, JsonSerializer.Serialize(editPostActivity));
+			forumActivity[forumId] = subforumActivity;
+			cacheService.Set(PostActivityOfTopicsCacheKey, forumActivity, Durations.OneDay);
+		}
+
+		if (cacheService.TryGetValue(PostActivityOfSubforumsCacheKey, out Dictionary<int, (string, string)> fullSubforumActivity))
+		{
+			fullSubforumActivity.TryGetValue(forumId, out (string, string) postActivity);
+			var editPostActivity = postActivity.Item2 == null ? [] : JsonSerializer.Deserialize<Dictionary<int, long>>(postActivity.Item2)!;
+			editPostActivity[postId] = editTimestamp.UnixTimestamp();
+			fullSubforumActivity[forumId] = (postActivity.Item1, JsonSerializer.Serialize(editPostActivity));
+			cacheService.Set(PostActivityOfSubforumsCacheKey, fullSubforumActivity, Durations.OneDay);
 		}
 	}
 
 	public void ClearLatestPostCache()
 	{
-		_cacheService.Remove(LatestPostCacheKey);
+		cacheService.Remove(LatestPostCacheKey);
 	}
 
 	public void ClearTopicActivityCache()
 	{
-		_cacheService.Remove(TopicActivityCacheKey);
-		_cacheService.Remove(TopicActivityJsonCacheKey);
+		cacheService.Remove(PostActivityOfTopicsCacheKey);
+		cacheService.Remove(PostActivityOfSubforumsCacheKey);
 	}
 
-	public async Task CreatePoll(ForumTopic topic, PollCreateDto pollDto)
+	public async Task CreatePoll(ForumTopic topic, PollCreate pollDto)
 	{
 		var poll = new ForumPoll
 		{
 			TopicId = topic.Id,
 			Question = pollDto.Question ?? "",
-			CloseDate = pollDto.DaysOpen.HasValue
+			CloseDate = pollDto.DaysOpen > 0
 				? DateTime.UtcNow.AddDays(pollDto.DaysOpen.Value)
 				: null,
 			MultiSelect = pollDto.MultiSelect,
@@ -163,12 +178,12 @@ internal class ForumService : IForumService
 				.ToList()
 		};
 
-		_db.ForumPolls.Add(poll);
+		db.ForumPolls.Add(poll);
 		topic.Poll = poll;
-		await _db.SaveChangesAsync();
+		await db.SaveChangesAsync();
 	}
 
-	public async Task<int> CreatePost(PostCreateDto post)
+	public async Task<int> CreatePost(PostCreate post)
 	{
 		var forumPost = new ForumPost
 		{
@@ -184,18 +199,18 @@ internal class ForumService : IForumService
 			EnableHtml = false,
 			EnableBbCode = true
 		};
-		_db.ForumPosts.Add(forumPost);
-		await _db.SaveChangesAsync();
+		db.ForumPosts.Add(forumPost);
+		await db.SaveChangesAsync();
 		CacheLatestPost(post.ForumId, post.TopicId, new LatestPost(forumPost.Id, forumPost.CreateTimestamp, post.PosterName));
-		CacheNewPostActivity(post.ForumId, post.TopicId, forumPost.CreateTimestamp);
+		CacheNewPostActivity(post.ForumId, post.TopicId, forumPost.Id, forumPost.CreateTimestamp);
 
 		if (post.WatchTopic)
 		{
-			await _topicWatcher.WatchTopic(post.TopicId, post.PosterId, canSeeRestricted: true);
+			await topicWatcher.WatchTopic(post.TopicId, post.PosterId, canSeeRestricted: true);
 		}
 		else
 		{
-			await _topicWatcher.UnwatchTopic(post.TopicId, post.PosterId);
+			await topicWatcher.UnwatchTopic(post.TopicId, post.PosterId);
 		}
 
 		return forumPost.Id;
@@ -203,12 +218,12 @@ internal class ForumService : IForumService
 
 	internal async Task<IDictionary<int, LatestPost?>> GetAllLatestPosts()
 	{
-		if (_cacheService.TryGetValue(LatestPostCacheKey, out Dictionary<int, LatestPost?> dict))
+		if (cacheService.TryGetValue(LatestPostCacheKey, out Dictionary<int, LatestPost?> dict))
 		{
 			return dict;
 		}
 
-		var raw = await _db.Forums
+		var raw = await db.Forums
 			.Select(f => new
 			{
 				f.Id,
@@ -227,28 +242,31 @@ internal class ForumService : IForumService
 			tvalue => tvalue.LatestPost is null ? null : new LatestPost(
 				tvalue.LatestPost.Id,
 				tvalue.LatestPost.CreateTimestamp,
-				tvalue.LatestPost.UserName ?? ""));
+				tvalue.LatestPost.UserName));
 
-		_cacheService.Set(LatestPostCacheKey, dict, Durations.OneDayInSeconds);
+		cacheService.Set(LatestPostCacheKey, dict, Durations.OneDay);
 
 		return dict;
 	}
 
-	internal async Task<Dictionary<int,Dictionary<int,DateTime>>> GetAllForumActivity()
+	internal async Task<Dictionary<int, Dictionary<int, (string PostsCreated, string PostsEdited)>>> GetPostActivityOfTopics()
 	{
-		if(_cacheService.TryGetValue(TopicActivityCacheKey, out Dictionary<int, Dictionary<int, DateTime>> forumActivity))
+		if (cacheService.TryGetValue(PostActivityOfTopicsCacheKey, out Dictionary<int, Dictionary<int, (string, string)>> forumActivity))
 		{
 			return forumActivity;
 		}
 
-		var fullrow = await _db.ForumPosts
-			.Where(fp => fp.CreateTimestamp > DateTime.UtcNow.AddDays(-ForumConstants.DaysTopicsCountAsActive))
+		DateTime minimumDate = DateTime.UtcNow.AddDays(-(ForumConstants.DaysPostsCountAsActive - 1)); // we subtract 1 day here because we cache activity for 1 day
+
+		var fullrow = await db.ForumPosts
+			.Where(fp => fp.CreateTimestamp > minimumDate || fp.PostEditedTimestamp > minimumDate)
 			.Select(fp => new
 			{
 				fp.Id,
 				TopicId = fp.TopicId ?? 0,
 				fp.ForumId,
-				fp.CreateTimestamp
+				fp.CreateTimestamp,
+				fp.PostEditedTimestamp
 			})
 			.ToListAsync();
 		forumActivity = fullrow
@@ -257,53 +275,135 @@ internal class ForumService : IForumService
 				tkey => tkey.Key,
 				tvalue => tvalue
 					.GroupBy(ffr => ffr.TopicId)
-					.ToDictionary(ttkey => ttkey.Key, ttvalue => ttvalue.Max(fffr => fffr.CreateTimestamp)));
+					.ToDictionary(
+						ttkey => ttkey.Key,
+						ttvalue => (
+							JsonSerializer.Serialize(ttvalue
+								.Where(fffr => fffr.CreateTimestamp > minimumDate)
+								.ToDictionary(
+									tttkey => tttkey.Id,
+									tttvalue => tttvalue.CreateTimestamp.UnixTimestamp())),
+							JsonSerializer.Serialize(ttvalue
+								.Where(fffr => fffr.PostEditedTimestamp != null && fffr.PostEditedTimestamp > minimumDate)
+								.ToDictionary(
+									tttkey => tttkey.Id,
+									tttvalue => ((DateTime)tttvalue.PostEditedTimestamp!).UnixTimestamp()))
+						)));
 
-		_cacheService.Set(TopicActivityCacheKey, forumActivity, Durations.OneDayInSeconds);
+		cacheService.Set(PostActivityOfTopicsCacheKey, forumActivity, Durations.OneDay);
 
 		return forumActivity;
 	}
 
-	internal async Task<Dictionary<int, string>> GetSubforumsWithActivity()
+	public async Task<Dictionary<int, (string, string)>> GetPostActivityOfSubforum(int subforumId)
 	{
-		if (_cacheService.TryGetValue(TopicActivityJsonCacheKey, out Dictionary<int, string> subforumActivity))
+		(await GetPostActivityOfTopics()).TryGetValue(subforumId, out var activityTopics);
+		return activityTopics ?? [];
+	}
+
+	public async Task<int> GetTopicCountInForum(int userId, int forumId)
+		=> await db.ForumTopics
+			.ForForum(forumId)
+			.CountAsync(fp => fp.PosterId == userId);
+
+	public async Task<int> GetPostCountInTopic(int userId, int topicId)
+		=> await db.ForumPosts
+			.ForTopic(topicId)
+			.CountAsync(fp => fp.PosterId == userId);
+
+	internal async Task<Dictionary<int, (string PostsCreated, string PostsEdited)>> GetPostActivityOfSubforums()
+	{
+		if (cacheService.TryGetValue(PostActivityOfSubforumsCacheKey, out Dictionary<int, (string, string)> subforumActivity))
 		{
 			return subforumActivity;
 		}
-		subforumActivity = new Dictionary<int, string>();
-		var forumActivity = await GetAllForumActivity();
-		foreach (var (subforumId, dict) in forumActivity)
-		{
-			var stringDict = new Dictionary<int, string>();
-			foreach (var (topicId, datetime) in dict)
-			{
-				stringDict[topicId] = datetime.UnixTimestamp().ToString();
-			}
-			subforumActivity[subforumId] = JsonSerializer.Serialize(stringDict);
-		}
 
-		_cacheService.Set(TopicActivityJsonCacheKey, subforumActivity, Durations.OneDayInSeconds);
+		DateTime minimumDate = DateTime.UtcNow.AddDays(-(ForumConstants.DaysPostsCountAsActive - 1)); // we subtract 1 day here because we cache activity for 1 day
+
+		var fullrow = await db.ForumPosts
+			.Where(fp => fp.CreateTimestamp > minimumDate || fp.PostEditedTimestamp > minimumDate)
+			.Select(fp => new
+			{
+				fp.Id,
+				TopicId = fp.TopicId ?? 0,
+				fp.ForumId,
+				fp.CreateTimestamp,
+				fp.PostEditedTimestamp
+			})
+			.ToListAsync();
+		subforumActivity = fullrow
+			.GroupBy(fr => fr.ForumId)
+			.ToDictionary(
+				tkey => tkey.Key,
+				tvalue => (
+					JsonSerializer.Serialize(tvalue
+						.Where(ffr => ffr.CreateTimestamp > minimumDate)
+						.ToDictionary(
+							ttkey => ttkey.Id,
+							ttvalue => ttvalue.CreateTimestamp.UnixTimestamp())),
+					JsonSerializer.Serialize(tvalue
+						.Where(ffr => ffr.PostEditedTimestamp != null && ffr.PostEditedTimestamp > minimumDate)
+						.ToDictionary(
+							ttkey => ttkey.Id,
+							ttvalue => ((DateTime)ttvalue.PostEditedTimestamp!).UnixTimestamp()))
+				));
+
+		cacheService.Set(PostActivityOfSubforumsCacheKey, subforumActivity, Durations.OneDay);
 
 		return subforumActivity;
 	}
 
-	public async Task<Dictionary<int, DateTime>?> GetTopicsWithActivity(int subforumId)
-	{
-		var forumActivity = await GetAllForumActivity();
-		forumActivity.TryGetValue(subforumId, out Dictionary<int, DateTime>? topicsWithActivity);
-		return topicsWithActivity;
-	}
-
-	public async Task<bool> IsTopicLocked(int topicId)
-	{
-		return await _db.ForumTopics.AnyAsync(t => t.Id == topicId && t.IsLocked);
-	}
+	public async Task<bool> IsTopicLocked(int topicId) => await db.ForumTopics.AnyAsync(t => t.Id == topicId && t.IsLocked);
 
 	public async Task<AvatarUrls> UserAvatars(int userId)
 	{
-		return await _db.Users
+		return await db.Users
 			.Where(u => u.Id == userId)
 			.Select(u => new AvatarUrls(u.Avatar, u.MoodAvatarUrlBase))
 			.SingleAsync();
 	}
+}
+
+public record LatestPost(int Id, DateTime Timestamp, string PosterName);
+
+public class ForumCategoryDisplay
+{
+	public int Id { get; init; }
+	public int Ordinal { get; init; }
+	public string Title { get; init; } = "";
+	public string? Description { get; init; }
+
+	public IEnumerable<Forum> Forums { get; init; } = [];
+	public class Forum
+	{
+		public int Id { get; init; }
+		public int Ordinal { get; init; }
+		public bool Restricted { get; init; }
+		public string Name { get; init; } = "";
+		public string? Description { get; init; }
+		public LatestPost? LastPost { get; set; }
+		public string ActivityPostsCreated { get; set; } = "";
+		public string ActivityPostsEdited { get; set; } = "";
+	}
+}
+
+public record PostPosition(int Page, int TopicId);
+
+public record PollCreate(string? Question, int? DaysOpen, bool MultiSelect, IEnumerable<string> Options);
+public record PostCreate(
+	int ForumId,
+	int TopicId,
+	string? Subject,
+	string Text,
+	int PosterId,
+	string PosterName,
+	ForumPostMood Mood,
+	string IpAddress,
+	bool WatchTopic);
+
+public record AvatarUrls(string? Avatar, string? MoodBase)
+{
+	public bool HasMoods => !string.IsNullOrWhiteSpace(MoodBase);
+	public bool HasAvatar => !HasMoods && !string.IsNullOrWhiteSpace(Avatar);
+	public string ToMoodUrl(ForumPostMood mood) => MoodBase?.Replace("$", ((int)mood).ToString()) ?? "";
 }

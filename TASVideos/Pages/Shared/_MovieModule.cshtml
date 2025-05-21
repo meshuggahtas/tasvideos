@@ -1,70 +1,49 @@
-﻿@model TASVideos.Pages.Publications.Models.PublicationDisplayModel
+﻿@model TASVideos.Pages.Publications.IndexModel.PublicationDisplay
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor Accessor
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
-	var classIconPath2X = "";
-	var classIconPath4X = "";
-	if (!string.IsNullOrWhiteSpace(Model!.ClassIconPath))
-	{
-		classIconPath2X = $"{Model.ClassIconPath.Split('.')[0]}-2x.png";
-		classIconPath4X = $"{Model.ClassIconPath.Split('.')[0]}-4x.png";
-	}
 	var requestToken = Antiforgery.GetAndStoreTokens(Context).RequestToken;
 	var canRate = User.Has(PermissionTo.RateMovies);
 	var ratingString = Model.Rating.Unrated ? "Rate" : $"Rated {Model.Rating.Rating} / 10";
+	var temp = Model.OnlineWatchingUrls.ToList();
+	var preferredWatchUrl = temp.Count == 1
+		? temp[0]
+		: temp.FirstOrDefault(t => t.Url?.Contains("youtube") ?? false);
 }
 
-@inject IAwards _awards
+@inject IAwards Awards
 @{
-	var publicationAwards = await _awards.ForPublication(Model.Id);
+	var publicationAwards = await Awards.ForPublication(Model.Id);
 }
 
 @functions{
-	static string RomAndVersionDisplay(string? version, string? region)
+	static string StreamingSiteDisplay(string? onlineWatchingUrl)
 	{
-		string regionDisplay = RegionDisplay(region);
-		if (string.IsNullOrWhiteSpace(version) && string.IsNullOrWhiteSpace(regionDisplay))
+		if (string.IsNullOrWhiteSpace(onlineWatchingUrl))
 		{
 			return "";
 		}
 
-		if (string.IsNullOrWhiteSpace(regionDisplay))
+		var lowered = onlineWatchingUrl.ToLower();
+		if (lowered.Contains("youtube"))
 		{
-			return version ?? "";
+			return " on YouTube";
 		}
 
-		if (string.IsNullOrWhiteSpace(version))
+		if (lowered.Contains("nicovideo"))
 		{
-			return regionDisplay;
+			return " on Niconico";
 		}
 
-		return $"{regionDisplay}, {version}";
-	}
-
-	static string RegionDisplay(string? region)
-	{
-		if (string.IsNullOrWhiteSpace(region))
-		{
-			return "";
-		}
-
-		return region switch
-		{
-			"J" => "Japan",
-			"E" => "Europe",
-			"EU" => "USA/Europe",
-			_ => ""
-		};
+		return "";
 	}
 }
 
 <card class="border border-primary">
-	<cardheader class="bg-cardprimary p-2">
+	<card-header class="bg-publication p-2">
 		<div class="gx-3 clearfix">
-			<div class="float-start" condition="!string.IsNullOrWhiteSpace(Model.ClassIconPath)">
-				<img  class="me-1" width="18" src="/@classIconPath2X"
-					srcset="/@Model.ClassIconPath .5x,
-					/@classIconPath2X 1x,
-					/@classIconPath4X 2x" />
+			<div class="float-start me-2" condition="!string.IsNullOrWhiteSpace(Model.ClassIconPath)">
+				<icon path="@Model.ClassIconPath" title="@Model.Class" />
 			</div>
 			<div class="float-end">
 				@foreach (var flag in Model.Flags.Where(f => !string.IsNullOrWhiteSpace(f.IconPath)))
@@ -75,38 +54,33 @@
 				}
 			</div>
 			<h4>
-				<a asp-page="/Publications/View" asp-route-id="@Model.Id" class="text-decoration-none"><span class="text-dark">
-						@{
-							var regionAndVersion = RomAndVersionDisplay(Model.RomVersion, Model.Region);
-						}
-					<small condition="!string.IsNullOrWhiteSpace(regionAndVersion)"> (@regionAndVersion)</small>
-					@Model.Title
-				</span></a>
+				<a asp-page="/Publications/View" asp-route-id="@Model.Id" class="text-decoration-none"><span class="text-body-emphasis">@Model.Title</span></a>
 			</h4>
 		</div>
-	</cardheader>
-	<cardbody class="px-2 py-0">
-		<div condition="@Model.ObsoletedById.HasValue" class="col card-subtitle text-dark my-2">
+	</card-header>
+	<card-body class="px-2 py-0">
+		<div condition="@Model.ObsoletedById.HasValue" class="col card-subtitle my-2">
 			<b>This movie has been obsoleted!</b><br />
-			<pub-link id="Model.ObsoletedById!.Value" class="btn bg-dark text-white btn-sm">Obsoleting Movie</pub-link>
+			<pub-link id="Model.ObsoletedById!.Value" class="btn btn-silver btn-sm">Obsoleting Movie</pub-link>
 		</div>
-		<row class="bg-cardsecondary gx-3 py-2">
+		<row class="bg-publication-subtle gx-3 py-2">
 			<div class="col-auto mb-4 mb-md-0 mx-auto text-center text-md-start">
 				<div>
+					<a @(preferredWatchUrl is not null ? $"href={preferredWatchUrl.Url} target=_blank" : null)>
 					<img src="~/media/@Model.Screenshot.Path"
 						 alt="@Model.Screenshot.Description"
 						 title="@Model.Screenshot.Description"
 						 class="w-100 pixelart-image"
 						 loading="lazy" />
+					</a>
 				</div>
 				<div>
 					@foreach (var url in Model.OnlineWatchingUrls)
 					{
 						<a href="@url.Url" class="btn btn-primary btn-sm mt-1" target="_blank">
-							<i class="fa fa-external-link"></i> Watch @(!string.IsNullOrWhiteSpace(url.DisplayName) ? $"{url.DisplayName}" : "")
+							<i class="fa fa-external-link"></i> Watch @(!string.IsNullOrWhiteSpace(url.DisplayName) ? $"{url.DisplayName}" : StreamingSiteDisplay(url.Url))
 						</a>
 					}
-					<a asp-page="/Publications/View" asp-page-handler="Download" asp-route-id="@Model.Id" class="btn btn-primary btn-sm mt-1"><i class="fa fa-download"></i> Download (@System.IO.Path.GetExtension(Model.MovieFileName))</a>
 				</div>
 				<div>
 					<a asp-page="/Submissions/View" asp-route-id="@Model.SubmissionId" class="btn btn-secondary btn-sm mt-1"><i class="fa fa-info-circle"></i> Author notes</a>
@@ -114,82 +88,41 @@
 					   asp-page="/Forum/Topics/Index"
 					   asp-route-id="@Model.TopicId"
 					   class="btn btn-secondary btn-sm mt-1">
-						<i class="fa fa-comments-o"></i> Discuss
+						<i class="fa-regular fa-comments"></i> Discuss
 					</a>
 				</div>
 				<div>
 					<input condition="@canRate" id="RequestVerificationToken" type="hidden" value="@requestToken" />
-					<a condition="@canRate" asp-page="/Publications/Rate" asp-route-id="@Model.Id" onclick="toggleDisplay(@(Model.Id)); return false;" class="btn btn-success btn-sm mt-1" id="ownRating-@(Model.Id)">@ratingString</a>
-					<a asp-page="/Ratings/Index" asp-route-id="@Model.Id" class="btn btn-warning btn-sm mt-1">
-						<i class="fa fa-star-o"></i> <span id="overallRating-@(Model.Id)">@((Model.OverallRating ?? 0).ToOverallRatingString())</span> / 10
+					<a condition="@canRate" asp-page="/Publications/Rate" asp-route-id="@Model.Id" data-rate-btn data-pub-id="@Model.Id" class="btn btn-success btn-sm mt-1" id="ownRating-@(Model.Id)">@ratingString</a>
+					<a asp-page="/Publications/Rate" asp-route-id="@Model.Id" class="btn btn-warning btn-sm mt-1">
+						@if (Model.RatingCount > 0)
+						{
+							@:<i class="fa-regular fa-star"></i> <span id="overallRating-@(Model.Id)">@((Model.OverallRating ?? 0).ToOverallRatingString())</span> / 10
+						}
+						else
+						{
+							@:No Rating
+						}
 					</a>
-					<a asp-page="/Ratings/Index" asp-route-id="@Model.Id" class="btn btn-secondary btn-sm mt-1"><i class="fa fa-list-ul"></i> Votes: <span id="ratingCount-@(Model.Id)">@Model.RatingCount</span></a>
-					<div condition="@canRate" class="mt-1 mb-0 d-none border border-primary bg-cardprimary rounded p-1" id="rate-@(Model.Id)">
-						<button class="btn btn-success btn-sm" onclick="rate(@(Model.Id),false);"><span class="fa fa-save"></span> Save</button>
-						<input asp-for="Rating.Rating" type="number" class="form-control d-inline-block btn-sm" style="width:5em;" min="0" max="10" value="@Model.Rating.Rating" step="0.1" />
-						<button class="btn btn-danger btn-sm" onclick="rate(@(Model.Id),true)"><i class="fa fa-times"></i> Remove</button>
+					<div condition="@canRate" class="mt-1 mb-0 d-none border border-primary bg-publication rounded p-1" id="rate-@(Model.Id)">
+						<button class="btn btn-success btn-sm" data-save-rating-btn data-pub-id="@Model.Id"><span class="fa fa-save"></span> Save</button>
+						<input asp-for="Rating.Rating" class="d-inline-block btn-sm" style="width:5em;" min="0" max="10" value="@Model.Rating.Rating" step="0.1" />
+						<button class="btn btn-danger btn-sm" data-remove-rating-btn data-pub-id="@Model.Id"><i class="fa fa-times"></i> Remove</button>
 						<div>
 						<input id="slider-@(Model.Id)" type="range" class="form-range mw-100 h-auto mt-1" min="0" max="10" value="@Model.Rating.Rating" step="0.1" />
 						</div>
 					</div>
 				</div>
-				<script condition="@canRate">
-					function rate(pubId, unrated) {
-						let rating = {};
-						rating.Rating = document.querySelector('#rate-'+pubId+' #Rating_Rating').value;
-						rating.Unrated = unrated;
-						fetch('/Publications/Rate/'+pubId+'?handler=Inline', {
-							method: 'POST',
-							body: JSON.stringify(rating),
-							headers: {
-								RequestVerificationToken:
-								document.getElementById('RequestVerificationToken').value
-							}
-						})
-							.then(r => {
-								if (!r.ok) {
-									throw Error(r.statusText);
-								}
-								return r;
-							})
-							.then(r => r.text())
-							.then(r => {
-								let update = JSON.parse(r);
-								if (unrated) {
-									document.querySelector('#ownRating-'+pubId).innerHTML = 'Rate';
-								} else if (update.Rating !== "") {
-									document.querySelector('#ownRating-'+pubId).innerHTML = 'Rated '+update.Rating+' / 10';
-								}
-								document.querySelector('#ratingCount-'+pubId).innerHTML = update.RatingCount;
-								document.querySelector('#overallRating-'+pubId).innerHTML = update.OverallRating;
-								toggleDisplay(pubId);
-							})
-							.catch(e => alert("Rating failed"));
-					}
-					function toggleDisplay(pubId) {
-						ratingConnect(document.querySelector('#rate-'+pubId+' #Rating_Rating'), document.querySelector('#slider-'+pubId));
-						document.querySelector('#rate-'+pubId).classList.toggle('d-none');
-					}
-					function ratingConnect(textbox, slider) {
-						textbox.oninput = function () {
-							slider.value = textbox.value;
-						};
-						slider.oninput = function () {
-							slider.value = Math.round(Number(this.value) * 2) / 2;
-							textbox.value = slider.value;
-						};
-					}
-				</script>
 				@foreach (var award in publicationAwards.OrderByDescending(a => a.Year))
 				{
 					<partial name="_Award" model="award" />
 				}
 			</div>
 			<div class="col-md">
+				<div class="pb-2 text-body-tertiary"><small>Published <timezone-convert asp-for="@Model.CreateTimestamp" in-line="true" date-only="true" relative-time="false" /></small></div>
 				<fullrow>
-					@await Component.RenderWiki(LinkConstants.PublicationWikiPage + Model.Id)
+					@await Html.RenderWiki(LinkConstants.PublicationWikiPage + Model.Id)
 				</fullrow>
-				<div><small>Published <timezone-convert asp-for="@Model.CreateTimestamp.Date" in-line="true" /></small></div>
 			</div>
 		</row>
 		<row condition="Model.ObsoletedMovies.Any()" class="my-2 gx-3">
@@ -217,69 +150,101 @@
 						Game:<br />
 						<game-link id="@Model.GameId" class="ms-2">@Model.GameName</game-link>
 					</span>
-					<span condition="Model.GenreTags.Any()">
+					<span condition="Model.GameGenres.Any()">
 						<br />Genres:<br />
-						@foreach (var genre in Model.GenreTags)
+						@foreach (var genre in Model.GameGenres)
 						{
-							<a href="/Movies-@genre.Code" class="ms-2">@genre.DisplayName</a><br />
+							<a href="/Movies-@genre" class="ms-2">@genre</a><br />
 						}
 					</span>
 				</small>
 			</div>
-			<div condition="Model.Tags.Any()" class="col-auto">
+			<div condition="@Model.GameVersionId > 0 || Model.Tags.Any()" class="col-auto">
 				<small>
-					Tags:<br />
-					@foreach (var tag in Model.Tags)
-					{
-						<a href="/Movies-@tag.Code" class="ms-2">@tag.DisplayName</a><br />
-					}
+					<span condition="Model.GameVersionId > 0 ">
+						Game Version:<br />
+						<a
+							asp-page="/Games/Versions/View"
+							asp-route-id="@Model.GameVersionId"
+							asp-route-gameid="@Model.GameId"
+							asp-route-returnUrl="@Accessor.HttpContext.CurrentPathToReturnUrl()">
+							@Model.GameVersionName
+						</a><br />
+					</span>
+					<span condition="Model.Tags.Any()">
+						Tags:<br />
+						@foreach (var tag in Model.Tags)
+						{
+							<a href="/Movies-@tag.Code" class="ms-2">@tag.DisplayName</a>
+							<br />
+						}
+					</span>
 				</small>
 			</div>
 			<div class="col-auto">
 				<small condition="Model.MirrorSiteUrls.Any()">
-					A/V files:<br />
+					Video Downloads:<br />
 					<span condition="Model.MirrorSiteUrls.Any()">
 						@foreach (var url in Model.MirrorSiteUrls)
 						{
-							<a href="@url.Url" class="ms-2">
-								@(string.IsNullOrWhiteSpace(url.DisplayName) ? "A/V file" : url.DisplayName) via Mirror
-								<br/>
-							</a>
+							var text = System.IO.Path.GetExtension(url.Url!).Replace(".", "").ToUpper();
+							if (text == "MKV")
+							{
+								text = "High Quality " + text;
+							}
+							else if (text == "MP4")
+							{
+								text = "Compatibility " + text;
+							}
+							if (!string.IsNullOrEmpty(url.DisplayName))
+							{
+								text += $" ({url.DisplayName})";
+							}
+							<a href="@url.Url" class="ms-2">@text<br/></a>
 						}
 					</span>
 				</small>
 			</div>
 			<div class="col-auto">
-				<small condition="!string.IsNullOrWhiteSpace(Model.EmulatorVersion)">
-					Emulator Version:<br /><span class="ms-2">@Model.EmulatorVersion</span>
+				<small>
+					Emulator Replay:
+					<div condition="!string.IsNullOrWhiteSpace(Model.EmulatorVersion)">
+						<span class="ms-2">@Model.EmulatorVersion</span>
+					</div>
+					<div>
+						<a asp-page="/Publications/View" asp-page-handler="Download" asp-route-id="@Model.Id" class="ms-2">
+							<i class="fa fa-download"></i> Download (@System.IO.Path.GetExtension(Model.MovieFileName))
+						</a>
+					</div>
 				</small>
+
 			</div>
 			<div condition="Model.MovieFileLinks.Any()" class="col-auto">
 				<small>
 					Additional Downloads:<br />
 					@foreach (var file in Model.MovieFileLinks)
 					{
-						<a class="ms-2" title="@file.Path" asp-page="/Publications/View" asp-page-handler="DownloadAdditional" asp-route-fileId="@file.Id">(@file.Description)</a>
+						<a class="ms-2" title="@file.Path" asp-page="/Publications/View" asp-page-handler="DownloadAdditional" asp-route-id="@Model.Id" asp-route-fileId="@file.Id">(@file.Description)</a>
 					}
 				</small>
 			</div>
 			<div class="col">
 				<div class="float-end">
-					<a permission="EditPublicationMetaData"
+					<edit-link permission="EditPublicationMetaData"
 					   asp-page="/Publications/Edit"
 					   asp-route-id="@Model.Id"
-					   class="btn btn-secondary btn-sm border border-warning mt-1"><i class="fa fa-pencil"></i> Edit</a>
+					   class="btn-sm mt-1"></edit-link>
 					<a permission="CatalogMovies"
 					   asp-page="/Publications/Catalog"
 					   asp-route-id="@Model.Id"
-					   class="btn btn-secondary btn-sm border border-warning mt-1"><i class="fa fa-book"></i> Catalog</a>
+					   class="btn btn-primary btn-sm mt-1"><i class="fa fa-book"></i> Catalog</a>
 					<a permission="EditPublicationMetaData"
 						href="/MovieMaintenanceLog?id=@Model.Id"
-						class="btn btn-secondary btn-sm border border-warning mt-1">
+						class="btn btn-primary btn-sm mt-1">
 						<i class="fa fa-history"></i> Logs
 					</a>
 					<a permission="Unpublish"
-						class="btn btn-danger btn-sm border border-warning mt-1"
+						class="btn btn-danger btn-sm mt-1"
 						asp-page="/Publications/Unpublish"
 						asp-route-id="@Model.Id">
 						<i class="fa fa-remove"></i> Unpublish
@@ -287,5 +252,5 @@
 				</div>
 			</div>
 		</row>
-	</cardbody>
+	</card-body>
 </card>

@@ -1,0 +1,25 @@
+﻿@model MovieStatistics
+<warning-alert condition="!string.IsNullOrEmpty(Model.ErrorMessage)">
+	@Model.ErrorMessage
+</warning-alert>
+
+<ul condition="Model.General is not null">
+	<li>Published movies: @Model.General!.PublishedMovieCount</li>
+	<li>Total movies (including obsoleted): @Model.General.TotalMovieCount</li>
+	<li>Submitted movies: @Model.General.SubmissionCount</li>
+	<li>Published movie average rerecord count: @Model.General.AverageRerecordCount</li>
+</ul>
+<standard-table condition="Model.Movies.Count > 0">
+	<table-head columns="@($"{Model.FieldHeader},Movie")"></table-head>
+	@foreach (var entry in Model.Movies)
+	{
+		<tr>
+			<td>
+				@entry.DisplayString()
+			</td>
+			<td>
+				<pub-link id="entry.Id">@entry.Title</pub-link>
+			</td>
+		</tr>
+	}
+</standard-table>

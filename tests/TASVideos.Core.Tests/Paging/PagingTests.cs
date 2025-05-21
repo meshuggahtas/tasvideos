@@ -6,7 +6,7 @@ public class PageableTests
 	[TestMethod]
 	public void Pageable_Offset_NullSafe()
 	{
-		var pageable = (IPageable?)null;
+		IPageable? pageable = null;
 
 		// ReSharper disable once ExpressionIsAlwaysNull
 		var actual = pageable.Offset();
@@ -30,15 +30,9 @@ public class PageableTests
 		Assert.AreEqual(expected, actual);
 	}
 
-	private class Pageable : IPageable
+	private class Pageable(int? pageSize, int? currentPage) : IPageable
 	{
-		public Pageable(int? pageSize, int? currentPage)
-		{
-			PageSize = pageSize;
-			CurrentPage = currentPage;
-		}
-
-		public int? PageSize { get; }
-		public int? CurrentPage { get; }
+		public int? PageSize { get; } = pageSize;
+		public int? CurrentPage { get; } = currentPage;
 	}
 }

@@ -1,8 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-
-namespace TASVideos.Core.Services;
+﻿namespace TASVideos.Core.Services;
 
 public enum TagEditResult { Success, Fail, NotFound, DuplicateCode }
 public enum TagDeleteResult { Success, Fail, NotFound, InUse }
@@ -13,32 +9,24 @@ public interface ITagService
 	ValueTask<Tag?> GetById(int id);
 	ValueTask<ListDiff> GetDiff(IEnumerable<int> currentIds, IEnumerable<int> newIds);
 	Task<bool> InUse(int id);
-	Task<(int? id, TagEditResult result)> Add(string code, string displayName);
+	Task<(int? Id, TagEditResult Result)> Add(string code, string displayName);
 	Task<TagEditResult> Edit(int id, string code, string displayName);
 	Task<TagDeleteResult> Delete(int id);
 }
 
-internal class TagService : ITagService
+internal class TagService(ApplicationDbContext db, ICacheService cache) : ITagService
 {
 	internal const string TagsKey = "AllTags";
-	private readonly ApplicationDbContext _db;
-	private readonly ICacheService _cache;
-
-	public TagService(ApplicationDbContext db, ICacheService cache)
-	{
-		_db = db;
-		_cache = cache;
-	}
 
 	public async ValueTask<ICollection<Tag>> GetAll()
 	{
-		if (_cache.TryGetValue(TagsKey, out List<Tag> tags))
+		if (cache.TryGetValue(TagsKey, out List<Tag> tags))
 		{
 			return tags;
 		}
 
-		tags = await _db.Tags.ToListAsync();
-		_cache.Set(TagsKey, tags);
+		tags = await db.Tags.ToListAsync();
+		cache.Set(TagsKey, tags);
 		return tags;
 	}
 
@@ -64,14 +52,11 @@ internal class TagService : ITagService
 		return new ListDiff(currentTags, newTags);
 	}
 
-	public async Task<bool> InUse(int id)
-	{
-		return await _db.PublicationTags.AnyAsync(pt => pt.TagId == id);
-	}
+	public async Task<bool> InUse(int id) => await db.PublicationTags.AnyAsync(pt => pt.TagId == id);
 
-	public async Task<(int? id, TagEditResult result)> Add(string code, string displayName)
+	public async Task<(int? Id, TagEditResult Result)> Add(string code, string displayName)
 	{
-		var entry = _db.Tags.Add(new Tag
+		var entry = db.Tags.Add(new Tag
 		{
 			Code = code,
 			DisplayName = displayName
@@ -79,8 +64,8 @@ internal class TagService : ITagService
 
 		try
 		{
-			await _db.SaveChangesAsync();
-			_cache.Remove(TagsKey);
+			await db.SaveChangesAsync();
+			cache.Remove(TagsKey);
 			return (entry.Entity.Id, TagEditResult.Success);
 		}
 		catch (DbUpdateConcurrencyException)
@@ -100,7 +85,7 @@ internal class TagService : ITagService
 
 	public async Task<TagEditResult> Edit(int id, string code, string displayName)
 	{
-		var tag = await _db.Tags.SingleOrDefaultAsync(t => t.Id == id);
+		var tag = await db.Tags.FindAsync(id);
 		if (tag is null)
 		{
 			return TagEditResult.NotFound;
@@ -111,8 +96,8 @@ internal class TagService : ITagService
 
 		try
 		{
-			await _db.SaveChangesAsync();
-			_cache.Remove(TagsKey);
+			await db.SaveChangesAsync();
+			cache.Remove(TagsKey);
 			return TagEditResult.Success;
 		}
 		catch (DbUpdateConcurrencyException)
@@ -139,15 +124,15 @@ internal class TagService : ITagService
 
 		try
 		{
-			var tag = await _db.Tags.SingleOrDefaultAsync(t => t.Id == id);
+			var tag = await db.Tags.FindAsync(id);
 			if (tag is null)
 			{
 				return TagDeleteResult.NotFound;
 			}
 
-			_db.Tags.Remove(tag);
-			await _db.SaveChangesAsync();
-			_cache.Remove(TagsKey);
+			db.Tags.Remove(tag);
+			await db.SaveChangesAsync();
+			cache.Remove(TagsKey);
 		}
 		catch (DbUpdateConcurrencyException)
 		{
@@ -156,4 +141,85 @@ internal class TagService : ITagService
 
 		return TagDeleteResult.Success;
 	}
+}
+
+public class UserProfile
+{
+	public int Id { get; init; }
+	public string UserName { get; init; } = "";
+	public int PlayerPoints { get; set; }
+	public string PlayerRank { get; set; } = "";
+	public DateTime JoinedOn { get; init; }
+	public DateTime? LastLoggedIn { get; init; }
+	public int PostCount { get; init; }
+	public string? Avatar { get; init; }
+	public string? Location { get; init; }
+	public string? Signature { get; init; }
+	public bool PublicRatings { get; init; }
+	public string? TimeZone { get; init; }
+	public PreferredPronounTypes PreferredPronouns { get; init; }
+
+	// Private info
+	public string? Email { get; init; }
+	public bool EmailConfirmed { get; init; }
+	public bool LockedOutStatus { get; init; }
+	public DateTime? BannedUntil { get; init; }
+	public string? ModeratorComments { get; init; }
+	public int PublicationActiveCount { get; init; }
+	public int PublicationObsoleteCount { get; init; }
+	public bool HasHomePage { get; set; }
+	public bool AnyPublications => PublicationActiveCount + PublicationObsoleteCount > 0;
+	public IEnumerable<string> PublishedSystems { get; set; } = [];
+	public WikiEdit WikiEdits { get; init; } = new();
+	public PublishingSummary Publishing { get; set; } = new();
+	public JudgingSummary Judgments { get; set; } = new();
+	public IEnumerable<RoleSummary> Roles { get; init; } = [];
+	public IEnumerable<AwardAssignmentSummary> Awards { get; set; } = [];
+	public IEnumerable<SubmissionEntry> Submissions { get; set; } = [];
+	public RatingSummary Ratings { get; init; } = new();
+	public UserFileSummary UserFiles { get; init; } = new();
+	public int SubmissionCount => Submissions.Sum(s => s.Count);
+	public bool IsBanned => BannedUntil.HasValue && BannedUntil >= DateTime.UtcNow;
+	public bool BanIsIndefinite => BannedUntil >= DateTime.UtcNow.AddYears(SiteGlobalConstants.YearsOfBanDisplayedAsIndefinite);
+
+	public class SubmissionEntry
+	{
+		public SubmissionStatus Status { get; init; }
+		public int Count { get; init; }
+	}
+
+	public class WikiEdit
+	{
+		public int TotalEdits { get; set; }
+		public DateTime? FirstEdit { get; set; }
+		public DateTime? LastEdit { get; set; }
+
+		public DateTime FirstEditDateTime => FirstEdit ?? DateTime.UtcNow;
+		public DateTime LastEditDateTime => LastEdit ?? DateTime.UtcNow;
+	}
+
+	public class RatingSummary
+	{
+		public int TotalMoviesRated { get; set; }
+	}
+
+	public class UserFileSummary
+	{
+		public int Total { get; init; }
+		public IEnumerable<string> Systems { get; set; } = [];
+	}
+
+	// TODO: more data points
+	public class PublishingSummary
+	{
+		public int TotalPublished { get; init; }
+	}
+
+	// TODO: more data points
+	public class JudgingSummary
+	{
+		public int TotalJudgments { get; init; }
+	}
+
+	public record RoleSummary(string? Name, string Description);
 }

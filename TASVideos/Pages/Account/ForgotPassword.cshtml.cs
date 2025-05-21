@@ -1,48 +1,33 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.Email;
+﻿using TASVideos.Core.Services.Email;
 
 namespace TASVideos.Pages.Account;
 
 [AllowAnonymous]
-public class ForgotPasswordModel : PageModel
+public class ForgotPasswordModel : BasePageModel
 {
-	private readonly UserManager _userManager;
-	private readonly IEmailService _emailService;
-
-	public ForgotPasswordModel(UserManager userManager, IEmailService emailService)
-	{
-		_userManager = userManager;
-		_emailService = emailService;
-	}
-
 	[BindProperty]
-	[Required]
 	[EmailAddress]
 	public string Email { get; set; } = "";
 
-	public async Task<IActionResult> OnPost()
+	public async Task<IActionResult> OnPost(
+		[FromServices] IUserManager userManager, [FromServices] IEmailService emailService)
 	{
-		if (ModelState.IsValid)
+		if (!ModelState.IsValid)
 		{
-			var user = await _userManager.FindByEmailAsync(Email);
-			if (user is null || !await _userManager.IsEmailConfirmedAsync(user))
-			{
-				// Don't reveal that the user does not exist or is not confirmed
-				return RedirectToPage("ForgotPasswordConfirmation");
-			}
+			return Page();
+		}
 
-			var code = await _userManager.GeneratePasswordResetTokenAsync(user);
-			var callbackUrl = Url.ResetPasswordCallbackLink(user.Id.ToString(), code, "https");
-			await _emailService.ResetPassword(Email, callbackUrl);
-
+		var user = await userManager.FindByEmail(Email);
+		if (user is null)
+		{
+			// Don't reveal that the user does not exist
 			return RedirectToPage("ForgotPasswordConfirmation");
 		}
 
-		// If we got this far, something failed, redisplay form
-		return Page();
+		var code = await userManager.GeneratePasswordResetToken(user);
+		var callbackUrl = Url.ResetPasswordCallbackLink(user.Id.ToString(), code);
+		await emailService.ResetPassword(Email, callbackUrl, user.UserName);
+
+		return RedirectToPage("ForgotPasswordConfirmation");
 	}
 }

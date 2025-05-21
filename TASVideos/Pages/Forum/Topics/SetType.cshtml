@@ -1,29 +1,28 @@
 ﻿@page "{topicId}"
 @model SetTypeModel
 @{
-	ViewData["Title"] = $"Setting type for topic for: {Model.TopicTitle}";
+	ViewData.SetTitle($"Setting type for topic for: {Model.TopicTitle}");
 }
+@section PageTitle {
+	Setting type for topic: <a asp-page="/Forum/Subforum/Index" asp-route-id="@Model.ForumId">@Model.ForumName</a> →
+	<a asp-page="/Forum/Topics/Index" asp-route-id="@Model.TopicId">@Model.TopicTitle</a>
+}
+
 <partial Name="_ForumHeader" />
-<h4>Setting type for topic: <a asp-page="/Forum/Subforum/Index" asp-route-id="@Model.ForumId">@Model.ForumName</a></h4>
-
-
-<form method="post">
+<form client-side-validation="true" method="post">
 	<input type="hidden" asp-for="ForumId"/>
 	<input type="hidden" asp-for="ForumName" />
 	<input type="hidden" asp-for="TopicTitle"/>
 	<row>
 		<column md="6">
-			<label asp-for="Type" class="form-control-label"></label>
-			<select type="text" asp-for="Type" class="form-control" asp-items="Model.TopicTypes"></select>
-			<span asp-validation-for="Type" class="text-danger"></span>
+			<label asp-for="Type"></label>
+			<select asp-for="Type" asp-items="Model.TopicTypes"></select>
+			<span asp-validation-for="Type"></span>
 		</column>
 	</row>
-	<div class="text-center mt-3">
-		<button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Save</button>
-		<a asp-page="/Forum/Topics/Index" asp-route-id="@Model.TopicId" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</div>
+	<form-button-bar>
+		<submit-button></submit-button>
+		<cancel-link asp-page="/Forum/Topics/Index" asp-route-id="@Model.TopicId"></cancel-link>
+	</form-button-bar>
 </form>
 
-@section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-}

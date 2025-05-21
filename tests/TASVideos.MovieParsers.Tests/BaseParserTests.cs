@@ -1,32 +1,24 @@
-﻿using System.IO.Compression;
-using System.Reflection;
+﻿using System.Reflection;
+using SharpZipArchive = SharpCompress.Archives.Zip.ZipArchive;
 
 namespace TASVideos.MovieParsers.Tests;
 
 public abstract class BaseParserTests
 {
-	public abstract string ResourcesPath { get; }
+	protected abstract string ResourcesPath { get; }
 
 	protected Stream Embedded(string name)
 	{
 		var stream = Assembly.GetAssembly(typeof(BaseParserTests))?.GetManifestResourceStream(ResourcesPath + name);
-		if (stream is null)
-		{
-			throw new InvalidOperationException($"Unable to find embedded resource {name}");
-		}
-
-		return MakeTestStream(stream);
+		return stream is null
+			? throw new InvalidOperationException($"Unable to find embedded resource {name}")
+			: MakeTestStream(stream);
 	}
 
 	protected long EmbeddedLength(string name)
 	{
 		var stream = Assembly.GetAssembly(typeof(BaseParserTests))?.GetManifestResourceStream(ResourcesPath + name);
-		if (stream is null)
-		{
-			throw new InvalidOperationException($"Unable to find embedded resource {name}");
-		}
-
-		return stream.Length;
+		return stream?.Length ?? throw new InvalidOperationException($"Unable to find embedded resource {name}");
 	}
 
 	private static Stream MakeTestStream(Stream input)
@@ -35,30 +27,27 @@ public abstract class BaseParserTests
 		// in the real site will always be from within a zip file.
 		var ms = new MemoryStream();
 
-		using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, true))
+		using (var zip = SharpZipArchive.Create())
 		{
-			var entry = zip.CreateEntry("foobar");
-			using var dest = entry.Open();
-			input.CopyTo(dest);
+			zip.AddEntry("foobar", input, input.Length);
+			zip.SaveTo(ms);
 		}
 
 		ms.Position = 0;
 
-		var zip2 = new ZipArchive(ms);
-		var movieFile = zip2.Entries[0];
-		var movieFileStream = movieFile.Open();
+		var zip2 = SharpZipArchive.Open(ms);
+		var movieFile = zip2.Entries.First();
+		var movieFileStream = movieFile.OpenEntryStream();
 		return movieFileStream;
 	}
 
 	protected static void AssertNoWarnings(IParseResult result)
 	{
-		Assert.IsNotNull(result.Warnings);
 		Assert.AreEqual(0, result.Warnings.Count());
 	}
 
 	protected static void AssertNoErrors(IParseResult result)
 	{
-		Assert.IsNotNull(result.Errors);
 		Assert.AreEqual(0, result.Errors.Count());
 	}
 

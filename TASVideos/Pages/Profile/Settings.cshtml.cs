@@ -1,62 +1,92 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.Email;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Profile.Models;
+﻿using TASVideos.Core.Services.Email;
 
 namespace TASVideos.Pages.Profile;
 
 [Authorize]
-public class SettingsModel : BasePageModel
+public class SettingsModel(IUserManager userManager, IEmailService emailService, ApplicationDbContext db) : BasePageModel
 {
-	private readonly UserManager _userManager;
-	private readonly IEmailService _emailService;
-	private readonly ApplicationDbContext _db;
+	public static readonly List<SelectListItem> AvailablePronouns = Enum
+		.GetValues<PreferredPronounTypes>()
+		.ToDropDown();
 
-	public SettingsModel(
-		UserManager userManager,
-		IEmailService emailService,
-		ApplicationDbContext db)
-	{
-		_userManager = userManager;
-		_emailService = emailService;
-		_db = db;
-	}
+	public static readonly List<SelectListItem> AvailableUserPreferenceTypes = Enum
+		.GetValues<UserPreference>()
+		.ToDropDown();
 
-	public static readonly IEnumerable<SelectListItem> AvailablePronouns = Enum
-		.GetValues(typeof(PreferredPronounTypes))
-		.Cast<PreferredPronounTypes>()
-		.Select(m => new SelectListItem
-		{
-			Value = ((int)m).ToString(),
-			Text = m.EnumDisplayName()
-		})
-		.ToList();
+	public static readonly List<SelectListItem> AvailableDateFormats = Enum
+		.GetValues<UserDateFormat>()
+		.ToDropDown();
+
+	public static readonly List<SelectListItem> AvailableTimeFormats = Enum
+		.GetValues<UserTimeFormat>()
+		.ToDropDown();
+
+	public static readonly List<SelectListItem> AvailableDecimalFormats = Enum
+		.GetValues<UserDecimalFormat>()
+		.ToDropDown();
+
+	public string Username { get; set; } = "";
+	public string CurrentEmail { get; set; } = "";
+	public bool IsEmailConfirmed { get; set; }
 
 	[BindProperty]
-	public ProfileSettingsModel Settings { get; set; } = new();
+	public string? TimeZone { get; set; } = TimeZoneInfo.Utc.Id;
+
+	[BindProperty]
+	public bool PublicRatings { get; set; }
+
+	[BindProperty]
+	[StringLength(100)]
+	public string? Location { get; set; }
+
+	[BindProperty]
+	[StringLength(1000)]
+	public string? Signature { get; set; }
+
+	[BindProperty]
+	[Url]
+	public string? AvatarUrl { get; set; }
+
+	[BindProperty]
+	[Url]
+	public string? MoodAvatar { get; set; }
+
+	[BindProperty]
+	public PreferredPronounTypes PreferredPronouns { get; set; }
+
+	[BindProperty]
+	public bool EmailOnPrivateMessage { get; set; }
+
+	[BindProperty]
+	public UserPreference AutoWatchTopic { get; set; }
+
+	[BindProperty]
+	public UserDateFormat DateFormat { get; set; }
+
+	[BindProperty]
+	public UserTimeFormat TimeFormat { get; set; }
+
+	[BindProperty]
+	public UserDecimalFormat DecimalFormat { get; set; }
 
 	public async Task OnGet()
 	{
-		var user = await _userManager.GetUserAsync(User);
-		Settings = new ProfileSettingsModel
-		{
-			Username = user.UserName,
-			Email = user.Email,
-			TimeZoneId = user.TimeZoneId,
-			IsEmailConfirmed = user.EmailConfirmed,
-			PublicRatings = user.PublicRatings,
-			From = user.From,
-			Signature = user.Signature,
-			Avatar = user.Avatar,
-			MoodAvatar = user.MoodAvatarUrlBase,
-			PreferredPronouns = user.PreferredPronouns,
-			EmailOnPrivateMessage = user.EmailOnPrivateMessage,
-			Roles = await _userManager.UserRoles(user.Id)
-		};
+		var user = await userManager.GetRequiredUser(User);
+		Username = user.UserName;
+		CurrentEmail = user.Email;
+		IsEmailConfirmed = user.EmailConfirmed;
+		TimeZone = user.TimeZoneId;
+		PublicRatings = user.PublicRatings;
+		Location = user.From;
+		Signature = user.Signature;
+		AvatarUrl = user.Avatar;
+		MoodAvatar = user.MoodAvatarUrlBase;
+		PreferredPronouns = user.PreferredPronouns;
+		EmailOnPrivateMessage = user.EmailOnPrivateMessage;
+		AutoWatchTopic = user.AutoWatchTopic ?? UserPreference.Auto;
+		DateFormat = user.DateFormat;
+		TimeFormat = user.TimeFormat;
+		DecimalFormat = user.DecimalFormat;
 	}
 
 	public async Task<IActionResult> OnPost()
@@ -66,29 +96,16 @@ public class SettingsModel : BasePageModel
 			return Page();
 		}
 
-		var user = await _userManager.GetUserAsync(User);
-
-		var bannedSites = _userManager.BannedAvatarSites().ToList();
-		if (!string.IsNullOrWhiteSpace(user.Avatar))
+		var site = userManager.AvatarSiteIsBanned(AvatarUrl);
+		if (!string.IsNullOrEmpty(site))
 		{
-			foreach (var site in bannedSites)
-			{
-				if (user.Avatar.Contains(site))
-				{
-					ModelState.AddModelError($"{nameof(Settings)}.{nameof(Settings.Avatar)}", $"Using {site} to host avatars is not allowed.");
-				}
-			}
+			ModelState.AddModelError($"{nameof(AvatarUrl)}", $"Using {site} to host avatars is not allowed.");
 		}
 
-		if (!string.IsNullOrWhiteSpace(Settings.MoodAvatar))
+		site = userManager.AvatarSiteIsBanned(MoodAvatar);
+		if (!string.IsNullOrEmpty(site))
 		{
-			foreach (var site in bannedSites)
-			{
-				if (Settings.MoodAvatar.Contains(site))
-				{
-					ModelState.AddModelError($"{nameof(Settings)}.{nameof(Settings.MoodAvatar)}", $"Using {site} to host avatars is not allowed.");
-				}
-			}
+			ModelState.AddModelError($"{nameof(AvatarUrl)}", $"Using {site} to host avatars is not allowed.");
 		}
 
 		if (!ModelState.IsValid)
@@ -96,15 +113,32 @@ public class SettingsModel : BasePageModel
 			return Page();
 		}
 
-		user.TimeZoneId = Settings.TimeZoneId;
-		user.PublicRatings = Settings.PublicRatings;
-		user.From = Settings.From;
-		user.Signature = Settings.Signature;
-		user.Avatar = Settings.Avatar;
-		user.MoodAvatarUrlBase = User.Has(PermissionTo.UseMoodAvatars) ? Settings.MoodAvatar : null;
-		user.PreferredPronouns = Settings.PreferredPronouns;
-		user.EmailOnPrivateMessage = Settings.EmailOnPrivateMessage;
-		await _db.SaveChangesAsync();
+		var user = await userManager.GetRequiredUser(User);
+
+		bool hasUserCustomLocaleChanged = user.DateFormat != DateFormat || user.TimeFormat != TimeFormat || user.DecimalFormat != DecimalFormat;
+
+		user.TimeZoneId = TimeZone ?? TimeZoneInfo.Utc.Id;
+		user.PublicRatings = PublicRatings;
+		user.From = Location;
+		user.Avatar = AvatarUrl;
+		user.MoodAvatarUrlBase = User.Has(PermissionTo.UseMoodAvatars) ? MoodAvatar : null;
+		user.PreferredPronouns = PreferredPronouns;
+		user.EmailOnPrivateMessage = EmailOnPrivateMessage;
+		user.AutoWatchTopic = AutoWatchTopic;
+		user.DateFormat = DateFormat;
+		user.TimeFormat = TimeFormat;
+		user.DecimalFormat = DecimalFormat;
+		if (User.Has(PermissionTo.EditSignature))
+		{
+			user.Signature = Signature;
+		}
+
+		await db.SaveChangesAsync();
+
+		if (hasUserCustomLocaleChanged)
+		{
+			userManager.ClearCustomLocaleCache(User.GetUserId());
+		}
 
 		SuccessStatusMessage("Your profile has been updated");
 		return BasePageRedirect("Settings");
@@ -117,11 +151,11 @@ public class SettingsModel : BasePageModel
 			return Page();
 		}
 
-		var user = await _userManager.GetUserAsync(User);
+		var user = await userManager.GetRequiredUser(User);
 
-		var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-		var callbackUrl = Url.EmailConfirmationLink(user.Id.ToString(), code, Request.Scheme);
-		await _emailService.EmailConfirmation(user.Email, callbackUrl);
+		var code = await userManager.GenerateEmailConfirmationToken(user);
+		var callbackUrl = Url.EmailConfirmationLink(user.Id.ToString(), code);
+		await emailService.EmailConfirmation(user.Email, callbackUrl);
 
 		SuccessStatusMessage("Verification email sent. Please check your email.");
 		return BasePageRedirect("Settings");

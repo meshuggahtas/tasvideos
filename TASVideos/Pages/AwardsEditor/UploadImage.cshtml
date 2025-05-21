@@ -1,0 +1,50 @@
+﻿@page "{year}"
+@model UploadImageModel
+@{
+	ViewData.SetTitle($"Upload Award Image for Year {Model.Year}");
+}
+
+<form method="post" enctype="multipart/form-data">
+	<row>
+		<column md="6">
+			<fieldset>
+				<label asp-for="Award"></label>
+				<select asp-for="Award" data-id="award-dropdown" data-year="@Model.Year" asp-items="Model.AvailableAwardCategories"></select>
+				<span asp-validation-for="Award"></span>
+			</fieldset>
+		</column>
+		<column md="6">
+			<img id="award-image" src="" />
+		</column>
+	</row>
+	<row>
+		<column md="6">
+			<fieldset>
+				<div><small>Note: filename will be auto-generated with the pattern {shortname}_@(Model.Year).png</small></div>
+				<label asp-for="BaseImage"></label>
+				<input asp-for="BaseImage" />
+				<span asp-validation-for="BaseImage"></span>
+			</fieldset>
+			<fieldset>
+				<div><small>Unfortunately, we need the higher res images manually uploaded too, for now</small></div>
+				<label asp-for="BaseImage2X"></label>
+				<input asp-for="BaseImage2X" />
+				<span asp-validation-for="BaseImage2X"></span>
+			</fieldset>
+			<fieldset>
+				<div><small>Unfortunately, we need the higher res images manually uploaded too, for now</small></div>
+				<label asp-for="BaseImage4X"></label>
+				<input asp-for="BaseImage4X" />
+				<span asp-validation-for="BaseImage4X"></span>
+			</fieldset>
+		</column>
+	</row>
+	<form-button-bar>
+		<submit-button><i class="fa fa-upload"></i> Upload</submit-button>
+		<cancel-link asp-page="Index"></cancel-link>
+	</form-button-bar>
+</form>
+
+@section Scripts {
+	<script src="/js/award-preview.js"></script>
+}

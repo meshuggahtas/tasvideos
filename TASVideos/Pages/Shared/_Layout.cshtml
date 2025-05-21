@@ -1,21 +1,29 @@
 ﻿<!DOCTYPE html>
 <html>
+@{
+	var title = ViewData.GetTitle();
+	var canonicalUrl = ViewData.GetCanonicalUrl();
+}
 <head>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<environment include="Production">
 		<meta name="google-site-verification" content="dvluB-ypxKLVGmSQpqBmi9i1xo85I0OmRFD2GhJkTYw" />
 	</environment>
-	<title>@(ViewData["Title"] != null ? ViewData["Title"] + " - " : "")TASVideos</title>
+	<title>@(title is not null ? title + " - " : "")TASVideos</title>
+	<link condition="!string.IsNullOrEmpty(canonicalUrl)" rel="canonical" href="@canonicalUrl" />
 
-	<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous" />
+	<link rel="shortcut icon" href="/@(ViewData.GetFavicon())" type="image/x-icon">
+	<link rel="stylesheet" href="/css/bootstrap.css" />
 	<link rel="stylesheet" href="/css/site.css" />
-	<link rel="stylesheet" id="style-dark-initial" href="/css/darkmode-initial.css" />
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
-		  integrity="sha512-SfTiTlX6kk+qitfevl/7LibUOeJWlt9rbyDn92a1DqWOw9vWG2MFoays0sgObmWazO5BQPiFucnnEAjpAB+/Sw=="
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"
+		  integrity="sha512-Kc323vGBEqzTmouAECnVceyQqyqdsSiqLQISBL29aUW4U/M7pSPA/gEUZQqv1cwx4OnYxTxve5UMg5GT6L4JJg=="
 		  crossorigin="anonymous"
 		  referrerpolicy="no-referrer" />
+	@if (this.Model.HttpContext.Request.Path.ToString().TrimStart('/').StartsWith("Forum/"))
+	{
+		<link rel="stylesheet" href="/css/forum.css" />
+	}
 
 	<script src="~/js/site-head.js"></script>
 
@@ -23,26 +31,13 @@
 	<link rel="alternate" href="/submissions.rss" type="application/rss+xml" title="TASVideos RSS Submission Feed">
 	<link rel="alternate" href="/publications.rss" type="application/rss+xml" title="TASVideos RSS Publication Feed">
 	<link rel="alternate" href="/wiki.rss" type="application/rss+xml" title="TASVideos RSS Wiki Feed">
-
-	@if (IsSectionDefined("Header"))
-	{
-		@await RenderSectionAsync("Header")
-	}
-	else
-	{
-		<meta property="og:type" content="website" />
-		<meta property="og:title" content="TASVideos" />
-		<meta property="og:description" content="Tool-assisted game movies - When human skills are just not enough" />
-		<meta property="og:url" content="@Context.Request.ToUrl()" />
-		<meta property="og:image" content="@($"{Context.Request.ToBaseUrl()}/images/logo-embed.png")" />
-	}
+	<partial name="_MetaTags" />
 </head>
 <body>
 	<nav id="banner" class="navbar navbar-expand-md navbar-dark mb-4">
 		<div class="container-fluid">
 			<div class="site-banner w-100 overflow-hidden position-absolute start-0 top-0">
 				<picture>
-					<source srcset="/images/tasvideosbg.avif" type="image/avif">
 					<source srcset="/images/tasvideosbg.webp" type="image/webp">
 					<img src="/images/tasvideosbg.jpg">
 				</picture>
@@ -77,7 +72,7 @@
 			<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
 				<span class="navbar-toggler-icon"></span>
 			</button>
-			<div class="collapse navbar-collapse" id="navbarCollapse">
+			<div class="collapse navbar-collapse z-2" id="navbarCollapse">
 				<div class="container-fluid">
 					<div class="d-flex">
 						<div class="me-auto">
@@ -92,21 +87,62 @@
 		</div>
 	</nav>
 
-	@{
-		var title = ViewData["Title"]?.ToString();
-		if (ViewData["WikiPage"] != null)
+	@if (ViewData.UsePageTitle())
+	{
+		var heading = ViewData.GetHeading();
+		int? prev = null;
+		int? next = null;
+		string fmtStr = ViewData.GetNavigationFormatStr();
+		if (User.Has(PermissionTo.CatalogMovies))
 		{
-			title = title.SplitCamelCase();
+			var id = ViewData.Int("NavigationId");
+			if (id.HasValue)
+			{
+				prev = id > 1 ? id - 1 : null;
+				next = id + 1;
+			}
 		}
-	}
-	@if (IsSectionDefined("PageTitle"))
-	{
-		@await RenderSectionAsync("PageTitle")
-	}
-	else
-	{
+
+		var permissionsRequired = Context.GetRequiredPermissionsView() as RequirePermissionsView;
+		bool requiresPermissions = permissionsRequired is not null && permissionsRequired.Permissions.Count > 0;
+
 		<div class="container mb-2">
-			<h1 class="card card-header d-block">@title</h1>
+			<h1 class="page-title card card-body d-block">
+				<a condition="prev.HasValue" href="@string.Format(fmtStr!, prev)"><i class="fa fa-arrow-left"></i></a>
+				@if (IsSectionDefined("PageTitle"))
+				{
+					@await RenderSectionAsync("PageTitle")
+				}
+				else
+				{
+					@heading
+				}
+				<a condition="next.HasValue" class="float-end" href="@string.Format(fmtStr!, next)"><i class="fa fa-arrow-right"></i></a>
+				<a condition="requiresPermissions" class="float-end text-body-secondary" data-id="permission-modal-button" href="#"><i class="fa-solid fa-shield-halved"></i></a>
+			</h1>
+		</div>
+
+		<div condition="requiresPermissions" id="permission-modal" class="modal fade" tabindex="-1">
+			<div class="modal-dialog">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h5 class="modal-title"><i class="fa-solid fa-shield-halved"></i> This page requires permissions</h5>
+						<button type='button' class='btn-close' data-bs-dismiss='modal'></button>
+					</div>
+					<div class="modal-body">
+						<p>You can visit this page because you have @(permissionsRequired!.Permissions.Count == 1 ? "" : permissionsRequired.MatchAny ? "one of " : "all of ")the following required permissions:</p>
+						<ul>
+							@foreach (var permission in permissionsRequired.Permissions)
+							{
+								<li>@permission.ToString().SplitCamelCase()</li>
+							}
+						</ul>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-silver" data-bs-dismiss="modal">Close</button>
+					</div>
+				</div>
+			</div>
 		</div>
 	}
 
@@ -114,20 +150,77 @@
 	<alert type="@TempData["MessageType"]" condition="@(!string.IsNullOrWhiteSpace(TempData["MessageType"]?.ToString()))" dismissible="true">
 		@TempData["Message"]
 	</alert>
+	<div asp-validation-summary="ModelOnly" class="alert alert-danger alert-dismissible" role="alert"></div>
 	@RenderBody()
 	<hr/>
 	<footer class="mb-3">
 		<button id="button-scrolltop" class="d-none position-fixed px-3 py-1 m-2 bottom-0 end-0 btn btn-primary fa fa-caret-up"></button>
 		<row class="justify-content-start align-items-center">
-			<p class="col-auto my-auto">&copy; @DateTime.UtcNow.Year - TASVideos <a href="https://github.com/TASVideos/tasvideos/commit/@ViewData["VersionSha"]">v@(ViewData["Version"])</a> - <a href="/api">API</a></p>
+			<p class="">
+					@{
+						var (version, sha) = Versioning.GetVersion();
+					}
+					<a class="btn btn-silver btn-sm mb-2" href="https://github.com/TASVideos/tasvideos/commit/@(sha)">&copy; @DateTime.UtcNow.Year - TASVideos v@(version)</a>
+					<a class="btn btn-info btn-sm mb-2" href="/SiteRules">Terms</a>
+					<a class="btn btn-info btn-sm mb-2" href="/api">API</a>
+					@{
+						string? path = null;
+						if (ViewData.GetWikiPage() is null && this.Model is not (Publications.ViewModel or Submissions.ViewModel))
+						{
+							path = this.Model.HttpContext.Request.Path.ToString().TrimStart('/');
+						}
+					}
+				<a condition="path is not null" class="btn btn-info btn-sm mb-2" asp-page="/Wiki/Referrers" asp-route-path="@path">List referrers</a>
+			</p>
 		</row>
 	</footer>
 </div>
-	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
-			integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p"
+	<script condition="!string.IsNullOrEmpty(canonicalUrl)" src="~/js/replace-url.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"
+			integrity="sha384-HwwvtgBNo3bZJJLYd8oVXjrBZt8cqVSpeBNS5n7C8IVInixGAoxmnlMuBnhbgrkm"
 			crossorigin="anonymous"></script>
 	<script src="~/js/site.js"></script>
-	<script src="~/js/prism.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"
+			integrity="sha512-9khQRAUBYEJDCDVP2yw3LRUQvjJ0Pjx0EShmaQjcHa6AXiOv6qHQu9lCAIR8O+/D8FtaCoJ2c0Tf9Xo7hYH01Q=="
+			crossorigin="anonymous"
+			referrerpolicy="no-referrer"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"
+			integrity="sha512-SkmBfuA2hqjzEVpmnMt/LINrjop3GKWqsuLSSB3e7iBmYK7JuWw4ldmmxwD9mdm2IRTTi0OxSAfEGvgEi0i2Kw=="
+			crossorigin="anonymous"
+			referrerpolicy="no-referrer"></script>
+	@if (ViewData.ClientSideValidationEnabled())
+	{
+		<script src="https://code.jquery.com/jquery-3.6.0.min.js"
+				integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
+				crossorigin="anonymous">
+		</script>
+		<script src="https://cdn.jsdelivr.net/npm/jquery-validation@1.19.3/dist/jquery.validate.min.js"
+				integrity="sha256-TAzGN4WNZQPLqSYvi+dXQMKehTYFoVOnveRqbi42frA="
+				crossorigin="anonymous">
+		</script>
+		<script src="https://cdn.jsdelivr.net/npm/jquery-validation-unobtrusive@3.2.12/dist/jquery.validate.unobtrusive.min.js"
+				integrity="sha256-H8OdhvNWpxCHXd9Osw8R7yOsWj9CQKGDMlujYVBsYMw="
+				crossorigin="anonymous">
+		</script>
+	}
+	<script condition="ViewData.UsesClientFileCompression()"
+		src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako_deflate.min.js"
+		integrity="sha512-oEsmlMj4bUaKNfYtsxV2eZm+5L0I/JhLsXftLFKeywkgAq8QMLKRlZrMIkMC2AHZQ/gT8YtI+fP1WUwNjF1PoQ=="
+		crossorigin="anonymous"
+		referrerpolicy="no-referrer"></script>
+	<script condition="ViewData.UsesSelectImprover()" src="/js/select-improver.js"></script>
+	<noscript condition="ViewData.UsesSelectImprover()"><style>.d-none-except-noscript { display: block !important; }</style></noscript>
+	<script condition="ViewData.UsesUserSearch()" src="/js/user-search.js"></script>
+	<script condition="ViewData.UsesBackupText()" src="/js/backup-text.js"></script>
+	<script condition="ViewData.UsesStringList()" src="/js/string-list.js"></script>
+	<script condition="ViewData.UsesPreview()" src="/js/preview.js"></script>
+	<script condition="ViewData.UsesShowMore()" src="/js/show-more.js"></script>
+	<script condition="ViewData.UsesPostHelper()" src="/js/post-helper.js"></script>
+	<script condition="ViewData.UsesWikiEditHelper()" src="/js/wiki-edit-helper.js"></script>
+	<script condition="ViewData.UsesDiff()" src="/js/diff_match_patch.js"></script>
+	<script condition="ViewData.UsesDiff()" src="/js/diff_view.js"></script>
+	<script condition="ViewData.UsesMoodPreview()" src="/js/mood-preview.js"></script>
+	<script src="/js/prevent-double-submit.js"></script>
 	@await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

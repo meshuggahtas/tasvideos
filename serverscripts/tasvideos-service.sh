@@ -1,8 +1,8 @@
 #!/bin/bash
 ### BEGIN INIT INFO
 # Provides:             tasvideos
-# Required-Start:       mysql nginx postgresql redis-server
-# Required-Stop:        mysql nginx postgresql redis-server
+# Required-Start:       nginx postgresql redis-server
+# Required-Stop:        nginx postgresql redis-server
 # Should-Start:         $local_fs $network
 # Should-Stop:          $local_fs $network
 # Default-Start:        3 4 5
@@ -15,7 +15,6 @@ ACTIVE_USER=tasvideos
 HOME_DIR=/home/tasvideos
 ENVIRONMENT_FILE=/home/tasvideos/environment.txt
 
-DOTNET_RUNTIME=/usr/bin/dotnet
 GIT_PULL_LOCATION=$HOME_DIR/tasvideos
 
 MEDIA_SYMLINK_DIRECTORY=$HOME_DIR/website/static-files/media
@@ -36,49 +35,62 @@ unset runlevel
 
 # Start the TASVideos website.
 start() {
-  if [ -f $PIDFILE ] && kill -0 $(cat $PIDFILE); then
-    echo 'Service already running or was not stopped correctly.' >&2
-    return 1
-  fi
+  echo 'Start()'
 
-  if [ -f $ENVIRONMENT_FILE ]; then
-    ENV=`cat $ENVIRONMENT_FILE`
+  stop
+
+  if [ -f \"$ENVIRONMENT_FILE\" ]; then
+    ENV=$(cat \"$ENVIRONMENT_FILE\")
   else
-    ENV=Staging
+    ENV=Production
   fi
 
-  echo 'Starting TASVideos website with' $ENV 'profile.' >&2
+  echo 'Starting TASVideos website with' "$ENV" 'profile.'
 
-  su -c "start-stop-daemon -SbmCv -x /usr/bin/nohup -p \"$PIDFILE_TEMP\" -d \"$ACTIVE_DIRECTORY\" -- ./TASVideos --urls \"http://127.0.0.1:5000\" --environment \"$ENV\" --StartupStrategy \"Migrate\" -c \"Release\"" $ACTIVE_USER
+  su -c "start-stop-daemon -SbmCv -p \"$PIDFILE_TEMP\" -d \"$ACTIVE_DIRECTORY\" -x \"./TASVideos\" -- --urls \"http://127.0.0.1:5000\" --environment $ENV --StartupStrategy Migrate -c Release" $ACTIVE_USER
+
   cp $PIDFILE_TEMP $PIDFILE
   chown root:root $PIDFILE
 
-  echo 'Website started.' >&2
+  echo 'Website started.'
 }
 
 # Stop the TASVideos website.
 stop() {
-  if [ ! -f "$PIDFILE" ] || ! kill -0 $(cat "$PIDFILE"); then
-    echo 'Website not running' >&2
-    return 1
+  echo 'Stop()'
+
+  if [ ! -f "$PIDFILE" ] || ! kill -0 "$(cat "$PIDFILE")"; then
+    echo 'Website not running'
+  else
+    echo 'Stopping website...'
+
+    su -c "start-stop-daemon -K -p \"$PIDFILE\" -u \"$ACTIVE_USER\" --retry 5"
+    rm -f "$PIDFILE"
+
+    echo 'Website stopped.'
   fi
-
-  echo 'Stopping website...' >&2
-
-  su -c "start-stop-daemon -K -p \"$PIDFILE\"" $WWW_USER
-  rm -f "$PIDFILE"
-  echo 'Website stopped.' >&2
 }
 
 # Grab code from Git and publish (compile) it.
 build() {
-  su -c "cd $GIT_PULL_LOCATION && git fetch --tags --force && git pull && dotnet publish . -c Release -o $BUILD_DIRECTORY" $ACTIVE_USER
+  echo 'Build()'
+
+  su -c "cd \"$GIT_PULL_LOCATION\" && git fetch --tags --force && git pull && dotnet publish TASVideos/TASVideos.csproj -c Release -o \"$BUILD_DIRECTORY\"" $ACTIVE_USER
+}
+
+restart() {
+  echo 'Restart()'
+  
+  stop
+  start
 }
 
 # Move files from the live site directory to a temp directory.
 # Move the published files into the live site directory.
 deploy() {
-  # mv old code into temp location
+  echo 'Starting deployment.'
+
+  # mv current website into temp directory
   mv $ACTIVE_DIRECTORY $TEMP_DIRECTORY
 
   # mv build directory into build location
@@ -87,17 +99,42 @@ deploy() {
   # recreate symlinks
   ln -s $MEDIA_SYMLINK_DIRECTORY $ACTIVE_MEDIA_LOCATION
   ln -s $SAMPLEDATA_SYMLINK_DIRECTORY $ACTIVE_SAMPLEDATA_LOCATION
+
+  echo 'Deploy complete.'
 }
+
+# Move files from the live site directory into a different temp directory.
+# Move the previous temp directory into the live site directory.
+undeploy() {
+  echo 'Reverting last deployment.'
+
+  ls $TEMP_DIRECTORY
+  LS=$?
+
+  if [ $LS -ne 0 ]; then
+    echo 'Error received checking existence of previous deployment.  Aborting revert.'
+    exit $LS
+  fi
+
+  # remove the current build
+  rm -rf $ACTIVE_DIRECTORY
+
+  # mv temp location into build location
+  mv $TEMP_DIRECTORY $ACTIVE_DIRECTORY
+
+  # recreate symlinks
+  ln -s $MEDIA_SYMLINK_DIRECTORY $ACTIVE_MEDIA_LOCATION
+  ln -s $SAMPLEDATA_SYMLINK_DIRECTORY $ACTIVE_SAMPLEDATA_LOCATION
+
+  # delete secondary temp location
+
+  echo 'Revert complete.'
+}
+
 
 # Delete the temp directory.
 cleanup() {
   rm -rf $TEMP_DIRECTORY
-}
-
-# Copy script files (.js and .css) into the live directories.
-copy_scripts() {
-  # TODO: Write this code.
-  echo 'Script not done.'
 }
 
 case "$1" in
@@ -108,22 +145,39 @@ case "$1" in
     stop
     ;;
   restart)
-    stop && start
+    restart
     ;;
-  build)
-    build && stop && deploy && start && cleanup
+  reload)
+    cleanup
+    build
+    stop
+    deploy
+    start
     ;;
-  update-scripts)
-    copy_scripts
+  revert)
+    stop
+    undeploy
+    restart
+    ;;
+  build-only)
+    build
+    ;;
+  commands)
+    echo start - Start the website without updating
+    echo stop - Stop the website
+    echo restart - Stop and Start the website without updating
+    echo reload - Full update.  Pulls latest code and builds it.  Should restart the service afterwards. \(Recommended\)
+    echo revert - Stop the website, revert to the previous build \(which was likely good\), and then start the website again.
+    echo build-only - Pulls the latest code and compiles without affecting the state of the website
     ;;
   *)
-    echo "Usage: $0 {build|restart|start|stop|update-scripts}"
+    echo "Usage: $0 {start|stop|restart|reload|revert|build-only|commands}"
 esac
 
 EC=$?
 
 if [ $EC -ne 0 ]; then
-  echo 'Error code' $EC 'received during' $1 '. Some step failed.'
+  echo 'Error code' $EC 'received during' "$1" '. Some step failed.'
 fi
 
 export runlevel=$TMP_SAVE_runlevel_VAR

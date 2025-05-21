@@ -1,44 +1,40 @@
-@page
+@page "{handler?}"
 @model EditModel
 @{
-	ViewData["Title"] = $"Editing {Model.Path}";
-	var returnUrl = HttpContext.Request.ReturnUrl();
+	ViewData.SetTitle($"Editing {Model.Path}");
 }
-<div asp-validation-summary="All" class="text-danger"></div>
-<form method="POST">
-	<input type="hidden" asp-for="PageToEdit.EditStart" />
-	<form-group>
-		<textarea asp-for="PageToEdit.Markup" class="form-control wiki-edit" rows="20"></textarea>
-		<span asp-validation-for="PageToEdit.Markup" class="text-danger"></span>
-		@await Component.RenderWiki("System/WikiEditHelp")
-	</form-group>
-	<form-group class="col-12">
-		<label asp-for="PageToEdit.RevisionMessage" class="form-control-label"></label>
+
+<form client-side-validation="true" method="post">
+	<input type="hidden" asp-for="EditStart" />
+	<input type="hidden" asp-for="OriginalMarkup" data-diff="left" />
+	<wiki-edit-helper class="mt-2"></wiki-edit-helper>
+	<fieldset>
+		<wiki-textarea asp-for="Markup" rows="20" data-diff="right"></wiki-textarea>
+		<span asp-validation-for="Markup"></span>
+		@await Html.RenderWiki(SystemWiki.WikiEditHelp)
+	</fieldset>
+	<fieldset class="col-12">
+		<label asp-for="EditComments"></label>
 		<div class="input-group">
-			<input type="text" asp-for="PageToEdit.RevisionMessage" class="form-control" autocomplete="off" />
+			<input asp-for="EditComments" autocomplete="off" />
 			<div class="input-group-text">
-				<input type="checkbox" class="form-check-input me-1 mt-0" asp-for="PageToEdit.MinorEdit" />
-				<label asp-for="PageToEdit.MinorEdit" class="form-check-label"></label>
+				<minor-edit></minor-edit>
 			</div>
 		</div>
-		<span>@Html.DescriptionFor(m => m.PageToEdit.RevisionMessage)</span><br />
-		<span asp-validation-for="PageToEdit.RevisionMessage" class="text-danger"></span>
-	</form-group>
-	<div class="text-center">
-		<button type="button" class="btn btn-secondary" id="preview-button">Preview</button>
-		<submit-button class="btn btn-primary"><i class="fa fa-save"></i> Save</submit-button>
-		<a condition="!string.IsNullOrWhiteSpace(returnUrl)" href="@returnUrl" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-		<a condition="string.IsNullOrWhiteSpace(returnUrl)" href="/@Model.Path" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</div>
+		<span>Please enter a descriptive summary of your change. Leaving this blank is discouraged.</span><br />
+		<span asp-validation-for="EditComments"></span>
+	</fieldset>
+	<form-button-bar>
+		<preview-button></preview-button>
+		<submit-button></submit-button>
+		<cancel-link href="/@Model.Path"></cancel-link>
+	</form-button-bar>
 	<div class="text-center alert-info mt-2" role="alert">
 		<label class="alert-info">
-			@await Component.RenderWiki("System/WikiEditNote")
+			@await Html.RenderWiki(SystemWiki.WikiEditNote)
 		</label>
 	</div>
 </form>
 
-<partial name="_PreviewWindow" model="@(("PageToEdit_Markup", "/Wiki/Preview?Id=" + Model.Id))" />
-
-@section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-}
+<diff-panel></diff-panel>
+<wiki-preview preview-path="@("/Wiki/Preview?Id=" + Model.Path)"></wiki-preview>

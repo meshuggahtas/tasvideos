@@ -1,64 +1,96 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
+﻿using TASVideos.Core.Services.Wiki;
 using TASVideos.Core.Services.Youtube;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
 using TASVideos.MovieParsers;
-using TASVideos.Pages.Submissions.Models;
 
 namespace TASVideos.Pages.Submissions;
 
 [RequirePermission(PermissionTo.SubmitMovies)]
-public class SubmitModel : BasePageModel
+public class SubmitModel(
+	ApplicationDbContext db,
+	IExternalMediaPublisher publisher,
+	IWikiPages wikiPages,
+	IMovieParser parser,
+	IUserManager userManager,
+	ITASVideoAgent tasVideoAgent,
+	IYoutubeSync youtubeSync,
+	IMovieFormatDeprecator deprecator,
+	IQueueService queueService,
+	IFileService fileService)
+	: SubmitPageModelBase(parser, fileService)
 {
-	private readonly string _fileFieldName = $"{nameof(Create)}.{nameof(SubmissionCreateModel.MovieFile)}";
-	private readonly ApplicationDbContext _db;
-	private readonly IWikiPages _wikiPages;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly IMovieParser _parser;
-	private readonly UserManager _userManager;
-	private readonly ITASVideoAgent _tasVideoAgent;
-	private readonly IYoutubeSync _youtubeSync;
-	private readonly IMovieFormatDeprecator _deprecator;
-	private readonly IQueueService _queueService;
-
-	public SubmitModel(
-		ApplicationDbContext db,
-		ExternalMediaPublisher publisher,
-		IWikiPages wikiPages,
-		IMovieParser parser,
-		UserManager userManager,
-		ITASVideoAgent tasVideoAgent,
-		IYoutubeSync youtubeSync,
-		IMovieFormatDeprecator deprecator,
-		IQueueService queueService)
-	{
-		_db = db;
-		_publisher = publisher;
-		_wikiPages = wikiPages;
-		_parser = parser;
-		_userManager = userManager;
-		_tasVideoAgent = tasVideoAgent;
-		_youtubeSync = youtubeSync;
-		_deprecator = deprecator;
-		_queueService = queueService;
-	}
+	private const string FileFieldName = $"{nameof(MovieFile)}";
 
 	[BindProperty]
-	public SubmissionCreateModel Create { get; set; } = new();
+	[StringLength(20)]
+	public string? GameVersion { get; init; }
 
-	public void OnGet()
+	[BindProperty]
+	[StringLength(100)]
+	public string GameName { get; init; } = "";
+
+	[BindProperty]
+	[StringLength(50)]
+	public string? GoalName { get; init; }
+
+	[BindProperty]
+	[StringLength(100)]
+	public string RomName { get; init; } = "";
+
+	[BindProperty]
+	[StringLength(50)]
+	public string? Emulator { get; init; }
+
+	[BindProperty]
+	[Url]
+	public string? EncodeEmbeddedLink { get; init; }
+
+	[BindProperty]
+	[MinLength(1)]
+	public IList<string> Authors { get; set; } = [];
+
+	[BindProperty]
+	public string? ExternalAuthors { get; init; }
+
+	[BindProperty]
+	[DoNotTrim]
+	public string Markup { get; init; } = "";
+
+	[BindProperty]
+	[Required]
+	public IFormFile? MovieFile { get; init; }
+
+	[BindProperty]
+	[MustBeTrue(ErrorMessage = "You must read and follow the instructions.")]
+	public bool AgreeToInstructions { get; init; }
+
+	[BindProperty]
+	[MustBeTrue(ErrorMessage = "You must agree to the license.")]
+	public bool AgreeToLicense { get; init; }
+
+	public string BackupSubmissionDeterminator { get; set; } = "";
+
+	public async Task<IActionResult> OnGet()
 	{
-		Create = new SubmissionCreateModel
+		var nextWindow = await queueService.ExceededSubmissionLimit(User.GetUserId());
+		if (nextWindow is not null)
 		{
-			Authors = new List<string> { User.Name() }
-		};
+			return RedirectToPage("ExceededLimit", new { NextWindow = nextWindow.Value });
+		}
+
+		Authors = [User.Name()];
+		BackupSubmissionDeterminator = (await queueService.GetSubmissionCount(User.GetUserId())).ToString();
+
+		return Page();
 	}
 
 	public async Task<IActionResult> OnPost()
 	{
+		var nextWindow = await queueService.ExceededSubmissionLimit(User.GetUserId());
+		if (nextWindow is not null)
+		{
+			return RedirectToPage("ExceededLimit", new { NextWindow = nextWindow.Value });
+		}
+
 		await ValidateModel();
 
 		if (!ModelState.IsValid)
@@ -66,33 +98,33 @@ public class SubmitModel : BasePageModel
 			return Page();
 		}
 
-		var parseResult = await _parser.ParseZip(Create.MovieFile!.OpenReadStream());
-
+		var (parseResult, movieFileBytes) = await ParseMovieFile(MovieFile!);
 		if (!parseResult.Success)
 		{
 			ModelState.AddParseErrors(parseResult);
 			return Page();
 		}
 
-		var deprecated = await _deprecator.IsDeprecated("." + parseResult.FileExtension);
+		var deprecated = await deprecator.IsDeprecated("." + parseResult.FileExtension);
 		if (deprecated)
 		{
-			ModelState.AddModelError(_fileFieldName, $".{parseResult.FileExtension} is no longer submittable");
+			ModelState.AddModelError(FileFieldName, $".{parseResult.FileExtension} is no longer submittable");
 			return Page();
 		}
 
+		using var dbTransaction = await db.Database.BeginTransactionAsync();
 		var submission = new Submission
 		{
-			GameVersion = Create.GameVersion,
-			GameName = Create.GameName,
-			Branch = Create.Branch,
-			RomName = Create.RomName,
-			EmulatorVersion = Create.Emulator,
-			EncodeEmbedLink = _youtubeSync.ConvertToEmbedLink(Create.EncodeEmbedLink),
-			AdditionalAuthors = Create.AdditionalAuthors
+			SubmittedGameVersion = GameVersion,
+			GameName = GameName,
+			Branch = GoalName?.Trim('\"'),
+			RomName = RomName,
+			EmulatorVersion = Emulator,
+			EncodeEmbedLink = youtubeSync.ConvertToEmbedLink(EncodeEmbeddedLink),
+			AdditionalAuthors = ExternalAuthors
 		};
 
-		var error = await _queueService.MapParsedResult(parseResult, submission);
+		var error = await queueService.MapParsedResult(parseResult, submission);
 		if (!string.IsNullOrWhiteSpace(error))
 		{
 			ModelState.AddModelError("", error);
@@ -103,84 +135,82 @@ public class SubmitModel : BasePageModel
 			return Page();
 		}
 
-		submission.MovieFile = await Create.MovieFile.ToBytes();
-		submission.Submitter = await _userManager.GetUserAsync(User);
+		submission.MovieFile = movieFileBytes;
+		submission.Submitter = await userManager.GetRequiredUser(User);
+		if (parseResult.Hashes.Count > 0)
+		{
+			submission.HashType = parseResult.Hashes.First().Key.ToString();
+			submission.Hash = parseResult.Hashes.First().Value;
+		}
 
-		_db.Submissions.Add(submission);
-		await _db.SaveChangesAsync();
+		db.Submissions.Add(submission);
+		await db.SaveChangesAsync();
 
-		await CreateSubmissionWikiPage(submission);
+		await wikiPages.Add(new WikiCreateRequest
+		{
+			PageName = LinkConstants.SubmissionWikiPage + submission.Id,
+			RevisionMessage = $"Auto-generated from Submission #{submission.Id}",
+			Markup = Markup,
+			AuthorId = User.GetUserId()
+		});
 
-		_db.SubmissionAuthors.AddRange(await _db.Users
-			.Where(u => Create.Authors.Contains(u.UserName))
-			.Select(u => new SubmissionAuthor
-			{
-				SubmissionId = submission.Id,
-				UserId = u.Id,
-				Author = u,
-				Ordinal = Create.Authors.IndexOf(u.UserName)
-			})
+		db.SubmissionAuthors.AddRange(await db.Users
+			.ToSubmissionAuthors(submission.Id, Authors)
 			.ToListAsync());
 
 		submission.GenerateTitle();
 
-		submission.TopicId = await _tasVideoAgent.PostSubmissionTopic(submission.Id, submission.Title);
-		await _db.SaveChangesAsync();
+		submission.TopicId = await tasVideoAgent.PostSubmissionTopic(submission.Id, submission.Title);
+		await db.SaveChangesAsync();
+		await dbTransaction.CommitAsync();
 
-		await _publisher.AnnounceSubmission(submission.Title, $"{submission.Id}S");
+		byte[]? screenshotFile = null;
+		if (youtubeSync.IsYoutubeUrl(submission.EncodeEmbedLink))
+		{
+			try
+			{
+				var youtubeEmbedImageLink = "https://i.ytimg.com/vi/" + submission.EncodeEmbedLink!.Split('/').Last() + "/hqdefault.jpg";
+				var client = new HttpClient();
+				var response = await client.GetAsync(youtubeEmbedImageLink);
+				if (response.IsSuccessStatusCode)
+				{
+					screenshotFile = await response.Content.ReadAsByteArrayAsync();
+				}
+			}
+			catch
+			{
+			}
+		}
+
+		await publisher.AnnounceNewSubmission(submission, screenshotFile, screenshotFile is not null ? "image/jpeg" : null, 480, 360);
 
 		return BaseRedirect($"/{submission.Id}S");
 	}
 
 	public async Task<IActionResult> OnGetPrefillText()
 	{
-		var page = await _wikiPages.Page("System/SubmissionDefaultMessage");
-		return new JsonResult(new { text = page?.Markup });
+		var page = await wikiPages.Page("System/SubmissionDefaultMessage");
+		return Json(new { text = page?.Markup });
 	}
 
 	private async Task ValidateModel()
 	{
-		Create.Authors = Create.Authors
-			.Where(a => !string.IsNullOrWhiteSpace(a))
-			.ToList();
-
-		if (!Create.Authors.Any())
+		Authors = Authors.RemoveEmpty();
+		if (!Authors.Any() && string.IsNullOrWhiteSpace(ExternalAuthors))
 		{
 			ModelState.AddModelError(
-				$"{nameof(Create)}.{nameof(SubmissionCreateModel.Authors)}",
+				$"{nameof(Authors)}",
 				"A submission must have at least one author"); // TODO: need to use the AtLeastOne attribute error message since it will be localized
 		}
 
-		if (!Create.MovieFile.IsZip())
-		{
-			ModelState.AddModelError(_fileFieldName, "Not a valid .zip file");
-		}
+		MovieFile?.AddModelErrorIfOverSizeLimit(ModelState, User, movieFieldName: FileFieldName);
 
-		if (!Create.MovieFile.LessThanMovieSizeLimit())
+		foreach (var author in Authors)
 		{
-			ModelState.AddModelError(_fileFieldName, ".zip is too big, are you sure this is a valid movie file?");
-		}
-
-		foreach (var author in Create.Authors)
-		{
-			if (!await _db.Users.Exists(author))
+			if (!await userManager.Exists(author))
 			{
-				ModelState.AddModelError($"{nameof(Create)}.{nameof(SubmissionCreateModel.Authors)}", $"Could not find user: {author}");
+				ModelState.AddModelError($"{nameof(Authors)}", $"Could not find user: {author}");
 			}
 		}
-	}
-
-	private async Task CreateSubmissionWikiPage(Submission submission)
-	{
-		var revision = new WikiPage
-		{
-			PageName = LinkConstants.SubmissionWikiPage + submission.Id,
-			RevisionMessage = $"Auto-generated from Submission #{submission.Id}",
-			Markup = Create.Markup,
-			MinorEdit = false,
-			AuthorId = User.GetUserId()
-		};
-		await _wikiPages.Add(revision);
-		submission.WikiContent = revision;
 	}
 }

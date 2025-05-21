@@ -1,13 +1,12 @@
 ﻿@page
 @model IndexModel
 @{
-	ViewData["Title"] = "Forum";
+	ViewData.SetTitle("Forum");
 }
 
 <div class="clearfix">
 	<partial Name="_ForumHeader" />
-	<a asp-page="/Forum/Subforum/Create" permission="EditForums" class="btn btn-primary btn-sm"><i class="fa fa-plus"></i> Create</a>
-	<div class="float-end pb-2">
+	<top-button-bar>
 		<a asp-page="/Forum/Posts/Latest" class="btn btn-secondary btn-sm">
 			Latest Posts
 		</a>
@@ -17,10 +16,11 @@
 		<a asp-page="/Forum/Posts/Unanswered" class="btn btn-secondary btn-sm">
 			Unanswered Posts
 		</a>
-		<a class="btn btn-secondary btn-sm" onclick="markAllPostsRead()">
+		<button type="button" id="mark-all-posts" class="btn btn-secondary btn-sm">
 			Mark all Posts as read
-		</a>
-	</div>
+		</button>
+		<add-link asp-page="/Forum/Subforum/Create" permission="EditForums" class="btn-sm"></add-link>
+	</top-button-bar>
 </div>
 <div class="clearfix flex-wrap d-flex d-md-block">
 	@foreach (var cat in Model.Categories.OrderBy(c => ((c.Ordinal + 21) % 31) % 22)) // please don't ban me
@@ -31,43 +31,7 @@
 	}
 </div>
 
+<span id="serverUnixTime" class="d-none">@DateTime.UtcNow.UnixTimestamp()</span>
 @section Scripts {
-	<script>
-		let currentTime = Math.floor(Date.now() / 1000);
-		{
-			let visitedTopics = localStorage.getItem('VisitedTopics');
-			if (visitedTopics) {
-				visitedTopics = JSON.parse(visitedTopics);
-			} else {
-				visitedTopics = {};
-			}
-			let activitySubforums = document.getElementsByClassName('activity-subforum');
-			for (let activityTopic of activitySubforums){
-				let activityJson = JSON.parse(activityTopic.dataset.activityJson);
-				let display = false;
-				for (let topicId in activityJson){
-					let lastVisit = visitedTopics[topicId];
-					if (!lastVisit || lastVisit < activityJson[topicId]){
-						display = true;
-						break;
-					}
-				}
-				if (display){
-					activityTopic.classList.remove('d-none');
-				}
-			}
-		}
-		function markAllPostsRead(){
-			let visitedTopics = {};
-			let activitySubforums = document.getElementsByClassName('activity-subforum');
-			for (let activityTopic of activitySubforums){
-				let activityJson = JSON.parse(activityTopic.dataset.activityJson);
-				for (let topicId in activityJson){
-					visitedTopics[topicId] = currentTime;
-				}
-			}
-			localStorage.setItem('VisitedTopics', JSON.stringify(visitedTopics));
-			location.reload();
-		}
-	</script>
+	<script src="/js/forum-index.js"></script>
 }

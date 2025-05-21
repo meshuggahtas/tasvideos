@@ -1,34 +1,15 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Submissions.Models;
+﻿using TASVideos.Common;
 
 namespace TASVideos.Pages.Submissions;
 
 [AllowAnonymous]
-public class IndexModel : BasePageModel
+public class IndexModel(ApplicationDbContext db, IGameSystemService gameSystemService) : BasePageModel
 {
-	private static readonly IEnumerable<SelectListItem> Statuses = Enum.GetValues(typeof(SubmissionStatus))
-		.Cast<SubmissionStatus>()
-		.Select(s => new SelectListItem
-		{
-			Text = s.EnumDisplayName(),
-			Value = ((int)s).ToString()
-		})
-		.OrderBy(s => s.Text)
-		.ToList();
-
-	private readonly ApplicationDbContext _db;
-
-	public IndexModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
+	public static readonly List<SelectListItem> AvailableStatuses = Enum.GetValues<SubmissionStatus>().ToDropDown();
+	public IEnumerable<SelectListItem> AvailableYears => Enumerable
+		.Range(2000, DateTime.UtcNow.Year + 1 - 2000)
+		.OrderByDescending(n => n)
+		.ToDropDown();
 
 	// For legacy routes such as Subs-Rej-422up
 	[FromRoute]
@@ -37,20 +18,14 @@ public class IndexModel : BasePageModel
 	[FromQuery]
 	public SubmissionSearchRequest Search { get; set; } = new();
 
-	public SubmissionPageOf<SubmissionListEntry> Submissions { get; set; } = SubmissionPageOf<SubmissionListEntry>.Empty();
+	public PageOf<SubmissionEntry, SubmissionSearchRequest> Submissions { get; set; } = new([], new());
 
-	[Display(Name = "Statuses")]
-	public IEnumerable<SelectListItem> AvailableStatuses => Statuses;
-
-	public IEnumerable<SelectListItem> SystemList { get; set; } = new List<SelectListItem>();
+	public List<SelectListItem> SystemList { get; set; } = [];
 
 	public async Task OnGet()
 	{
-		SystemList = UiDefaults.DefaultEntry.Concat(
-			await _db.GameSystems
-			.OrderBy(s => s.Code)
-			.ToDropdown()
-			.ToListAsync());
+		SystemList = (await gameSystemService.GetAll())
+			.ToDropDownList().WithDefaultEntry();
 
 		var search = LegacySubListConverter.ToSearchRequest(Query);
 		if (search is not null)
@@ -60,45 +35,97 @@ public class IndexModel : BasePageModel
 
 		// Defaults
 		// Note that we do not provide these for GameId, the assumption is that we want to see all submissions of a given game, not just active ones
-		if (!Search.StatusFilter.Any() && string.IsNullOrWhiteSpace(Search.GameId))
+		if (!Search.Statuses.Any() && string.IsNullOrWhiteSpace(Search.GameId))
 		{
-			Search.StatusFilter = !string.IsNullOrWhiteSpace(Search.User) || Search.Years.Any()
+			Search.Statuses = !string.IsNullOrWhiteSpace(Search.User) || Search.Years.Any()
 				? SubmissionSearchRequest.All
 				: SubmissionSearchRequest.Default;
 		}
 
-		var entries = await _db.Submissions
+		Submissions = await db.Submissions
 			.FilterBy(Search)
-			.ToSubListEntry()
+			.ToSubListEntry(User.GetUserId())
 			.SortedPageOf(Search);
-
-		Submissions = new SubmissionPageOf<SubmissionListEntry>(entries)
-		{
-			PageSize = entries.PageSize,
-			CurrentPage = entries.CurrentPage,
-			RowCount = entries.RowCount,
-			Sort = entries.Sort,
-			Years = Search.Years,
-			StatusFilter = Search.StatusFilter,
-			System = Search.System,
-			User = Search.User
-		};
 	}
 
-	public async Task<IActionResult> OnGetSearchAuthor(string partial)
+	public class SubmissionEntry : ITimeable, ISubmissionDisplay
 	{
-		if (string.IsNullOrWhiteSpace(partial) || partial.Length < 3)
-		{
-			return new JsonResult(Array.Empty<string>());
-		}
+		[Sortable]
+		public string? System { get; init; }
 
-		var upper = partial.ToUpper();
-		var result = await _db.Users
-			.ThatHaveSubmissions()
-			.ThatPartiallyMatch(upper)
-			.Select(u => u.UserName)
-			.ToListAsync();
+		[Sortable]
+		public string? Game { get; init; }
 
-		return new JsonResult(result);
+		[Sortable]
+		public string? Goal { get; init; }
+		public TimeSpan Time => this.Time();
+		public List<string>? By { get; init; }
+
+		[TableIgnore]
+		public string? AdditionalAuthors { get; init; }
+
+		[Sortable]
+		public DateTime Date { get; init; }
+
+		[Sortable]
+		public SubmissionStatus Status { get; init; }
+
+		public VoteCounts? Votes { get; init; }
+
+		[TableIgnore]
+		public int Id { get; init; }
+
+		[TableIgnore]
+		public int Frames { get; init; }
+
+		[TableIgnore]
+		public double FrameRate { get; init; }
+
+		[TableIgnore]
+		public string? Judge { get; init; }
+
+		[TableIgnore]
+		public string? Publisher { get; init; }
+
+		[TableIgnore]
+		public string? IntendedClass { get; init; }
+
+		[TableIgnore]
+		public DateTime? SyncedOn { get; set; }
+	}
+
+	[PagingDefaults(PageSize = 100, Sort = $"{nameof(SubmissionEntry.Date)}")]
+	public class SubmissionSearchRequest : PagingModel, ISubmissionFilter
+	{
+		public ICollection<int> Years { get; set; } = [];
+		public string? System { get; init; }
+		public string? User { get; init; }
+		public string? GameId { get; set; }
+		public int? StartType { get; set; }
+
+		[Display(Name = "Show Sync Verified")]
+		public bool? ShowVerified { get; set; }
+
+		public ICollection<SubmissionStatus> Statuses { get; set; } = [];
+
+		public static ICollection<SubmissionStatus> Default =>
+		[
+			SubmissionStatus.New,
+			SubmissionStatus.JudgingUnderWay,
+			SubmissionStatus.Accepted,
+			SubmissionStatus.PublicationUnderway,
+			SubmissionStatus.NeedsMoreInfo,
+			SubmissionStatus.Delayed
+		];
+
+		public static List<SubmissionStatus> All => [.. Enum.GetValues<SubmissionStatus>()];
+
+		ICollection<string> ISubmissionFilter.Systems => string.IsNullOrWhiteSpace(System)
+			? []
+			: [System];
+
+		ICollection<int> ISubmissionFilter.GameIds => !string.IsNullOrWhiteSpace(GameId) && int.TryParse(GameId, out int _)
+			? [int.Parse(GameId)]
+			: [];
 	}
 }

@@ -4,7 +4,7 @@
 @{
 	const string tvc = "TASVideosChannel";
 
-	ViewData["Title"] = "Youtube Uploaders";
+	ViewData.SetTitle("Youtube Uploaders");
 	var groups = Model.Videos
 		.GroupBy(g => g.ChannelTitle)
 		.OrderByDescending(g => g.Count())
@@ -13,19 +13,28 @@
 	var tvcData = groups.Single(g => g.Key == tvc);
 }
 
+<h4>Non-Obsolete Pubs Without a TASVideosChannel Encode</h4>
+<standard-table>
+	<table-head columns="Id, Publication, Channel"></table-head>
+	@foreach(var channel in Model.Videos.Where(v => !v.IsObsolete).Where(v => v.ChannelTitle != tvc).OrderByDescending(v => v.PublicationId))
+	{
+		<tr>
+			<td>@channel.PublicationId</td>
+			<td><pub-link id="@channel.PublicationId">@channel.PublicationTitle</pub-link></td>
+			<td>@channel.ChannelTitle</td>
+		</tr>
+	}
+</standard-table>
+
 <h4>@tvc</h4>
 <label>Current: @tvcData.Count(d => !d.IsObsolete)</label>
 <br />
 <label>Obsolete: @tvcData.Count(d => d.IsObsolete)</label>
 <br />
 <br />
-
-<table class="table table-sm table-bordered">
-	<tr>
-		<th>Youtube Channel</th>
-		<th>Current Uploads</th>
-		<th>Obsolete Uploads</th>
-	</tr>
+<h4>Non-TVA channels linked on Publications</h4>
+<standard-table>
+	<table-head columns="Youtube Channel,Current Uploads,Obsolete Uploads"></table-head>
 	@foreach (var channel in groups.Where(g => g.Key != tvc))
 	{
 		var obsoleteCount = channel.Count(c => c.IsObsolete);
@@ -42,17 +51,13 @@
 					@currentCount
 				</a>
 			</td>
-			<td condition="currentCount == 0">
-				0
-			</td>
+			<td condition="currentCount == 0">0</td>
 			<td condition="obsoleteCount > 0">
 				<a href="/Movies-@(string.Join("-", channel.Where(c => c.IsObsolete).Select(c => $"{c.PublicationId}M")))">
 					@obsoleteCount
 				</a>
 			</td>
-			<td condition="obsoleteCount == 0">
-				0
-			</td>
+			<td condition="obsoleteCount == 0">0</td>
 		</tr>
 	}
-</table>
+</standard-table>

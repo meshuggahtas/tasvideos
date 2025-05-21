@@ -1,120 +1,108 @@
-﻿using TASVideos.Common;
-using TASVideos.Data.Entity.Forum;
-using TASVideos.Data.Entity.Game;
+﻿using TASVideos.Data.AutoHistory;
 
 namespace TASVideos.Data.Entity;
 
+public enum ShowVerified { All, Verified, NotVerified }
 public interface ISubmissionFilter
 {
-	IEnumerable<SubmissionStatus> StatusFilter { get; }
-	IEnumerable<int> Years { get; }
-	IEnumerable<string> Systems { get; }
+	ICollection<SubmissionStatus> Statuses { get; }
+	ICollection<int> Years { get; }
+	ICollection<string> Systems { get; }
 	string? User { get; }
-	IEnumerable<int> GameIds { get; }
+	ICollection<int> GameIds { get; }
+	int? StartType { get; }
+	bool? ShowVerified { get; }
 }
 
+[IncludeInAutoHistory]
 public class Submission : BaseEntity, ITimeable
 {
 	public int Id { get; set; }
 
-	public int? WikiContentId { get; set; }
-	public virtual WikiPage? WikiContent { get; set; }
-
 	public int? TopicId { get; set; }
-	public virtual ForumTopic? Topic { get; set; }
+	public ForumTopic? Topic { get; set; }
 
-	// TODO: don't make this nullable! Need to fix the importer for this to work
-	public int? SubmitterId { get; set; }
-	public virtual User? Submitter { get; set; }
+	public int SubmitterId { get; set; }
+	public User? Submitter { get; set; }
 
-	public virtual ICollection<SubmissionAuthor> SubmissionAuthors { get; set; } = new HashSet<SubmissionAuthor>();
+	public ICollection<SubmissionAuthor> SubmissionAuthors { get; init; } = [];
 
 	public int? IntendedClassId { get; set; }
-	public virtual PublicationClass? IntendedClass { get; set; }
+	public PublicationClass? IntendedClass { get; set; }
 
 	public int? JudgeId { get; set; }
-	public virtual User? Judge { get; set; }
+	public User? Judge { get; set; }
 
 	public int? PublisherId { get; set; }
-	public virtual User? Publisher { get; set; }
+	public User? Publisher { get; set; }
 
 	public SubmissionStatus Status { get; set; } = SubmissionStatus.New;
-	public virtual ICollection<SubmissionStatusHistory> History { get; set; } = new HashSet<SubmissionStatusHistory>();
+	public ICollection<SubmissionStatusHistory> History { get; init; } = [];
 
-	[Required]
-	public byte[] MovieFile { get; set; } = Array.Empty<byte>();
+	[ExcludeFromAutoHistory]
+	public byte[] MovieFile { get; set; } = [];
 
 	public string? MovieExtension { get; set; }
 
 	public int? GameId { get; set; }
-	public virtual Game.Game? Game { get; set; }
+	public Game.Game? Game { get; set; }
 
-	public int? RomId { get; set; }
-	public virtual GameRom? Rom { get; set; }
+	public int? GameVersionId { get; set; }
+	public GameVersion? GameVersion { get; set; }
 
 	// Metadata parsed from movie file
 	public int? SystemId { get; set; }
-	public virtual GameSystem? System { get; set; }
+	public GameSystem? System { get; set; }
 
 	public int? SystemFrameRateId { get; set; }
-	public virtual GameSystemFrameRate? SystemFrameRate { get; set; }
+	public GameSystemFrameRate? SystemFrameRate { get; set; }
 
-	public virtual Publication? Publication { get; set; }
+	public Publication? Publication { get; set; }
 
 	public int Frames { get; set; }
 	public int RerecordCount { get; set; }
 
 	// Metadata, user entered
-	[StringLength(100)]
 	public string? EncodeEmbedLink { get; set; }
 
-	[StringLength(100)]
-	public string? GameVersion { get; set; }
+	public string? SubmittedGameVersion { get; set; }
 
-	[StringLength(100)]
 	public string? GameName { get; set; }
 
-	[StringLength(50)]
 	public string? Branch { get; set; }
 
-	[StringLength(250)]
 	public string? RomName { get; set; }
 
-	[StringLength(50)]
 	public string? EmulatorVersion { get; set; }
 
 	public int? MovieStartType { get; set; }
 
 	public int? RejectionReasonId { get; set; }
-	public virtual SubmissionRejectionReason? RejectionReason { get; set; }
+	public SubmissionRejectionReason? RejectionReason { get; set; }
 
 	/// <summary>
-	/// Gets or sets Any author's that are not a user. If they are a user, they should linked, and not listed here.
+	/// Gets or sets Any author's that are not a user. If they are a user, they should be linked, and not listed here.
 	/// </summary>
-	[StringLength(200)]
 	public string? AdditionalAuthors { get; set; }
 
 	/// <summary>
 	/// Gets or sets a de-normalized column consisting of the submission title for display when linked or in the queue
 	/// ex: N64 The Legend of Zelda: Majora's Mask "low%" in 1:59:01.
 	/// </summary>
-	[Required]
 	public string Title { get; set; } = "";
+
+	public string? Annotations { get; set; }
 
 	double ITimeable.FrameRate => SystemFrameRate?.FrameRate ?? 0;
 
+	public int? GameGoalId { get; set; }
+	public GameGoal? GameGoal { get; set; }
+
+	public string? HashType { get; set; }
+	public string? Hash { get; set; }
+
 	public void GenerateTitle()
 	{
-		if (System is null)
-		{
-			throw new ArgumentNullException($"{nameof(System)} can not be null.");
-		}
-
-		if (SystemFrameRate is null)
-		{
-			throw new ArgumentNullException($"{nameof(SystemFrameRate)} can not be null.");
-		}
-
 		var authorList = SubmissionAuthors
 			.OrderBy(sa => sa.Ordinal)
 			.Select(sa => sa.Author?.UserName)
@@ -126,19 +114,27 @@ public class Submission : BaseEntity, ITimeable
 		}
 
 		var gameName = GameName;
-		if (Game is not null)
+		if (Game is not null && Game.Id > 0)
 		{
 			gameName = Game.DisplayName;
 		}
 
-		if (Rom is not null && !string.IsNullOrWhiteSpace(Rom.TitleOverride))
+		if (GameVersion is not null && !string.IsNullOrWhiteSpace(GameVersion.TitleOverride))
 		{
-			gameName = Rom.TitleOverride;
+			gameName = GameVersion.TitleOverride;
 		}
 
+		string? goal = GameGoal?.DisplayName;
+		goal = goal switch
+		{
+			null => Branch,
+			"baseline" => null,
+			_ => goal
+		};
+
 		Title =
-		$"#{Id}: {string.Join(", ", authorList).LastCommaToAmpersand()}'s {System.Code} {gameName}"
-			+ (!string.IsNullOrWhiteSpace(Branch) ? $" \"{Branch}\"" : "")
+		$"#{Id}: {string.Join(", ", authorList).LastCommaToAmpersand()}'s {System?.Code ?? "Unknown"} {gameName}"
+			+ (!string.IsNullOrWhiteSpace(goal) ? $" \"{goal}\"" : "")
 			+ $" in {this.Time().ToStringWithOptionalDaysAndHours()}";
 	}
 
@@ -146,21 +142,29 @@ public class Submission : BaseEntity, ITimeable
 	public decimal LegacyTime { get; set; }
 	public decimal ImportedTime { get; set; }
 
-	[StringLength(4096)]
-	public string? LegacyAlerts { get; set; }
+	public string? Warnings { get; set; }
+
+	public long? CycleCount { get; set; }
+
+	public int? SyncedByUserId { get; set; }
+	public User? SyncedByUser { get; set; }
+	public DateTime? SyncedOn { get; set; }
+
+	public string? AdditionalSyncNotes { get; set; }
 }
 
 public static class SubmissionExtensions
 {
-	public static bool CanPublish(this Submission submission)
+	public static bool CanPublish(this Submission submission) => submission is
 	{
-		return submission.SystemId > 0
-			&& submission.SystemFrameRateId > 0
-			&& submission.GameId > 0
-			&& submission.RomId > 0
-			&& submission.IntendedClassId > 0
-			&& submission.Status == SubmissionStatus.PublicationUnderway;
-	}
+		SystemId: > 0,
+		SystemFrameRateId: > 0,
+		GameId: > 0,
+		GameVersionId: > 0,
+		IntendedClassId: > 0,
+		Status: SubmissionStatus.PublicationUnderway,
+		SyncedOn: not null
+	};
 
 	public static IQueryable<Submission> FilterBy(this IQueryable<Submission> query, ISubmissionFilter criteria)
 	{
@@ -175,9 +179,9 @@ public static class SubmissionExtensions
 			query = query.Where(p => criteria.Years.Contains(p.CreateTimestamp.Year));
 		}
 
-		if (criteria.StatusFilter.Any())
+		if (criteria.Statuses.Any())
 		{
-			query = query.Where(s => criteria.StatusFilter.Contains(s.Status));
+			query = query.Where(s => criteria.Statuses.Contains(s.Status));
 		}
 
 		if (criteria.Systems.Any())
@@ -190,23 +194,59 @@ public static class SubmissionExtensions
 			query = query.Where(s => criteria.GameIds.Contains(s.GameId ?? 0));
 		}
 
+		if (criteria.StartType.HasValue)
+		{
+			query = query.Where(s => s.MovieStartType == criteria.StartType);
+		}
+
+		if (criteria.ShowVerified.HasValue)
+		{
+			query = criteria.ShowVerified.Value
+				? query.ThatAreVerified()
+				: query.ThatAreUnverified();
+		}
+
 		return query;
 	}
 
 	public static IQueryable<Submission> ThatAreActive(this IQueryable<Submission> query)
-	{
-		return query.Where(s => s.Status != SubmissionStatus.Published
+		=> query.Where(s => s.Status != SubmissionStatus.Published
+			&& s.Status != SubmissionStatus.Playground
 			&& s.Status != SubmissionStatus.Cancelled
 			&& s.Status != SubmissionStatus.Rejected);
-	}
+
+	public static IQueryable<Submission> ThatAreInActive(this IQueryable<Submission> query)
+		=> query.Where(s => s.Status == SubmissionStatus.Published
+			|| s.Status == SubmissionStatus.Playground
+			|| s.Status == SubmissionStatus.Cancelled
+			|| s.Status == SubmissionStatus.Rejected);
 
 	public static IQueryable<Submission> ThatAreRejected(this IQueryable<Submission> query)
-	{
-		return query.Where(s => s.Status == SubmissionStatus.Rejected);
-	}
+		=> query.Where(s => s.Status == SubmissionStatus.Rejected);
 
 	public static IQueryable<Submission> ThatHaveBeenJudgedBy(this IQueryable<Submission> query, string userName)
-	{
-		return query.Where(s => s.JudgeId.HasValue && s.Judge!.UserName == userName);
-	}
+		=> query.Where(s => s.JudgeId.HasValue && s.Judge!.UserName == userName);
+
+	public static IQueryable<Submission> ForAuthor(this IQueryable<Submission> submissions, int userId)
+		=> submissions.Where(p => p.SubmissionAuthors.Select(pa => pa.UserId).Contains(userId));
+
+	/// <summary>
+	/// Includes all the necessary sub-tables in order to generate a title
+	/// </summary>
+	public static IQueryable<Submission> IncludeTitleTables(this DbSet<Submission> query)
+		=> query
+			.Include(s => s.SubmissionAuthors)
+			.ThenInclude(sa => sa.Author)
+			.Include(s => s.System)
+			.Include(s => s.SystemFrameRate)
+			.Include(s => s.Game)
+			.Include(s => s.GameVersion)
+			.Include(s => s.GameGoal)
+			.Include(gg => gg.GameGoal);
+
+	public static IQueryable<Submission> ThatAreVerified(this IQueryable<Submission> query)
+		=> query.Where(s => s.SyncedOn.HasValue);
+
+	public static IQueryable<Submission> ThatAreUnverified(this IQueryable<Submission> query)
+		=> query.Where(s => !s.SyncedOn.HasValue);
 }

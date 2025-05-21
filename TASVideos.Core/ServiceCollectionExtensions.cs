@@ -2,9 +2,10 @@
 using TASVideos.Core.Services;
 using TASVideos.Core.Services.Cache;
 using TASVideos.Core.Services.Email;
-using TASVideos.Core.Services.ExternalMediaPublisher.Distributors;
 using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Core.Services.PublicationChain;
+using TASVideos.Core.Services.ExternalMediaPublisher.Distributors;
+using TASVideos.Core.Services.Forum;
+using TASVideos.Core.Services.Wiki;
 using TASVideos.Core.Services.Youtube;
 using TASVideos.Core.Settings;
 
@@ -12,32 +13,21 @@ namespace TASVideos.Core;
 
 public static class ServiceCollectionExtensions
 {
-	public static IServiceCollection AddTasvideosCore<T>(this IServiceCollection services, bool isDevelopment, AppSettings settings) where T : class, IWikiToTextRenderer
+	public static IServiceCollection AddTasvideosCore<T1, T2>(this IServiceCollection services, bool isDevelopment, AppSettings settings)
+		where T1 : class, IWikiToTextRenderer
+		where T2 : class, IWikiToMetaDescriptionRenderer
 	{
-		services.AddScoped<IWikiToTextRenderer, T>();
-		services
-			.AddControllers()
-			.AddApplicationPart(typeof(IJwtAuthenticator).Assembly);
-
+		services.AddScoped<IWikiToTextRenderer, T1>();
+		services.AddScoped<IWikiToMetaDescriptionRenderer, T2>();
 		services
 			.AddCacheService(settings.CacheSettings)
-			.AddExternalMediaPublishing(isDevelopment);
+			.AddExternalMediaPublishing(settings, isDevelopment);
 
 		// HTTP Client
 		services
 			.AddHttpClient(HttpClients.Discord, client =>
 			{
-				client.BaseAddress = new Uri("https://discord.com/api/v6/");
-			});
-		services
-			.AddHttpClient(HttpClients.TwitterV2, client =>
-			{
-				client.BaseAddress = new Uri("https://api.twitter.com/2/tweets");
-			});
-		services
-			.AddHttpClient(HttpClients.TwitterAuth, client =>
-			{
-				client.BaseAddress = new Uri("https://api.twitter.com/2/oauth2/token");
+				client.BaseAddress = new Uri("https://discord.com/api/v10/");
 			});
 		services
 			.AddHttpClient(HttpClients.GoogleAuth, client =>
@@ -49,6 +39,11 @@ public static class ServiceCollectionExtensions
 			{
 				client.BaseAddress = new Uri("https://www.googleapis.com/youtube/v3/");
 			});
+		services
+			.AddHttpClient(HttpClients.Bluesky, client =>
+			{
+				client.BaseAddress = new Uri("https://bsky.social/xrpc/");
+			});
 
 		return services.AddServices(settings);
 	}
@@ -56,7 +51,9 @@ public static class ServiceCollectionExtensions
 	private static IServiceCollection AddServices(this IServiceCollection services, AppSettings settings)
 	{
 		services.AddScoped<UserManager>();
+		services.AddScoped<IUserManager, UserManager>();
 		services.AddScoped<SignInManager>();
+		services.AddScoped<ISignInManager, SignInManager>();
 		services.AddScoped<IPointsService, PointsService>();
 		services.AddScoped<IAwards, Awards>();
 		services.AddScoped<IMediaFileUploader, MediaFileUploader>();
@@ -68,16 +65,20 @@ public static class ServiceCollectionExtensions
 		services.AddScoped<IIpBanService, IpBanService>();
 		services.AddScoped<ITagService, TagService>();
 		services.AddScoped<IFlagService, FlagService>();
+		services.AddScoped<IGenreService, GenreService>();
 		services.AddScoped<IClassService, ClassService>();
 		services.AddScoped<IMovieFormatDeprecator, MovieFormatDeprecator>();
 		services.AddScoped<IForumService, ForumService>();
 		services.AddScoped<IGameSystemService, GameSystemService>();
+		services.AddScoped<IPrivateMessageService, PrivateMessageService>();
+		services.AddScoped<IRoleService, RoleService>();
+		services.AddScoped<IRatingService, RatingService>();
 
 		services.AddScoped<IJwtAuthenticator, JwtAuthenticator>();
 
-		if (settings.Gmail.IsEnabled())
+		if (settings.Email.IsEnabled())
 		{
-			services.AddTransient<IEmailSender, GmailSender>();
+			services.AddTransient<IEmailSender, SmtpSender>();
 		}
 		else
 		{
@@ -91,6 +92,7 @@ public static class ServiceCollectionExtensions
 		services.AddScoped<ITASVideosGrue, TASVideosGrue>();
 
 		services.AddScoped<ForumEngine.IWriterHelper, ForumWriterHelper>();
+		services.AddScoped<IForumToMetaDescriptionRenderer, ForumToMetaDescriptionRenderer>();
 
 		services.AddScoped<IYoutubeSync, YouTubeSync>();
 		services.AddScoped<IGoogleAuthService, GoogleAuthService>();
@@ -104,39 +106,45 @@ public static class ServiceCollectionExtensions
 
 	private static IServiceCollection AddCacheService(this IServiceCollection services, AppSettings.CacheSetting cacheSettings)
 	{
-		if (cacheSettings.CacheType == "Memory")
+		switch (cacheSettings.CacheType)
 		{
-			services.AddMemoryCache();
-			services.AddSingleton<ICacheService, MemoryCacheService>();
-		}
-		else if (cacheSettings.CacheType == "Redis")
-		{
-			services.AddScoped<ICacheService, RedisCacheService>();
-		}
-		else
-		{
-			services.AddSingleton<ICacheService, NoCacheService>();
+			case "Memory":
+				services.AddMemoryCache();
+				services.AddSingleton<ICacheService, MemoryCacheService>();
+				break;
+			case "Redis":
+				services.AddScoped<ICacheService, RedisCacheService>();
+				break;
+			default:
+				services.AddSingleton<ICacheService, NoCacheService>();
+				break;
 		}
 
 		return services;
 	}
 
-	private static IServiceCollection AddExternalMediaPublishing(this IServiceCollection services, bool isDevelopment)
+	private static IServiceCollection AddExternalMediaPublishing(this IServiceCollection services, AppSettings settings, bool isDevelopment)
 	{
 		if (isDevelopment)
 		{
 			services.AddSingleton<IPostDistributor, LogDistributor>();
 		}
 
-		services.AddSingleton<IPostDistributor, IrcDistributor>();
-		services.AddScoped<IPostDistributor, DiscordDistributor>();
+		if (settings.Irc.IsEnabled())
+		{
+			services.AddSingleton<IPostDistributor, IrcDistributor>();
+		}
 
-		services.AddSingleton<IPostDistributor, TwitterDistributorV2>();
+		if (settings.Discord.IsEnabled())
+		{
+			services.AddScoped<IPostDistributor, DiscordDistributor>();
+		}
 
-		services.AddScoped<IPostDistributor, DistributorStorage>();
+		if (settings.Bluesky.IsEnabled())
+		{
+			services.AddScoped<IPostDistributor, BlueskyDistributor>();
+		}
 
-		services.AddSingleton<TwitterDistributorV2>();	// Required for direct Tweets.
-
-		return services.AddTransient<ExternalMediaPublisher>();
+		return services.AddScoped<IPostDistributor, DistributorStorage>();
 	}
 }

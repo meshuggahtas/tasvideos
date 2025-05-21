@@ -1,28 +1,34 @@
 ﻿@page
 @model IndexModel
 @{
-	ViewData["Title"] = "Game Systems List";
+	ViewData.SetTitle("Game Systems List");
 }
-
-<a permission="GameSystemMaintenance" class="btn btn-primary float-end mb-3" asp-page="Create"><i class="fa fa-plus"></i> Create</a>
-<table class="table table-bordered table-striped table-sm">
-	<tr>
-		<th>Id</th>
-		<th>Code</th>
-		<th>Display Name</th>
-		<th></th>
-	</tr>
-	@foreach (var system in Model.Systems)
+<top-button-bar>
+	<add-link permission="GameSystemMaintenance" asp-page="Create"></add-link>
+</top-button-bar>
+<standard-table>
+	<table-head columns="Display Name,Code,Id,Framerates,"></table-head>
+	@foreach (var system in Model.Systems.OrderBy(s => s.DisplayName))
 	{
 		<tr>
-			<td>@system.Id</td>
-			<td>@system.Code</td>
 			<td>@system.DisplayName</td>
+			<td>@system.Code</td>
+			<td>@system.Id</td>
 			<td>
-				<a permission="GameSystemMaintenance" class="btn btn-primary" asp-page="Edit" asp-route-id="@system.Id">
-					<i class="fa fa-pencil"></i> Edit
-				</a>
+				@foreach(var rate in system.SystemFrameRates
+					.Where(sf => !sf.Obsolete)
+					.OrderBy(sf => sf.FrameRate))
+				{
+					<div>@rate.FrameRate</div>
+				}
+
+				<div condition="system.SystemFrameRates.Any(sf => sf.Obsolete)">
+					(@system.SystemFrameRates.Count(sf => sf.Obsolete) obsolete)
+				</div>
 			</td>
+			<td-action-column>
+				<edit-link permission="GameSystemMaintenance" asp-page="Edit" asp-route-id="@system.Id"></edit-link>
+			</td-action-column>
 		</tr>
 	}
-</table>
+</standard-table>

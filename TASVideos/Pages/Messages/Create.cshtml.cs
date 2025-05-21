@@ -1,31 +1,8 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.Email;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Models;
-
-namespace TASVideos.Pages.Messages;
+﻿namespace TASVideos.Pages.Messages;
 
 [RequirePermission(PermissionTo.SendPrivateMessages)]
-public class CreateModel : BasePageModel
+public class CreateModel(IUserManager userManager, IPrivateMessageService privateMessageService) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly UserManager _userManager;
-	private readonly IEmailService _emailService;
-
-	public CreateModel(
-		ApplicationDbContext db,
-		UserManager userManager,
-		IEmailService emailService)
-	{
-		_db = db;
-		_userManager = userManager;
-		_emailService = emailService;
-	}
-
 	[FromQuery]
 	public int? ReplyTo { get; set; }
 
@@ -33,30 +10,26 @@ public class CreateModel : BasePageModel
 	public string? DefaultToUser { get; set; }
 
 	[BindProperty]
-	[Required]
-	[Display(Name = "Subject")]
 	[StringLength(100, MinimumLength = 3)]
 	public string Subject { get; set; } = "";
 
 	[BindProperty]
-	[Required]
-	[Display(Name = "Message Body")]
 	[StringLength(10000, MinimumLength = 5)]
-	public string Text { get; set; } = "";
+	public string MessageBody { get; set; } = "";
 
 	[BindProperty]
-	[Required]
-	[Display(Name = "Username", Description = "Enter a UserName")]
 	public string ToUser { get; set; } = "";
 
 	public PrivateMessageModel? ReplyingTo { get; set; }
+
+	public List<SelectListItem> AvailableGroupRoles { get; set; } = [];
 
 	public bool IsReply => ReplyingTo is not null;
 
 	public async Task OnGet()
 	{
 		await SetReplyingTo();
-
+		await SetAvailableGroupRoles();
 		ToUser = DefaultToUser ?? "";
 		if (IsReply)
 		{
@@ -75,73 +48,57 @@ public class CreateModel : BasePageModel
 		if (!ModelState.IsValid)
 		{
 			await SetReplyingTo();
+			await SetAvailableGroupRoles();
 			return Page();
 		}
 
-		var exists = await _db.Users.Exists(ToUser);
-		if (!exists)
+		var allowedRoles = await privateMessageService.AllowedRoles();
+		if (allowedRoles.Contains(ToUser))
 		{
-			ModelState.AddModelError(nameof(ToUser), "User does not exist");
-			await SetReplyingTo();
-			return Page();
+			await privateMessageService.SendMessageToRole(User.GetUserId(), ToUser, Subject, MessageBody);
 		}
+		else
+		{
+			var exists = await userManager.Exists(ToUser);
+			if (!exists)
+			{
+				ModelState.AddModelError(nameof(ToUser), "User does not exist");
+				await SetReplyingTo();
+				return Page();
+			}
 
-		await SendMessage();
+			await privateMessageService.SendMessage(User.GetUserId(), ToUser, Subject, MessageBody);
+		}
 
 		return BasePageRedirect("Inbox");
+	}
+
+	private async Task SetAvailableGroupRoles()
+	{
+		AvailableGroupRoles = (await privateMessageService.AllowedRoles())
+			.ToDropDown()
+			.WithDefaultEntry();
 	}
 
 	private async Task SetReplyingTo()
 	{
 		if (ReplyTo > 0)
 		{
-			var message = await _userManager.GetMessage(User.GetUserId(), ReplyTo.Value);
-			if (message != null)
+			var message = await privateMessageService.GetMessage(User.GetUserId(), ReplyTo.Value);
+			if (message is not null)
 			{
 				DefaultToUser = message.FromUserName;
-				ReplyingTo = new PrivateMessageModel
-				{
-					Subject = message.Subject,
-					Text = message.Text,
-					SentOn = message.SentOn,
-					FromUserName = message.FromUserName,
-					FromUserId = message.FromUserId,
-					ToUserName = message.ToUserName,
-					ToUserId = message.ToUserId
-				};
+				ReplyingTo = new PrivateMessageModel(
+					message.Subject,
+					message.SentOn,
+					message.Text,
+					message.FromUserId,
+					message.FromUserName,
+					message.ToUserId,
+					message.ToUserName);
 			}
 		}
 	}
 
-	private async Task SendMessage()
-	{
-		var toUser = await _db.Users
-			.Where(u => u.UserName == ToUser)
-			.Select(u => new
-			{
-				u.Id,
-				u.UserName,
-				u.Email,
-				u.EmailOnPrivateMessage
-			})
-			.SingleAsync();
-
-		var message = new PrivateMessage
-		{
-			FromUserId = User.GetUserId(),
-			ToUserId = toUser.Id,
-			Subject = Subject,
-			Text = Text,
-			IpAddress = IpAddress,
-			EnableBbCode = true
-		};
-
-		_db.PrivateMessages.Add(message);
-		await _db.SaveChangesAsync();
-
-		if (toUser.EmailOnPrivateMessage)
-		{
-			await _emailService.NewPrivateMessage(toUser.Email, toUser.UserName);
-		}
-	}
+	public record PrivateMessageModel(string? Subject, DateTime SentOn, string Text, int FromUserId, string FromUserName, int ToUserId, string ToUserName);
 }

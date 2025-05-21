@@ -1,4 +1,4 @@
-﻿using TASVideos.Core.Services;
+﻿using TASVideos.Core.Services.Wiki;
 using TASVideos.Core.Services.Youtube;
 using TASVideos.Core.Settings;
 using TASVideos.Data.Entity;
@@ -12,37 +12,43 @@ using static TASVideos.Data.Entity.SubmissionStatus;
 namespace TASVideos.Core.Tests.Services;
 
 [TestClass]
-public class QueueServiceTests
+public class QueueServiceTests : TestDbBase
 {
 	private const int MinimumHoursBeforeJudgment = 72;
+	private const int SubmissionRateDays = 1;
+	private const int SubmissionRateSubs = 3;
 	private readonly QueueService _queueService;
-	private readonly TestDbContext _db;
-	private readonly Mock<IYoutubeSync> _youtubeSync;
-	private readonly Mock<ITASVideoAgent> _tva;
-	private readonly Mock<IWikiPages> _wikiPages;
+	private readonly IYoutubeSync _youtubeSync;
+	private readonly ITASVideoAgent _tva;
+	private readonly IWikiPages _wikiPages;
 
 	private static DateTime TooNewToJudge => DateTime.UtcNow;
 
 	private static DateTime OldEnoughToBeJudged
 		=> DateTime.UtcNow.AddHours(-1 - MinimumHoursBeforeJudgment);
 
-	private static readonly IEnumerable<PermissionTo> BasicUserPerms = new[] { PermissionTo.SubmitMovies };
-	private static readonly IEnumerable<PermissionTo> JudgePerms = new[] { PermissionTo.SubmitMovies, PermissionTo.JudgeSubmissions };
-	private static readonly IEnumerable<PermissionTo> PublisherPerms = new[] { PermissionTo.SubmitMovies, PermissionTo.PublishMovies };
-	private static readonly IEnumerable<PermissionTo> Override = new[] { PermissionTo.OverrideSubmissionStatus };
+	private static readonly IEnumerable<PermissionTo> BasicUserPerms = [PermissionTo.SubmitMovies];
+	private static readonly IEnumerable<PermissionTo> JudgePerms = [PermissionTo.SubmitMovies, PermissionTo.JudgeSubmissions];
+	private static readonly IEnumerable<PermissionTo> PublisherPerms = [PermissionTo.SubmitMovies, PermissionTo.PublishMovies];
+	private static readonly IEnumerable<PermissionTo> Override = [PermissionTo.OverrideSubmissionConstraints];
 
 	public QueueServiceTests()
 	{
-		_db = TestDbContext.Create();
-		_youtubeSync = new Mock<IYoutubeSync>();
-		_tva = new Mock<ITASVideoAgent>();
-		_wikiPages = new Mock<IWikiPages>();
-		var settings = new AppSettings { MinimumHoursBeforeJudgment = MinimumHoursBeforeJudgment };
-		_queueService = new QueueService(settings, _db, _youtubeSync.Object, _tva.Object, _wikiPages.Object);
+		_youtubeSync = Substitute.For<IYoutubeSync>();
+		_tva = Substitute.For<ITASVideoAgent>();
+		_wikiPages = Substitute.For<IWikiPages>();
+		var settings = new AppSettings
+		{
+			MinimumHoursBeforeJudgment = MinimumHoursBeforeJudgment,
+			SubmissionRate = new() { Days = SubmissionRateDays, Submissions = SubmissionRateSubs }
+		};
+		_queueService = new QueueService(settings, _db, _youtubeSync, _tva, _wikiPages);
 	}
 
+	#region AvailableStatuses
+
 	[TestMethod]
-	public void Published_CanNotChange()
+	public void AvailableStatuses_Published_CanNotChange()
 	{
 		var result = _queueService.AvailableStatuses(
 			Published,
@@ -67,7 +73,7 @@ public class QueueServiceTests
 	[DataRow(Cancelled, new[] { New })]
 	[DataRow(Playground, new SubmissionStatus[0])]
 	[TestMethod]
-	public void Submitter_BasicPerms(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
+	public void AvailableStatuses_Submitter_BasicPerms(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
 	{
 		var expected = new[] { current }.Concat(canChangeTo).ToList();
 		var result = _queueService.AvailableStatuses(
@@ -96,7 +102,7 @@ public class QueueServiceTests
 	[DataRow(Cancelled, new[] { New })]
 	[DataRow(Playground, new SubmissionStatus[0])]
 	[TestMethod]
-	public void Submitter_IsJudge(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
+	public void AvailableStatuses_Submitter_IsJudge(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
 	{
 		var expected = new[] { current }.Concat(canChangeTo).ToList();
 		var result = _queueService.AvailableStatuses(
@@ -125,7 +131,7 @@ public class QueueServiceTests
 	[DataRow(Cancelled, new[] { New })]
 	[DataRow(Playground, new SubmissionStatus[0])]
 	[TestMethod]
-	public void Submitter_IsPublisher(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
+	public void AvailableStatuses_Submitter_IsPublisher(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
 	{
 		var expected = new[] { current }.Concat(canChangeTo).ToList();
 		var result = _queueService.AvailableStatuses(
@@ -154,7 +160,7 @@ public class QueueServiceTests
 	[DataRow(Cancelled, new[] { New, JudgingUnderWay })]
 	[DataRow(Playground, new[] { New, JudgingUnderWay })]
 	[TestMethod]
-	public void Judge_ButNotSubmitter_BeforeAllowedJudgmentWindow(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
+	public void AvailableStatuses_Judge_ButNotSubmitter_BeforeAllowedJudgmentWindow(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
 	{
 		var expected = new[] { current }.Concat(canChangeTo).ToList();
 		var result = _queueService.AvailableStatuses(
@@ -183,7 +189,7 @@ public class QueueServiceTests
 	[DataRow(Cancelled, new[] { New, JudgingUnderWay })]
 	[DataRow(Playground, new[] { New, JudgingUnderWay })]
 	[TestMethod]
-	public void Judge_ButNotSubmitter_AfterAllowedJudgmentWindow(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
+	public void AvailableStatuses_Judge_ButNotSubmitter_AfterAllowedJudgmentWindow(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
 	{
 		var expected = new[] { current }.Concat(canChangeTo).ToList();
 		var result = _queueService.AvailableStatuses(
@@ -212,7 +218,7 @@ public class QueueServiceTests
 	[DataRow(Cancelled, new SubmissionStatus[0])]
 	[DataRow(Playground, new SubmissionStatus[0])]
 	[TestMethod]
-	public void Publisher_ButNotSubmitter_BeforeAllowedJudgmentWindow_CanNotChangeStatus(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
+	public void AvailableStatuses_Publisher_ButNotSubmitter_BeforeAllowedJudgmentWindow_CanNotChangeStatus(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
 	{
 		var expected = new[] { current }.Concat(canChangeTo).ToList();
 		var result = _queueService.AvailableStatuses(
@@ -241,7 +247,7 @@ public class QueueServiceTests
 	[DataRow(Cancelled, new SubmissionStatus[0])]
 	[DataRow(Playground, new SubmissionStatus[0])]
 	[TestMethod]
-	public void Publisher_ButNotSubmitter_AfterAllowedJudgmentWindow(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
+	public void AvailableStatuses_Publisher_ButNotSubmitter_AfterAllowedJudgmentWindow(SubmissionStatus current, IEnumerable<SubmissionStatus> canChangeTo)
 	{
 		var expected = new[] { current }.Concat(canChangeTo).ToList();
 		var result = _queueService.AvailableStatuses(
@@ -263,9 +269,8 @@ public class QueueServiceTests
 	[TestMethod]
 	public void OverrideSubmissions_AnyStatusButPublished()
 	{
-		var exceptPublished = Enum.GetValues(typeof(SubmissionStatus))
-			.Cast<SubmissionStatus>()
-			.Except(new[] { Published })
+		var exceptPublished = Enum.GetValues<SubmissionStatus>()
+			.Except([Published])
 			.OrderBy(s => s)
 			.ToList();
 
@@ -285,6 +290,57 @@ public class QueueServiceTests
 		}
 	}
 
+	#endregion
+
+	#region HoursRemainingFor
+
+	[TestMethod]
+	[DataRow(Accepted)]
+	[DataRow(PublicationUnderway)]
+	[DataRow(Published)]
+	[DataRow(Rejected)]
+	[DataRow(Cancelled)]
+	[DataRow(Playground)]
+	public void HoursRemainingForJudging_StatusCannotBeJudged_ReturnsZero(SubmissionStatus status)
+	{
+		var submission = Substitute.For<ISubmissionDisplay>();
+		submission.Status.Returns(status);
+		var actual = _queueService.HoursRemainingForJudging(submission);
+		Assert.AreEqual(0, actual);
+	}
+
+	[TestMethod]
+	[DataRow(New)]
+	[DataRow(Delayed)]
+	[DataRow(NeedsMoreInfo)]
+	[DataRow(JudgingUnderWay)]
+	public void HoursRemainingForJudging_CanBeJudgedAndIsRecent_ReturnsPositiveHours(SubmissionStatus status)
+	{
+		var submission = Substitute.For<ISubmissionDisplay>();
+		submission.Status.Returns(status);
+		submission.Date.Returns(DateTime.UtcNow.AddHours(-(MinimumHoursBeforeJudgment - 1)));
+		var actual = _queueService.HoursRemainingForJudging(submission);
+		Assert.IsTrue(actual > 0);
+	}
+
+	[TestMethod]
+	[DataRow(New)]
+	[DataRow(Delayed)]
+	[DataRow(NeedsMoreInfo)]
+	[DataRow(JudgingUnderWay)]
+	public void HoursRemainingForJudging_CanBeJudgedAndIsOld_ReturnsNegativeHours(SubmissionStatus status)
+	{
+		var submission = Substitute.For<ISubmissionDisplay>();
+		submission.Status.Returns(status);
+		submission.Date.Returns(DateTime.UtcNow.AddHours(-(MinimumHoursBeforeJudgment + 1)));
+		var actual = _queueService.HoursRemainingForJudging(submission);
+		Assert.IsTrue(actual < 0);
+	}
+
+	#endregion
+
+	#region Delete Submission
+
 	[TestMethod]
 	public async Task CanDeleteSubmission_NotFound()
 	{
@@ -298,17 +354,12 @@ public class QueueServiceTests
 	[TestMethod]
 	public async Task CanDeleteSubmission_CannotDeleteIfPublished()
 	{
-		const int submissionId = 1;
-		const int publicationId = 2;
-		_db.Submissions.Add(new Submission
-		{
-			Id = 1,
-			PublisherId = publicationId
-		});
-		_db.Publications.Add(new Publication { Id = publicationId });
+		var user = _db.AddUser(0).Entity;
+		var pub = _db.AddPublication().Entity;
+		pub.Submission!.Publisher = user;
 		await _db.SaveChangesAsync();
 
-		var result = await _queueService.DeleteSubmission(submissionId);
+		var result = await _queueService.CanDeleteSubmission(pub.SubmissionId);
 		Assert.IsNotNull(result);
 		Assert.AreEqual(DeleteSubmissionResult.DeleteStatus.NotAllowed, result.Status);
 		Assert.IsFalse(string.IsNullOrWhiteSpace(result.ErrorMessage));
@@ -318,12 +369,12 @@ public class QueueServiceTests
 	[TestMethod]
 	public async Task CanDeleteSubmission_Success()
 	{
-		const int submissionId = 1;
+		var sub = _db.AddSubmission().Entity;
 		const string submissionTitle = "Test Submission";
-		_db.Submissions.Add(new Submission { Id = 1, Status = New, Title = submissionTitle });
+		sub.Title = submissionTitle;
 		await _db.SaveChangesAsync();
 
-		var result = await _queueService.DeleteSubmission(submissionId);
+		var result = await _queueService.CanDeleteSubmission(sub.Id);
 		Assert.IsNotNull(result);
 		Assert.AreEqual(DeleteSubmissionResult.DeleteStatus.Success, result.Status);
 		Assert.IsTrue(string.IsNullOrWhiteSpace(result.ErrorMessage));
@@ -343,17 +394,12 @@ public class QueueServiceTests
 	[TestMethod]
 	public async Task DeleteSubmission_CannotDeleteIfPublished()
 	{
-		const int submissionId = 1;
-		const int publicationId = 2;
-		_db.Submissions.Add(new Submission
-		{
-			Id = 1,
-			PublisherId = publicationId
-		});
-		_db.Publications.Add(new Publication { Id = publicationId });
+		var user = _db.AddUser(0).Entity;
+		var pub = _db.AddPublication().Entity;
+		pub.Submission!.Publisher = user;
 		await _db.SaveChangesAsync();
 
-		var result = await _queueService.DeleteSubmission(submissionId);
+		var result = await _queueService.DeleteSubmission(pub.SubmissionId);
 		Assert.IsNotNull(result);
 		Assert.AreEqual(DeleteSubmissionResult.DeleteStatus.NotAllowed, result.Status);
 		Assert.IsFalse(string.IsNullOrWhiteSpace(result.ErrorMessage));
@@ -364,38 +410,36 @@ public class QueueServiceTests
 	public async Task DeleteSubmission_Success()
 	{
 		const int submissionId = 1;
-		const int topicId = 2;
 		const int pollId = 3;
 		const string submissionTitle = "Test Submission";
-		const string pageName = "Submission Page";
-		var poll = new ForumPoll { Id = pollId, TopicId = topicId };
+		var user = _db.AddUser(0).Entity;
+		var topic = _db.AddTopic().Entity;
+		await _db.SaveChangesAsync();
+		var poll = new ForumPoll { Id = pollId, TopicId = topic.Id };
+		_db.ForumPolls.Add(poll);
 		var pollOptions = new ForumPollOption[]
 		{
-			new() { PollId = pollId, Votes = new ForumPollOptionVote[] { new() } },
+			new() { PollId = pollId, Votes = [new() { User = user }] },
 			new() { PollId = pollId }
 		};
 		_db.ForumPollOptions.AddRange(pollOptions);
 		poll.PollOptions.AddRange(pollOptions);
-		var topic = new ForumTopic { Id = topicId, PollId = 2, Poll = poll };
+		topic.Poll = poll;
 		_db.Submissions.Add(new Submission
 		{
-			Id = 1,
+			Id = submissionId,
 			Status = New,
 			Title = submissionTitle,
-			TopicId = topicId,
+			TopicId = topic.Id,
 			Topic = topic,
-			WikiContent = new WikiPage { PageName = pageName }
+			Submitter = user
 		});
 		_db.SubmissionStatusHistory.Add(new SubmissionStatusHistory { SubmissionId = submissionId, Status = New });
-		_db.SubmissionAuthors.Add(new SubmissionAuthor { SubmissionId = submissionId, UserId = 1 });
-		_db.ForumTopics.Add(topic);
-		_db.ForumPolls.Add(poll);
-		var post1 = new ForumPost { Topic = topic, TopicId = topicId, Text = "1" };
-		var post2 = new ForumPost { Topic = topic, TopicId = topicId, Text = "2" };
+		_db.SubmissionAuthors.Add(new SubmissionAuthor { SubmissionId = submissionId, UserId = user.Id });
+		var post1 = new ForumPost { Topic = topic, TopicId = topic.Id, Text = "1", ForumId = topic.ForumId, Poster = user };
+		var post2 = new ForumPost { Topic = topic, TopicId = topic.Id, Text = "2", ForumId = topic.ForumId, Poster = user };
 		_db.ForumPosts.Add(post1);
 		_db.ForumPosts.Add(post2);
-		topic.ForumPosts.Add(post1);
-		topic.ForumPosts.Add(post2);
 		await _db.SaveChangesAsync();
 
 		var result = await _queueService.DeleteSubmission(submissionId);
@@ -411,8 +455,12 @@ public class QueueServiceTests
 		Assert.AreEqual(0, _db.ForumPosts.Count());
 		Assert.AreEqual(0, _db.ForumPollOptions.Count());
 		Assert.AreEqual(0, _db.ForumPollOptionVotes.Count());
-		_wikiPages.Verify(v => v.Delete(pageName));
+		await _wikiPages.Received(1).Delete(WikiHelper.ToSubmissionWikiPageName(1));
 	}
+
+	#endregion
+
+	#region Unpublish
 
 	[TestMethod]
 	public async Task CanUnpublish_NotFound()
@@ -427,28 +475,26 @@ public class QueueServiceTests
 	[TestMethod]
 	public async Task CanUnpublish_CannotUnpublishWithAwards()
 	{
-		int publicationId = 1;
-		int awardId = 2;
-		_db.Publications.Add(new Publication { Id = publicationId });
-		_db.PublicationAwards.Add(new PublicationAward { PublicationId = publicationId, AwardId = awardId });
+		var pub = _db.AddPublication().Entity;
+		_db.PublicationAwards.Add(new PublicationAward { Publication = pub, Award = new Award() });
 		await _db.SaveChangesAsync();
 
-		var result = await _queueService.CanUnpublish(publicationId);
+		var result = await _queueService.CanUnpublish(pub.Id);
 		Assert.IsNotNull(result);
 		Assert.AreEqual(UnpublishResult.UnpublishStatus.NotAllowed, result.Status);
-		Assert.IsTrue(!string.IsNullOrWhiteSpace(result.ErrorMessage));
-		Assert.IsTrue(string.IsNullOrWhiteSpace(result.PublicationTitle));
+		Assert.IsFalse(string.IsNullOrWhiteSpace(result.ErrorMessage));
+		Assert.IsFalse(string.IsNullOrWhiteSpace(result.PublicationTitle));
 	}
 
 	[TestMethod]
 	public async Task CanUnpublish_Success()
 	{
-		const int publicationId = 1;
+		var pub = _db.AddPublication().Entity;
 		const string publicationTitle = "Test Publication";
-		_db.Publications.Add(new Publication { Id = publicationId, Title = publicationTitle });
+		pub.Title = publicationTitle;
 		await _db.SaveChangesAsync();
 
-		var result = await _queueService.CanUnpublish(publicationId);
+		var result = await _queueService.CanUnpublish(pub.Id);
 		Assert.IsNotNull(result);
 		Assert.AreEqual(UnpublishResult.UnpublishStatus.Success, result.Status);
 		Assert.IsTrue(string.IsNullOrWhiteSpace(result.ErrorMessage));
@@ -468,74 +514,53 @@ public class QueueServiceTests
 	[TestMethod]
 	public async Task Unpublish_CannotUnpublishWithAwards()
 	{
-		int publicationId = 1;
-		int awardId = 2;
-		_db.Publications.Add(new Publication
-		{
-			Id = publicationId,
-			Submission = new Submission { PublisherId = publicationId } // A quirk of InMemoryDatabase, 1:1 relationships need the other object for the .Include() to work
-		});
-		_db.PublicationAwards.Add(new PublicationAward { PublicationId = publicationId, AwardId = awardId });
+		var pub = _db.AddPublication().Entity;
+		_db.PublicationAwards.Add(new PublicationAward { Publication = pub, Award = new Award() });
 		await _db.SaveChangesAsync();
 
-		var result = await _queueService.Unpublish(publicationId);
+		var result = await _queueService.Unpublish(pub.Id);
 		Assert.IsNotNull(result);
 		Assert.AreEqual(UnpublishResult.UnpublishStatus.NotAllowed, result.Status);
-		Assert.IsTrue(!string.IsNullOrWhiteSpace(result.ErrorMessage));
-		Assert.IsTrue(string.IsNullOrWhiteSpace(result.PublicationTitle));
+		Assert.IsFalse(string.IsNullOrWhiteSpace(result.ErrorMessage));
+		Assert.IsFalse(string.IsNullOrWhiteSpace(result.PublicationTitle));
 	}
 
 	[TestMethod]
 	public async Task Unpublish_NoObsoletedMovie_NoYoutube()
 	{
-		_youtubeSync
-			.Setup(m => m.IsYoutubeUrl(It.IsAny<string>()))
-			.Returns(true);
+		_youtubeSync.IsYoutubeUrl(Arg.Any<string>()).Returns(true);
 
-		const int publicationId = 1;
-		const string publicationTitle = "Test Publication";
+		var user1 = _db.AddUser(0).Entity;
+		var user2 = _db.AddUser(0).Entity;
+		await _db.SaveChangesAsync();
 
-		const int publisherId = 3;
-		const int submissionId = 2;
-		var submission = new Submission
-		{
-			Id = submissionId,
-			Status = Published,
-			PublisherId = publisherId
-		};
-
-		_db.Submissions.Add(submission);
-		_db.Publications.Add(new Publication
-		{
-			Id = publicationId,
-			Title = publicationTitle,
-			Submission = submission,
-			SubmissionId = submissionId
-		});
-		_db.PublicationAuthors.Add(new PublicationAuthor { PublicationId = publicationId, UserId = 1 });
-		_db.PublicationAuthors.Add(new PublicationAuthor { PublicationId = publicationId, UserId = 2 });
-		_db.PublicationFiles.Add(new PublicationFile { PublicationId = publicationId });
-		_db.PublicationFiles.Add(new PublicationFile { PublicationId = publicationId });
-		_db.PublicationFlags.Add(new PublicationFlag { PublicationId = publicationId, FlagId = 1 });
-		_db.PublicationFlags.Add(new PublicationFlag { PublicationId = publicationId, FlagId = 2 });
-		_db.PublicationRatings.Add(new PublicationRating { PublicationId = publicationId, UserId = 1 });
-		_db.PublicationRatings.Add(new PublicationRating { PublicationId = publicationId, UserId = 2 });
-		_db.PublicationTags.Add(new PublicationTag { PublicationId = publicationId, TagId = 1 });
-		_db.PublicationTags.Add(new PublicationTag { PublicationId = publicationId, TagId = 2 });
+		var pub = _db.AddPublication().Entity;
+		_db.PublicationAuthors.Add(new PublicationAuthor { Publication = pub, UserId = user1.Id });
+		_db.PublicationAuthors.Add(new PublicationAuthor { Publication = pub, UserId = user2.Id });
+		_db.PublicationFiles.Add(new PublicationFile { Publication = pub });
+		_db.PublicationFiles.Add(new PublicationFile { Publication = pub });
+		_db.PublicationFlags.Add(new PublicationFlag { Publication = pub, Flag = new Flag { Token = "1" } });
+		_db.PublicationFlags.Add(new PublicationFlag { Publication = pub, Flag = new Flag { Token = "2" } });
+		_db.PublicationRatings.Add(new PublicationRating { Publication = pub, User = user1 });
+		_db.PublicationRatings.Add(new PublicationRating { Publication = pub, User = user2 });
+		_db.PublicationTags.Add(new PublicationTag { Publication = pub, Tag = new Tag { Code = "1" } });
+		_db.PublicationTags.Add(new PublicationTag { Publication = pub, Tag = new Tag { Code = "2" } });
 		_db.PublicationUrls.Add(new PublicationUrl
 		{
-			PublicationId = publicationId,
+			Publication = pub,
 			Type = PublicationUrlType.Streaming,
 			Url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 		});
 		await _db.SaveChangesAsync();
+		int publicationId = pub.Id;
+		int submissionId = pub.Submission!.Id;
 
 		var result = await _queueService.Unpublish(publicationId);
 
 		// Result must be correct
 		Assert.IsNotNull(result);
 		Assert.AreEqual(UnpublishResult.UnpublishStatus.Success, result.Status);
-		Assert.AreEqual(publicationTitle, result.PublicationTitle);
+		Assert.AreEqual(pub.Title, result.PublicationTitle);
 		Assert.IsTrue(string.IsNullOrWhiteSpace(result.ErrorMessage));
 
 		// Publication sub-tables must be cleared
@@ -551,11 +576,11 @@ public class QueueServiceTests
 		Assert.IsTrue(_db.Submissions.Any(s => s.Id == submissionId));
 
 		var sub = _db.Submissions.Single(s => s.Id == submissionId);
-		Assert.AreEqual(sub.PublisherId, publisherId);
+		Assert.AreEqual(sub.PublisherId, pub.Submission!.PublisherId);
 		Assert.AreEqual(PublicationUnderway, sub.Status);
 
-		// Youtube url should be unlisted
-		_youtubeSync.Verify(v => v.UnlistVideo(It.IsAny<string>()));
+		// YouTube url should be unlisted
+		await _youtubeSync.Received(1).UnlistVideo(Arg.Any<string>());
 
 		// Submission status history added for published status
 		Assert.AreEqual(1, _db.SubmissionStatusHistory.Count(sh => sh.SubmissionId == submissionId));
@@ -563,85 +588,51 @@ public class QueueServiceTests
 		Assert.AreEqual(Published, statusHistory.Status);
 
 		// TVA post is made
-		_tva.Verify(v => v.PostSubmissionUnpublished(submissionId));
+		await _tva.Received(1).PostSubmissionUnpublished(submissionId);
 	}
 
 	[TestMethod]
 	public async Task Unpublish_ObsoletedMovies_ResetAndSync()
 	{
-		_youtubeSync
-			.Setup(m => m.IsYoutubeUrl(It.IsAny<string>()))
-			.Returns(true);
+		_youtubeSync.IsYoutubeUrl(Arg.Any<string>()).Returns(true);
 
-		var wikiEntry = _db.WikiPages.Add(new WikiPage { Markup = "Test" });
-		var systemEntry = _db.GameSystems.Add(new GameSystem { Code = "Test" });
-		var gameEntry = _db.Games.Add(new Game { SearchKey = "Test" });
-		var authorEntry = _db.Users.Add(new User { UserName = "Author" });
-
-		const int publicationId = 1;
-		const string publicationTitle = "Test Publication";
-		const int obsoletedPublicationId = 10;
-
-		const int publisherId = 3;
-		const int submissionId = 2;
-		var submission = new Submission
-		{
-			Id = submissionId,
-			Status = Published,
-			PublisherId = publisherId
-		};
-
-		_db.Submissions.Add(submission);
-
-		_db.Publications.Add(new Publication
-		{
-			Id = obsoletedPublicationId,
-			ObsoletedById = publicationId,
-			WikiContentId = wikiEntry.Entity.Id,
-			SystemId = systemEntry.Entity.Id,
-			GameId = gameEntry.Entity.Id
-		});
-
+		var obsoletedPub = _db.AddPublication().Entity;
 		_db.PublicationUrls.Add(new PublicationUrl
 		{
-			PublicationId = obsoletedPublicationId,
+			Publication = obsoletedPub,
 			Type = PublicationUrlType.Streaming,
 			Url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 		});
+		var pub = _db.AddPublication().Entity;
 
-		_db.PublicationAuthors.Add(new PublicationAuthor { PublicationId = obsoletedPublicationId, UserId = authorEntry.Entity.Id });
-
-		_db.Publications.Add(new Publication
-		{
-			Id = publicationId,
-			Title = publicationTitle,
-			Submission = submission,
-			SubmissionId = submissionId
-		});
+		obsoletedPub.ObsoletedBy = pub;
 
 		await _db.SaveChangesAsync();
-		var result = await _queueService.Unpublish(publicationId);
+		var result = await _queueService.Unpublish(pub.Id);
 
 		// Result must be correct
 		Assert.IsNotNull(result);
 		Assert.AreEqual(UnpublishResult.UnpublishStatus.Success, result.Status);
-		Assert.AreEqual(publicationTitle, result.PublicationTitle);
+		Assert.AreEqual(pub.Title, result.PublicationTitle);
 		Assert.IsTrue(string.IsNullOrWhiteSpace(result.ErrorMessage));
 
 		// Obsoleted movie must no longer be obsolete
-		Assert.AreEqual(1, _db.Publications.Count(p => p.Id == obsoletedPublicationId));
-		var obsoletedMovie = _db.Publications.Single(p => p.Id == obsoletedPublicationId);
+		Assert.AreEqual(1, _db.Publications.Count(p => p.Id == obsoletedPub.Id));
+		var obsoletedMovie = _db.Publications.Single(p => p.Id == obsoletedPub.Id);
 		Assert.IsNull(obsoletedMovie.ObsoletedById);
 
-		// Obsoleted movie youtube url must be synced
-		_youtubeSync.Verify(v => v.SyncYouTubeVideo(It.IsAny<YoutubeVideo>()));
+		// Obsoleted movie YouTube url must be synced
+		await _youtubeSync.Received(1).SyncYouTubeVideo(Arg.Any<YoutubeVideo>());
 	}
 
+	#endregion
+
+	#region MapParsedResult
+
 	[TestMethod]
-	[ExpectedException(typeof(InvalidOperationException))]
 	public async Task MapParsedResult_ThrowsIfParsingIsFailed()
 	{
-		await _queueService.MapParsedResult(new TestParseResult { Success = false }, new Submission());
+		await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => _queueService.MapParsedResult(new TestParseResult { Success = false }, new Submission()));
 	}
 
 	[TestMethod]
@@ -652,7 +643,7 @@ public class QueueServiceTests
 
 		var actual = await _queueService.MapParsedResult(new TestParseResult { Success = true, SystemCode = "Does not exist" }, new Submission());
 
-		Assert.IsTrue(!string.IsNullOrWhiteSpace(actual));
+		Assert.IsFalse(string.IsNullOrWhiteSpace(actual));
 	}
 
 	[TestMethod]
@@ -727,6 +718,10 @@ public class QueueServiceTests
 		Assert.AreEqual(entry.Entity, submission.SystemFrameRate.System);
 	}
 
+	#endregion
+
+	#region ObsoleteWith
+
 	[TestMethod]
 	public async Task ObsoleteWith_NoPublication_ReturnsFalse()
 	{
@@ -737,31 +732,122 @@ public class QueueServiceTests
 	[TestMethod]
 	public async Task ObsoleteWith_Success()
 	{
-		_youtubeSync.Setup(m => m.IsYoutubeUrl(It.IsAny<string>())).Returns(true);
-		int pubToObsolete = 1;
-		int obsoletingPub = 2;
-		string youtubeUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-		string wikiMarkup = "Test";
-		_db.Publications.Add(new Publication
+		_youtubeSync.IsYoutubeUrl(Arg.Any<string>()).Returns(true);
+		const string youtubeUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+		const string wikiMarkup = "Test";
+		var pubToObsolete = _db.AddPublication().Entity;
+		pubToObsolete.PublicationUrls.Add(new() { Type = PublicationUrlType.Streaming, Url = youtubeUrl });
+		var obsoletingPub = _db.AddPublication().Entity;
+		await _db.SaveChangesAsync();
+		_db.WikiPages.Add(new WikiPage
 		{
-			Id = pubToObsolete,
-			PublicationUrls = new List<PublicationUrl>
-			{
-				new () { Type = PublicationUrlType.Streaming, Url = youtubeUrl }
-			},
-			WikiContent = new WikiPage { Markup = wikiMarkup },
-			System = new GameSystem { Code = "Test" },
-			Game = new Game()
+			PageName = WikiHelper.ToPublicationWikiPageName(pubToObsolete.Id),
+			Markup = wikiMarkup
 		});
 		await _db.SaveChangesAsync();
 
-		var actual = await _queueService.ObsoleteWith(pubToObsolete, obsoletingPub);
+		var actual = await _queueService.ObsoleteWith(pubToObsolete.Id, obsoletingPub.Id);
 
 		Assert.IsTrue(actual);
-		Assert.AreEqual(1, _db.Publications.Count(p => p.Id == pubToObsolete));
-		var actualPub = _db.Publications.Single(p => p.Id == pubToObsolete);
-		Assert.AreEqual(obsoletingPub, actualPub.ObsoletedById);
+		Assert.AreEqual(1, _db.Publications.Count(p => p.Id == pubToObsolete.Id));
+		var actualPub = _db.Publications.Single(p => p.Id == pubToObsolete.Id);
+		Assert.AreEqual(obsoletingPub.Id, actualPub.ObsoletedById);
 
-		_youtubeSync.Verify(v => v.SyncYouTubeVideo(It.IsAny<YoutubeVideo>()));
+		await _youtubeSync.Received(1).SyncYouTubeVideo(Arg.Any<YoutubeVideo>());
 	}
+
+	#endregion
+
+	#region ExceededSubmissionLimit
+
+	[TestMethod]
+	public async Task ExceededSubmissionLimit_RecentSubmissionsButUnderLimit_ReturnsNull()
+	{
+		const int submitterId = 1;
+		_db.AddUser(submitterId);
+		_db.Submissions.Add(new Submission { SubmitterId = submitterId });
+		await _db.SaveChangesAsync();
+
+		var actual = await _queueService.ExceededSubmissionLimit(submitterId);
+		Assert.IsNull(actual);
+	}
+
+	[TestMethod]
+	public async Task ExceededSubmissionLimit_ManySubmissionsButOldEnough_ReturnsNull()
+	{
+		const int submitterId = 1;
+		_db.AddUser(submitterId);
+		for (var i = 0; i < SubmissionRateSubs + 1; i++)
+		{
+			_db.Submissions.Add(new Submission { SubmitterId = submitterId, CreateTimestamp = DateTime.UtcNow.AddDays(-SubmissionRateDays).AddHours(-1) });
+		}
+
+		await _db.SaveChangesAsync();
+
+		var actual = await _queueService.ExceededSubmissionLimit(submitterId);
+		Assert.IsNull(actual);
+	}
+
+	[TestMethod]
+	public async Task ExceededSubmissionLimit_ManyRecentSubmissions_ReturnsFutureDate()
+	{
+		const int submitterId = 1;
+		_db.AddUser(submitterId);
+		for (var i = 0; i < SubmissionRateSubs + 1; i++)
+		{
+			_db.Submissions.Add(new Submission { SubmitterId = submitterId, CreateTimestamp = DateTime.UtcNow.AddDays(-SubmissionRateDays).AddHours(1 + i) });
+		}
+
+		await _db.SaveChangesAsync();
+
+		var actual = await _queueService.ExceededSubmissionLimit(submitterId);
+		Assert.IsNotNull(actual);
+		Assert.IsTrue(actual.Value > DateTime.UtcNow);
+	}
+
+	#endregion
+
+	#region GetSubmissionCount
+
+	[TestMethod]
+	public async Task GetSubmissionCount_UserDoesNotExist_ReturnsZero()
+	{
+		var actual = await _queueService.GetSubmissionCount(int.MaxValue);
+		Assert.AreEqual(0, actual);
+	}
+
+	[TestMethod]
+	public async Task GetSubmissionCount_UserHasNotSubmitted_ReturnsZero()
+	{
+		const int userId = 1;
+		_db.AddUser(userId);
+
+		var actual = await _queueService.GetSubmissionCount(userId);
+		Assert.AreEqual(0, actual);
+	}
+
+	[TestMethod]
+	public async Task GetSubmissionCount_UserIsAuthorButNotSubmitter_ReturnsZero()
+	{
+		const int authorId = 1;
+		_db.AddUser(authorId);
+		var sub = _db.AddSubmission();
+		_db.SubmissionAuthors.Add(new SubmissionAuthor { UserId = authorId, Submission = sub.Entity });
+		await _db.SaveChangesAsync();
+
+		var actual = await _queueService.GetSubmissionCount(authorId);
+		Assert.AreEqual(0, actual);
+	}
+
+	[TestMethod]
+	public async Task GetSubmissionCount_ReturnsSubmissionCount()
+	{
+		var sub = _db.AddSubmission();
+		await _db.SaveChangesAsync();
+
+		var actual = await _queueService.GetSubmissionCount(sub.Entity.Submitter!.Id);
+		Assert.AreEqual(1, actual);
+	}
+
+	#endregion
 }

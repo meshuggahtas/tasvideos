@@ -2,29 +2,82 @@
 
 namespace TASVideos.Common;
 
-public class HtmlWriter
+public partial class HtmlWriter(TextWriter w)
 {
-	private static readonly Regex AllowedTagNames = new("^[a-z0-9]+$");
-	private static readonly Regex AllowedAttributeNames = new("^[a-z\\-]+$");
-	private static readonly HashSet<string> VoidTags = new(
-		new[]
+	private struct HtmlClassList()
+	{
+		private List<string>? _list = null;
+
+		private string? _single = null;
+
+		public void Add(string item)
 		{
-				"area", "base", "br", "col", "embed", "hr", "img", "input",
-				"keygen", "link", "meta", "param", "source", "track", "wbr"
-		},
+			if (_single is not null)
+			{
+				_list = new() { _single, item };
+				_single = null;
+			}
+			else if (_list is not null)
+			{
+				_list.Add(item);
+			}
+			else
+			{
+				_single = item;
+			}
+		}
+
+		public readonly string Serialize()
+		{
+			HashSet<string> classes;
+			if (!string.IsNullOrEmpty(_single))
+			{
+				classes = _single.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+			}
+			else if (_list is not null)
+			{
+				classes = _list.SelectMany(s => s.Split(' ', StringSplitOptions.RemoveEmptyEntries)).ToHashSet();
+			}
+			else
+			{
+				return "";
+			}
+
+			return classes.Count is 0 ? "" : string.Join(' ', classes);
+		}
+	}
+
+	private static readonly Regex AllowedTagNames = AllowedTagNamesRegex();
+	private static readonly Regex AllowedAttributeNames = AllowedAttributeNamesRegex();
+	private static readonly HashSet<string> VoidTags = new(
+		[
+			"area",
+			"base",
+			"br",
+			"col",
+			"embed",
+			"hr",
+			"img",
+			"input",
+			"keygen",
+			"link",
+			"meta",
+			"param",
+			"source",
+			"track",
+			"wbr"
+		],
 		StringComparer.OrdinalIgnoreCase
 	);
 
-	private readonly TextWriter _w;
+	private HtmlClassList _currentElemClassAttr = default;
+
+	private HtmlClassList _currentElemRelAttr = default;
+
 	private bool _inTagOpen;
 	private readonly Stack<string> _openTags = new();
 
 	private bool InForeignContent => _openTags.TryPeek(out var tag) && tag is "script" or "style";
-
-	public HtmlWriter(TextWriter w)
-	{
-		_w = w;
-	}
 
 	public void OpenTag(string tagName)
 	{
@@ -43,43 +96,42 @@ public class HtmlWriter
 			throw new InvalidOperationException("Can't open a void tag");
 		}
 
-		if (_inTagOpen)
-		{
-			_w.Write('>');
-		}
-
-		tagName = tagName.ToLowerInvariant();
-		_w.Write('<');
-		_w.Write(tagName);
+		FinalizeOpenTag();
+		w.Write('<');
+		w.Write(tagName);
 		_openTags.Push(tagName);
 		_inTagOpen = true;
 	}
 
 	public void CloseTag(string tagName)
 	{
+		if (VoidTags.Contains(tagName))
+		{
+			throw new InvalidOperationException($"{tagName} cannot have children and is self-closing");
+		}
+
 		if (_openTags.Count == 0)
 		{
 			throw new InvalidOperationException("No open tags!");
 		}
 
-		if (!tagName.Equals(_openTags.Peek(), StringComparison.OrdinalIgnoreCase))
+		tagName = tagName.ToLowerInvariant();
+		if (!tagName.Equals(_openTags.Peek(), StringComparison.Ordinal))
 		{
 			throw new InvalidOperationException($"Opened tag {_openTags.Peek()} but closing tag {tagName}");
 		}
 
-		if (_inTagOpen)
-		{
-			_w.Write('>');
-		}
-
-		tagName = tagName.ToLowerInvariant();
-		_w.Write("</");
-		_w.Write(tagName);
-		_w.Write('>');
+		FinalizeOpenTag();
+		w.Write("</");
+		w.Write(tagName);
+		w.Write('>');
 		_openTags.Pop();
-		_inTagOpen = false;
 	}
 
+	/// <summary>equivalent of <see cref="OpenTag"/> for tags like <c>&lt;img></c> which may not have children and are self-closing</summary>
+	/// <remarks>where does the name "void" come from? it's the title of the relevant MDN article, but nowhere in the spec --yoshi</remarks>
+	/// <seealso cref="OpenTag"/>
+	/// <seealso cref="CloseTag"/>
 	public void VoidTag(string tagName)
 	{
 		if (InForeignContent)
@@ -97,14 +149,9 @@ public class HtmlWriter
 			throw new InvalidOperationException("Can't void an open tag");
 		}
 
-		if (_inTagOpen)
-		{
-			_w.Write('>');
-		}
-
-		tagName = tagName.ToLowerInvariant();
-		_w.Write('<');
-		_w.Write(tagName);
+		FinalizeOpenTag();
+		w.Write('<');
+		w.Write(tagName);
 		_inTagOpen = true;
 	}
 
@@ -120,91 +167,123 @@ public class HtmlWriter
 			throw new InvalidOperationException($"Invalid attribute name {name}");
 		}
 
-		_w.Write(' ');
-		_w.Write(name);
-		_w.Write("=\"");
+		if (name is "class")
+		{
+			_currentElemClassAttr.Add(value);
+		}
+		else if (name is "rel")
+		{
+			_currentElemRelAttr.Add(value);
+		}
+		else
+		{
+			EscapeAndWriteAttribute(name, value);
+		}
+	}
 
+	private void EscapeAndWriteAttribute(ReadOnlySpan<char> name, ReadOnlySpan<char> value)
+	{
+		w.Write(' ');
+		w.Write(name);
+		w.Write("=\"");
 		foreach (var c in value)
 		{
 			switch (c)
 			{
 				case '<':
-					_w.Write("&lt;");
+					w.Write("&lt;");
 					break;
 				case '&':
-					_w.Write("&amp;");
+					w.Write("&amp;");
 					break;
 				case '"':
-					_w.Write("&quot;");
+					w.Write("&quot;");
 					break;
 				default:
-					_w.Write(c);
+					w.Write(c); // different overload
 					break;
 			}
 		}
 
-		_w.Write('"');
+		w.Write('"');
 	}
 
 	public void Text(string text)
 	{
-		if (InForeignContent)
+		var inForeignContent = InForeignContent;
+		if (inForeignContent && text.Contains($"</{_openTags.Peek()}", StringComparison.OrdinalIgnoreCase))
 		{
-			if (text.Contains($"</{_openTags.Peek()}", StringComparison.OrdinalIgnoreCase))
-			{
-				throw new InvalidOperationException("Can't unescape something that looks like closing tag here!");
-			}
-
-			if (_inTagOpen)
-			{
-				_w.Write('>');
-			}
-
-			_w.Write(text);
-		}
-		else
-		{
-			if (_inTagOpen)
-			{
-				_w.Write('>');
-			}
-
-			foreach (var c in text)
-			{
-				switch (c)
-				{
-					case '<':
-						_w.Write("&lt;");
-						break;
-					case '&':
-						_w.Write("&amp;");
-						break;
-					default:
-						_w.Write(c);
-						break;
-				}
-			}
+			throw new InvalidOperationException("Can't unescape something that looks like closing tag here!");
 		}
 
-		_inTagOpen = false;
+		FinalizeOpenTag();
+		if (inForeignContent)
+		{
+			w.Write(text);
+			return;
+		}
+
+		foreach (var c in text)
+		{
+			switch (c)
+			{
+				case '<':
+					w.Write("&lt;");
+					break;
+				case '&':
+					w.Write("&amp;");
+					break;
+				default:
+					w.Write(c); // different overload
+					break;
+			}
+		}
 	}
 
 	public void AssertFinished()
 	{
 		if (_openTags.Count > 0)
 		{
-			throw new InvalidOperationException("Tags still open!");
+			throw new InvalidOperationException($"Tags still open! {string.Join(" > ", _openTags)}");
 		}
 
-		if (_inTagOpen)
+		FinalizeOpenTag();
+	}
+
+	private void FinalizeOpenTag()
+	{
+		if (!_inTagOpen)
 		{
-			_w.Write('>');
+			return;
 		}
+
+		_inTagOpen = false;
+
+		var classListStr = _currentElemClassAttr.Serialize();
+		_currentElemClassAttr = default;
+		if (classListStr.Length is not 0)
+		{
+			EscapeAndWriteAttribute("class", classListStr);
+		}
+
+		var relationListStr = _currentElemRelAttr.Serialize();
+		_currentElemRelAttr = default;
+		if (relationListStr.Length is not 0)
+		{
+			EscapeAndWriteAttribute("rel", relationListStr);
+		}
+
+		w.Write('>');
 	}
 
 	/// <summary>
 	/// Gets the underlying writer
 	/// Do not use this unless you're very careful with escaping!
 	/// </summary>
-	public TextWriter BaseWriter => _w;
+	public TextWriter BaseWriter => w;
+
+	[GeneratedRegex("^[a-z0-9]+$")]
+	private static partial Regex AllowedTagNamesRegex();
+	[GeneratedRegex("^[a-z\\-]+$")]
+	private static partial Regex AllowedAttributeNamesRegex();
 }

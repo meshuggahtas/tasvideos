@@ -1,0 +1,41 @@
+﻿@page "{year}/{handler?}"
+@model AssignModel
+@{
+	ViewData.SetTitle($"Assign an Award for Year {Model.Year}");
+}
+
+<form method="post">
+	<a condition="Model.ShowUpload" asp-page="UploadImage" asp-route-year="@Model.Year" class="btn btn-primary mb-2"><i class="fa fa-upload"></i> Upload</a>
+	<row>
+		<column md="6">
+			<fieldset>
+				<label asp-for="AwardToAssign.Award"></label>
+				<select asp-for="AwardToAssign.Award" data-id="award-dropdown" data-year="@Model.Year" asp-items="Model.AvailableAwardCategories"></select>
+				<span asp-validation-for="AwardToAssign.Award"></span>
+			</fieldset>
+		</column>
+		<column md="6">
+			<img id="award-image" src="" />
+		</column>
+	</row>
+	<fullrow>
+		<fieldset>
+			<label asp-for="AwardToAssign.Users"></label>
+			<select asp-for="AwardToAssign.Users" multiselect="true" asp-items="Model.AvailableUsers"></select>
+		</fieldset>
+	</fullrow>
+	<fullrow>
+		<fieldset>
+			<label asp-for="AwardToAssign.Publications"></label>
+			<select asp-for="AwardToAssign.Publications" multiselect="true" asp-items="Model.AvailablePublications"></select>
+		</fieldset>
+	</fullrow>
+	<form-button-bar>
+		<submit-button><i class="fa fa-plus"></i> Assign</submit-button>
+		<cancel-link asp-page="List"></cancel-link>
+	</form-button-bar>
+</form>
+
+@section Scripts {
+	<script src="/js/award-preview.js"></script>
+}

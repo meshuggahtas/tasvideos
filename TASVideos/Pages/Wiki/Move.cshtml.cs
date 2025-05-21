@@ -1,43 +1,29 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Wiki.Models;
+﻿using TASVideos.Core.Services.Wiki;
 
 namespace TASVideos.Pages.Wiki;
 
 [RequirePermission(PermissionTo.MoveWikiPages)]
-public class MoveModel : BasePageModel
+public class MoveModel(IWikiPages wikiPages, IExternalMediaPublisher publisher) : BasePageModel
 {
-	private readonly IWikiPages _wikiPages;
-	private readonly ExternalMediaPublisher _publisher;
-
-	public MoveModel(
-		IWikiPages wikiPages,
-		ExternalMediaPublisher publisher)
-	{
-		_wikiPages = wikiPages;
-		_publisher = publisher;
-	}
-
 	[FromQuery]
 	public string? Path { get; set; }
 
 	[BindProperty]
-	public WikiMoveModel Move { get; set; } = new();
+	public string OriginalPageName { get; set; } = "";
+
+	[BindProperty]
+	[ValidWikiPageName]
+	public string DestinationPageName { get; set; } = "";
 
 	public async Task<IActionResult> OnGet()
 	{
 		if (!string.IsNullOrWhiteSpace(Path))
 		{
 			Path = Path.Trim('/');
-			if (await _wikiPages.Exists(Path))
+			if (await wikiPages.Exists(Path))
 			{
-				Move = new WikiMoveModel
-				{
-					OriginalPageName = Path,
-					DestinationPageName = Path
-				};
+				OriginalPageName = Path;
+				DestinationPageName = Path;
 				return Page();
 			}
 		}
@@ -52,12 +38,12 @@ public class MoveModel : BasePageModel
 			return Page();
 		}
 
-		Move.OriginalPageName = Move.OriginalPageName.Trim('/');
-		Move.DestinationPageName = Move.DestinationPageName.Trim('/');
+		OriginalPageName = OriginalPageName.Trim('/');
+		DestinationPageName = DestinationPageName.Trim('/');
 
-		if (await _wikiPages.Exists(Move.DestinationPageName, includeDeleted: true))
+		if (await wikiPages.Exists(DestinationPageName, includeDeleted: true))
 		{
-			ModelState.AddModelError("Move.DestinationPageName", "The destination page already exists.");
+			ModelState.AddModelError("DestinationPageName", "The destination page already exists.");
 		}
 
 		if (!ModelState.IsValid)
@@ -65,7 +51,18 @@ public class MoveModel : BasePageModel
 			return Page();
 		}
 
-		var result = await _wikiPages.Move(Move.OriginalPageName, Move.DestinationPageName);
+		var result = await wikiPages.Move(OriginalPageName, DestinationPageName);
+
+		// Add a dummy commit to track the move
+		var page = (await wikiPages.Page(DestinationPageName))!;
+		await wikiPages.Add(new WikiCreateRequest
+		{
+			PageName = DestinationPageName,
+			Markup = page.Markup,
+			RevisionMessage = $"Page Moved from {OriginalPageName} to {DestinationPageName}",
+			AuthorId = User.GetUserId(),
+			MinorEdit = false
+		});
 
 		if (!result)
 		{
@@ -73,11 +70,11 @@ public class MoveModel : BasePageModel
 			return Page();
 		}
 
-		await _publisher.SendGeneralWiki(
-			$"Page {Move.OriginalPageName} moved to {Move.DestinationPageName} by {User.Name()}",
+		await publisher.SendWiki(
+			$"Page {OriginalPageName} moved to [{DestinationPageName}]({{0}}) by {User.Name()}",
 			"",
-			Move.DestinationPageName);
+			DestinationPageName);
 
-		return BaseRedirect("/" + Move.DestinationPageName);
+		return BaseRedirect("/" + DestinationPageName);
 	}
 }

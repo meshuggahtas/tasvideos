@@ -1,47 +1,21 @@
-﻿using System.ComponentModel;
-using AutoMapper;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Users.Models;
-
-namespace TASVideos.Pages.Users;
+﻿namespace TASVideos.Pages.Users;
 
 [RequirePermission(PermissionTo.EditUsers)]
-public class EditModel : BasePageModel
+public class EditModel(
+	IRoleService roleService,
+	ApplicationDbContext db,
+	IExternalMediaPublisher publisher,
+	IUserMaintenanceLogger userMaintenanceLogger,
+	IUserManager userManager)
+	: BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly IMapper _mapper;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly IUserMaintenanceLogger _userMaintenanceLogger;
-	private readonly IWikiPages _wikiPages;
-
-	public EditModel(
-		ApplicationDbContext db,
-		IMapper mapper,
-		ExternalMediaPublisher publisher,
-		IUserMaintenanceLogger userMaintenanceLogger,
-		IWikiPages wikiPages)
-	{
-		_db = db;
-		_mapper = mapper;
-		_publisher = publisher;
-		_userMaintenanceLogger = userMaintenanceLogger;
-		_wikiPages = wikiPages;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
 	[BindProperty]
 	public UserEditModel UserToEdit { get; set; } = new();
 
-	[DisplayName("Available Roles")]
-	public IEnumerable<SelectListItem> AvailableRoles { get; set; } = new List<SelectListItem>();
+	public List<SelectListItem> AvailableRoles { get; set; } = [];
 
 	public async Task<IActionResult> OnGet()
 	{
@@ -50,8 +24,26 @@ public class EditModel : BasePageModel
 			return RedirectToPage("/Profile/Settings");
 		}
 
-		var userToEdit = await _mapper.ProjectTo<UserEditModel>(
-				_db.Users.Where(u => u.Id == Id))
+		var userToEdit = await db.Users
+			.Where(u => u.Id == Id)
+			.Select(u => new UserEditModel
+			{
+				UserName = u.UserName,
+				TimeZone = u.TimeZoneId,
+				Location = u.From,
+				SelectedRoles = u.UserRoles.Select(ur => ur.RoleId).ToList(),
+				AccountCreatedOn = u.CreateTimestamp,
+				UserLastLoggedIn = u.LastLoggedInTimeStamp,
+				Email = u.Email,
+				EmailConfirmed = u.EmailConfirmed,
+				LockedStatus = u.LockoutEnabled && u.LockoutEnd.HasValue && u.LockoutEnd.Value > DateTime.UtcNow,
+				Signature = u.Signature,
+				Avatar = u.Avatar,
+				MoodAvatar = u.MoodAvatarUrlBase,
+				UseRatings = u.UseRatings,
+				BannedUntil = u.BannedUntil,
+				ModeratorComments = u.ModeratorComments
+			})
 			.SingleOrDefaultAsync();
 
 		if (userToEdit is null)
@@ -60,26 +52,28 @@ public class EditModel : BasePageModel
 		}
 
 		UserToEdit = userToEdit;
-		AvailableRoles = await GetAllRolesUserCanAssign(User.GetUserId(), UserToEdit.SelectedRoles);
+		var roles = await roleService.GetAllRolesUserCanAssign(User.GetUserId(), UserToEdit.SelectedRoles);
+		AvailableRoles = roles.ToDropDown().ToList();
 		return Page();
 	}
 
 	public async Task<IActionResult> OnPost()
 	{
+		var roles = await roleService.GetAllRolesUserCanAssign(User.GetUserId(), UserToEdit.SelectedRoles);
 		if (!ModelState.IsValid)
 		{
-			AvailableRoles = await GetAllRolesUserCanAssign(User.GetUserId(), UserToEdit.SelectedRoles);
+			AvailableRoles = roles.ToDropDown().ToList();
 			return Page();
 		}
 
-		var user = await _db.Users.Include(u => u.UserRoles).SingleOrDefaultAsync(u => u.Id == Id);
+		var user = await db.Users.Include(u => u.UserRoles).SingleOrDefaultAsync(u => u.Id == Id);
 		if (user is null)
 		{
 			return NotFound();
 		}
 
 		// Double check user can assign all new the roles they are requesting to assign
-		var rolesThatUserCanAssign = await GetAllRoleIdsUserCanAssign(User.GetUserId(), user.UserRoles.Select(ur => ur.RoleId));
+		var rolesThatUserCanAssign = roles.Where(r => !r.Disabled).Select(r => r.Id).ToList();
 		if (UserToEdit.SelectedRoles.Except(rolesThatUserCanAssign).Any())
 		{
 			return AccessDenied();
@@ -89,54 +83,65 @@ public class EditModel : BasePageModel
 			? user.UserName
 			: null;
 
-		user.UserName = UserToEdit.UserName;
-		user.TimeZoneId = UserToEdit.TimezoneId;
-		user.From = UserToEdit.From;
+		if (userNameChange is not null)
+		{
+			if (await userManager.CanRenameUser(user.UserName, UserToEdit.UserName!))
+			{
+				user.UserName = UserToEdit.UserName!;
+			}
+			else
+			{
+				userNameChange = null;
+			}
+		}
+
+		user.TimeZoneId = UserToEdit.TimeZone;
+		user.From = UserToEdit.Location;
 		user.Signature = UserToEdit.Signature;
 		user.Avatar = UserToEdit.Avatar;
-		user.MoodAvatarUrlBase = UserToEdit.MoodAvatarUrlBase;
+		user.MoodAvatarUrlBase = UserToEdit.MoodAvatar;
+		user.UseRatings = UserToEdit.UseRatings;
+		user.BannedUntil = UserToEdit.BannedUntil;
+		user.ModeratorComments = UserToEdit.ModeratorComments;
 
-		var currentRoles = await _db.UserRoles
-			.Where(ur => ur.User == user)
+		var currentRoles = await db.UserRoles
+			.Where(ur => ur.User == user && rolesThatUserCanAssign.Contains(ur.RoleId))
 			.ToListAsync();
 
-		_db.UserRoles.RemoveRange(currentRoles);
+		db.UserRoles.RemoveRange(currentRoles);
 
-		var result = await ConcurrentSave(_db, "", $"Unable to update user data for {user.UserName}");
-		if (!result)
+		var result = await db.TrySaveChanges();
+		if (result != SaveResult.Success)
 		{
+			ErrorStatusMessage($"Unable to update user data for {user.UserName}");
 			return BasePageRedirect("List");
 		}
 
-		_db.UserRoles.AddRange(UserToEdit.SelectedRoles
+		db.UserRoles.AddRange(UserToEdit.SelectedRoles
 			.Select(r => new UserRole
 			{
 				User = user,
 				RoleId = r
 			}));
 
-		var saveResult2 = await ConcurrentSave(_db, "", $"Unable to update user data for {user.UserName}");
-		if (!saveResult2)
+		var saveResult2 = await db.TrySaveChanges();
+		if (saveResult2 != SaveResult.Success)
 		{
+			ErrorStatusMessage($"Unable to update user data for {user.UserName}");
 			return BasePageRedirect("List");
 		}
 
-		if (userNameChange != null)
+		if (userNameChange is not null)
 		{
+			await publisher.SendUserManagement(
+				$"Username {userNameChange} changed to [{user.UserName}]({{0}}) by {User.Name()}", user.UserName);
 			string message = $"Username {userNameChange} changed to {user.UserName} by {User.Name()}";
-			await _publisher.SendUserManagement(
-				message,
-				"",
-				$"Users/Profile/{user.UserName}");
-			await _userMaintenanceLogger.Log(user.Id, message, User.GetUserId());
-			var oldHomePage = LinkConstants.HomePages + userNameChange;
-			var newHomePage = LinkConstants.HomePages + user.UserName;
-
-			await _wikiPages.MoveAll(oldHomePage, newHomePage);
+			await userMaintenanceLogger.Log(user.Id, message, User.GetUserId());
+			await userManager.UserNameChanged(user, userNameChange);
 		}
 
 		// Announce Role change
-		var allRoles = await _db.Roles.ToListAsync();
+		var allRoles = await db.Roles.ToListAsync();
 		var currentRoleIds = currentRoles.Select(r => r.RoleId).ToList();
 		var newRoleIds = UserToEdit.SelectedRoles.ToList();
 		var addedRoles = allRoles
@@ -168,86 +173,52 @@ public class EditModel : BasePageModel
 				message += "Removed roles: " + string.Join(", ", removedRoles);
 			}
 
-			await _publisher.SendUserManagement(
-				$"User {user.UserName} edited by {User.Name()}",
-				message,
-				$"Users/Profile/{user.UserName}");
-			await _userMaintenanceLogger.Log(user.Id, message, User.GetUserId());
+			await publisher.SendUserManagement($"User [{user.UserName}]({{0}}) edited by {User.Name()}", user.UserName);
+			await userMaintenanceLogger.Log(user.Id, message, User.GetUserId());
 		}
 
 		SuccessStatusMessage($"User {user.UserName} updated");
 
 		// If username is changed, we want to ignore the returnUrl that will be the old name
-		return userNameChange != null
+		return userNameChange is not null
 			? RedirectToPage("/Users/Profile", new { Name = user.UserName })
 			: BasePageRedirect("List");
 	}
 
 	public async Task<IActionResult> OnGetUnlock()
 	{
-		var user = await _db.Users.SingleOrDefaultAsync(u => u.Id == Id);
+		var user = await db.Users.FindAsync(Id);
 		if (user is null)
 		{
 			return NotFound();
 		}
 
 		user.LockoutEnd = null;
-		await ConcurrentSave(_db, $"User {user.UserName} unlocked", $"Unable to unlock user {user.UserName}");
+		SetMessage(await db.TrySaveChanges(), $"User {user.UserName} unlocked", $"Unable to unlock user {user.UserName}");
 
 		return BaseReturnUrlRedirect();
 	}
 
-	private async Task<IEnumerable<SelectListItem>> GetAllRolesUserCanAssign(int userId, IEnumerable<int> assignedRoles)
+	public class UserEditModel
 	{
-		if (assignedRoles is null)
-		{
-			throw new ArgumentException($"{nameof(assignedRoles)} can not be null");
-		}
+		[StringLength(50)]
+		public string? UserName { get; init; }
+		public string TimeZone { get; init; } = TimeZoneInfo.Utc.Id;
+		public string? Location { get; init; }
+		public List<int> SelectedRoles { get; init; } = [];
+		public DateTime AccountCreatedOn { get; init; }
+		public DateTime? UserLastLoggedIn { get; init; }
 
-		var assignedRoleList = assignedRoles.ToList();
-		var assignablePermissions = await _db.Users
-			.Where(u => u.Id == userId)
-			.SelectMany(u => u.UserRoles)
-			.SelectMany(ur => ur.Role!.RolePermission)
-			.Where(rp => rp.CanAssign)
-			.Select(rp => rp.PermissionId)
-			.ToListAsync();
-
-		return await _db.Roles
-			.Where(r => r.RolePermission.All(rp => assignablePermissions.Contains(rp.PermissionId))
-				|| assignedRoleList.Contains(r.Id))
-			.Select(r => new SelectListItem
-			{
-				Value = r.Id.ToString(),
-				Text = r.Name,
-				Disabled = !r.RolePermission.All(rp => assignablePermissions.Contains(rp.PermissionId))
-					&& assignedRoleList.Any() // EF Core 2.1 issue, needs this or a user with no assigned roles blows up
-					&& assignedRoleList.Contains(r.Id)
-			})
-			.ToListAsync();
-	}
-
-	// TODO: reduce copy-pasta
-	private async Task<IEnumerable<int>> GetAllRoleIdsUserCanAssign(int userId, IEnumerable<int> assignedRoles)
-	{
-		if (assignedRoles is null)
-		{
-			throw new ArgumentException($"{nameof(assignedRoles)} can not be null");
-		}
-
-		var assignedRoleList = assignedRoles.ToList();
-		var assignablePermissions = await _db.Users
-			.Where(u => u.Id == userId)
-			.SelectMany(u => u.UserRoles)
-			.SelectMany(ur => ur.Role!.RolePermission)
-			.Where(rp => rp.CanAssign)
-			.Select(rp => rp.PermissionId)
-			.ToListAsync();
-
-		return await _db.Roles
-			.Where(r => r.RolePermission.All(rp => assignablePermissions.Contains(rp.PermissionId))
-				|| assignedRoleList.Contains(r.Id))
-			.Select(r => r.Id)
-			.ToListAsync();
+		[EmailAddress]
+		public string? Email { get; init; }
+		public bool EmailConfirmed { get; init; }
+		public bool LockedStatus { get; init; }
+		public string? Signature { get; init; }
+		public string? Avatar { get; init; }
+		public string? MoodAvatar { get; init; }
+		public string? OriginalUserName => UserName;
+		public bool UseRatings { get; init; }
+		public DateTime? BannedUntil { get; init; }
+		public string? ModeratorComments { get; init; }
 	}
 }

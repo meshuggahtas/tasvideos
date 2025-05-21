@@ -14,7 +14,13 @@ public class TestCache : ICacheService
 		ReferenceHandler = ReferenceHandler.IgnoreCycles
 	};
 
-	private readonly Dictionary<string, string> _cache = new();
+	private readonly Dictionary<string, string> _cache = [];
+
+	public T Get<T>(string key)
+	{
+		var json = _cache[key];
+		return JsonSerializer.Deserialize<T>(json)!;
+	}
 
 	public bool TryGetValue<T>(string key, out T value)
 	{
@@ -26,7 +32,7 @@ public class TestCache : ICacheService
 		return result;
 	}
 
-	public void Set(string key, object? data, int? cacheTime = null)
+	public void Set<T>(string key, T data, TimeSpan? cacheTime = null)
 	{
 		var str = JsonSerializer.Serialize(data, SerializerSettings);
 		_cache[key] = str;

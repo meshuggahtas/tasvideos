@@ -1,8 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-
-namespace TASVideos.Core.Services;
+﻿namespace TASVideos.Core.Services;
 
 public interface IPointsService
 {
@@ -11,7 +7,7 @@ public interface IPointsService
 	/// the calculated player rank is returned. If a user with the given
 	/// <see cref="userId"/> does not exist, 0 is returned
 	/// </summary>
-	ValueTask<(double, string)> PlayerPoints(int userId);
+	ValueTask<(double Points, string Rank)> PlayerPoints(int userId);
 
 	/// <summary>
 	/// Calculates the player points that are being awarded for the given publication
@@ -20,54 +16,44 @@ public interface IPointsService
 	ValueTask<double> PlayerPointsForPublication(int publicationId);
 }
 
-internal class PointsService : IPointsService
+internal class PointsService(ApplicationDbContext db, ICacheService cache) : IPointsService
 {
 	private const string MoviePlayerPointKey = "PlayerPointsForPub-";
 	private const string PlayerPointKey = "PlayerPoints-";
 	private const string AverageNumberOfRatingsKey = "AverageNumberOfRatings";
 
-	private readonly ApplicationDbContext _db;
-	private readonly ICacheService _cache;
-
-	public PointsService(
-		ApplicationDbContext db,
-		ICacheService cache)
-	{
-		_db = db;
-		_cache = cache;
-	}
-
-	public async ValueTask<(double, string)> PlayerPoints(int userId)
+	public async ValueTask<(double Points, string Rank)> PlayerPoints(int userId)
 	{
 		string cacheKey = PlayerPointKey + userId;
-		if (_cache.TryGetValue(cacheKey, out double playerPoints))
+		if (cache.TryGetValue(cacheKey, out double playerPoints))
 		{
 			return (playerPoints, PointsCalculator.PlayerRank((decimal)playerPoints));
 		}
 
-		var publications = await _db.Publications
+		var publications = await db.Publications
 			.ForAuthor(userId)
 			.ToCalcPublication()
 			.ToListAsync();
 
 		var averageRatings = await AverageNumberOfRatingsPerPublication();
-		playerPoints = Math.Round(PointsCalculator.PlayerPoints(publications, averageRatings), 1);
+		playerPoints = Math.Ceiling(PointsCalculator.PlayerPoints(publications, averageRatings) * 10) / 10;
 
-		_cache.Set(cacheKey, playerPoints);
+		cache.Set(cacheKey, playerPoints);
 		return (playerPoints, PointsCalculator.PlayerRank((decimal)playerPoints));
 	}
 
 	public async ValueTask<double> PlayerPointsForPublication(int publicationId)
 	{
 		string cacheKey = MoviePlayerPointKey + publicationId;
-		if (_cache.TryGetValue(cacheKey, out double playerPoints))
+		if (cache.TryGetValue(cacheKey, out double playerPoints))
 		{
 			return playerPoints;
 		}
 
-		var publication = await _db.Publications
+		var publication = await db.Publications
+			.Where(p => p.Id == publicationId)
 			.ToCalcPublication()
-			.SingleOrDefaultAsync(p => p.Id == publicationId);
+			.SingleOrDefaultAsync();
 
 		if (publication is null || publication.AuthorCount == 0)
 		{
@@ -76,27 +62,27 @@ internal class PointsService : IPointsService
 
 		var averageRatings = await AverageNumberOfRatingsPerPublication();
 		playerPoints = PointsCalculator.PlayerPointsForMovie(publication, averageRatings);
-		_cache.Set(cacheKey, playerPoints);
+		cache.Set(cacheKey, playerPoints);
 		return playerPoints;
 	}
 
 	// total ratings / total publications
 	private async ValueTask<double> AverageNumberOfRatingsPerPublication()
 	{
-		if (_cache.TryGetValue(AverageNumberOfRatingsKey, out double playerPoints))
+		if (cache.TryGetValue(AverageNumberOfRatingsKey, out double playerPoints))
 		{
 			return playerPoints;
 		}
 
-		var totalPublications = await _db.Publications.CountAsync();
+		var totalPublications = await db.Publications.CountAsync();
 
 		double avg = 0;
 		if (totalPublications > 0)
 		{
-			avg = await _db.PublicationRatings.CountAsync() / (double)totalPublications;
+			avg = await db.PublicationRatings.CountAsync() / (double)totalPublications;
 		}
 
-		_cache.Set(AverageNumberOfRatingsKey, avg);
+		cache.Set(AverageNumberOfRatingsKey, avg);
 		return avg;
 	}
 }
@@ -105,17 +91,14 @@ internal static class PointsEntityExtensions
 {
 	public static IQueryable<PointsCalculator.Publication> ToCalcPublication(this IQueryable<Publication> query)
 	{
-		return query.Select(p => new PointsCalculator.Publication
-		{
-			Id = p.Id,
-			Obsolete = p.ObsoletedById.HasValue,
-			ClassWeight = p.PublicationClass!.Weight,
-			AuthorCount = p.Authors.Count,
-			RatingCount = p.PublicationRatings.Count,
-			AverageRating = p.PublicationRatings.Count > 0 ? p.PublicationRatings
+		return query.Select(p => new PointsCalculator.Publication(
+			p.ObsoletedById.HasValue,
+			p.PublicationRatings.Count,
+			p.Authors.Count,
+			p.PublicationFlags.Any() ? p.PublicationFlags.Max(pf => pf.Flag!.Weight) : 1,
+			p.PublicationRatings.Count > 0 ? p.PublicationRatings
 				.Where(pr => !pr.Publication!.Authors.Select(a => a.UserId).Contains(pr.UserId))
 				.Where(pr => pr.User!.UseRatings)
-				.Average(pr => pr.Value) : null
-		});
+				.Average(pr => pr.Value) : null));
 	}
 }

@@ -1,42 +1,27 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.UserFiles.Models;
+﻿namespace TASVideos.Pages.UserFiles;
 
-namespace TASVideos.Pages.UserFiles;
-
-public class EditModel : BasePageModel
+public class EditModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public EditModel(
-		ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
 	[FromRoute]
 	public long Id { get; set; }
 
 	[BindProperty]
-	public UserFileEditModel UserFile { get; set; } = new();
+	public UserFileEdit UserFile { get; set; } = new();
 
-	public IEnumerable<SelectListItem> AvailableSystems { get; set; } = new List<SelectListItem>();
+	public List<SelectListItem> AvailableSystems { get; set; } = [];
 
-	public IEnumerable<SelectListItem> AvailableGames { get; set; } = new List<SelectListItem>();
+	public List<SelectListItem> AvailableGames { get; set; } = [];
 
 	public async Task<IActionResult> OnGet()
 	{
-		var file = await _db.UserFiles
+		var file = await db.UserFiles
 			.Where(uf => uf.Id == Id)
-			.Select(uf => new UserFileEditModel
+			.Select(uf => new UserFileEdit
 			{
 				Title = uf.Title,
 				Description = uf.Description ?? "",
-				SystemId = uf.SystemId,
-				GameId = uf.GameId,
+				System = uf.SystemId,
+				Game = uf.GameId,
 				Hidden = uf.Hidden,
 				UserId = uf.AuthorId,
 				UserName = uf.Author!.UserName
@@ -68,9 +53,7 @@ public class EditModel : BasePageModel
 			return Page();
 		}
 
-		var file = await _db.UserFiles
-			.SingleOrDefaultAsync(uf => uf.Id == Id);
-
+		var file = await db.UserFiles.FindAsync(Id);
 		if (file is null)
 		{
 			return NotFound();
@@ -83,28 +66,36 @@ public class EditModel : BasePageModel
 
 		file.Title = UserFile.Title;
 		file.Description = UserFile.Description;
-		file.SystemId = UserFile.SystemId;
-		file.GameId = UserFile.GameId;
+		file.SystemId = UserFile.System;
+		file.GameId = UserFile.Game;
 		file.Hidden = UserFile.Hidden;
 
-		await ConcurrentSave(_db, $"UserFile {Id} successfully updated", "Unable to update UserFile");
+		SetMessage(await db.TrySaveChanges(), $"UserFile {Id} successfully updated", "Unable to update UserFile");
 		return BasePageRedirect("/UserFiles/Info", new { Id });
 	}
 
 	private async Task Initialize()
 	{
-		AvailableSystems = UiDefaults.DefaultEntry.Concat(await _db.GameSystems
-			.OrderBy(s => s.Code)
-			.Select(s => new SelectListItem
-			{
-				Value = s.Id.ToString(),
-				Text = s.Code
-			})
-			.ToListAsync());
+		AvailableSystems = (await db.GameSystems
+			.ToDropDownListWithId())
+			.WithDefaultEntry();
 
-		AvailableGames = UiDefaults.DefaultEntry.Concat(await _db.Games
-			.OrderBy(g => g.DisplayName)
-			.ToDropDown()
-			.ToListAsync());
+		AvailableGames = UserFile.System.HasValue
+			? (await db.Games.ToDropDownList(UserFile.System.Value)).WithDefaultEntry()
+			: [.. UiDefaults.DefaultEntry];
+	}
+
+	public class UserFileEdit
+	{
+		[StringLength(255)]
+		public string Title { get; init; } = "";
+
+		[DoNotTrim]
+		public string Description { get; init; } = "";
+		public int? System { get; init; }
+		public int? Game { get; init; }
+		public bool Hidden { get; init; }
+		public int UserId { get; init; }
+		public string UserName { get; init; } = "";
 	}
 }

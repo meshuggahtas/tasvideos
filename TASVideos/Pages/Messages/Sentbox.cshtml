@@ -1,37 +1,31 @@
 ﻿@page "{id?}/{handler?}"
 @model SentboxModel
 @{
-	ViewData["Title"] = $"Saved messages for {User.Name()}";
+	ViewData.SetTitle($"Saved messages for {User.Name()}");
 }
 
-<a asp-page="Inbox" class="btn btn-secondary mb-1"><span class="fa fa-arrow-left"></span> Inbox</a>
-<table class="table table-bordered table-striped">
-	<tr>
-		<th>@Html.DisplayNameFor(m => m.SentBox.First().Subject)</th>
-		<th>@Html.DisplayNameFor(m => m.SentBox.First().ToUser)</th>
-		<th>@Html.DisplayNameFor(m => m.SentBox.First().SendDate)</th>
-		<th>Actions</th>
-	</tr>
-	@foreach (var entry in Model.SentBox
-		.OrderBy(m => m.HasBeenRead)
-		.ThenByDescending(m => m.SendDate))
+<back-link asp-page="Inbox" class="mb-1" name-override="Inbox"></back-link>
+<standard-table>
+	<table-head columns="Subject,To,Date,"></table-head>
+	@foreach (var entry in Model.SentBox)
 	{
 		<tr>
 			<td>
-				<span Condition="@(!entry.HasBeenRead)" class="fa fa-send-o" title="User has not yet read"></span>
+				<span Condition="@(!entry.IsRead)" class="fa-regular fa-paper-plane" title="User has not yet read"></span>
 				<a asp-page="Index" asp-route-id="@entry.Id">@entry.Subject</a>
 			</td>
-			<td><profile-link username="@entry.ToUser"></profile-link></td>
+			<td><profile-link username="@entry.To"></profile-link></td>
 			<td>@entry.SendDate</td>
-			<td>
-				<delete-button
-					condition="!entry.HasBeenRead"
-					asp-href="/Messages/SentBox/@entry.Id/Delete"
+			<td-action-column>
+				<form method="post" class="d-inline-block" asp-page="Inbox" asp-page-handler="Save" asp-route-id="@entry.Id">
+					<submit-button class="btn-sm"></submit-button>
+				</form>
+				<delete-button condition="!entry.IsRead"
+					asp-href="/Messages/Inbox/@entry.Id/Delete"
 					warning-message="Are you sure you want to remove this message?"
-					class="btn-sm">
-						Delete
-				</delete-button>
-			</td>
+					class="btn-sm"></delete-button>
+			</td-action-column>
 		</tr>
 	}
-</table>
+</standard-table>
+<partial name="_Pager" model="Model.SentBox" />

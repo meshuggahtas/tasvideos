@@ -1,23 +1,20 @@
 ﻿using System.Net;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NetTools;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
 
 namespace TASVideos.Core.Services;
 
 public interface IIpBanService
 {
 	/// <summary>
-	/// Returns a value indicating whether or not the ip address is currently banned.
+	/// Returns a value indicating whether the ip address is currently banned.
 	/// </summary>
 	ValueTask<bool> IsBanned(IPAddress? ipAddress);
 
 	/// <summary>
 	/// Returns a list of all banned IP Address/Ranges
 	/// </summary>
-	Task<IEnumerable<IpBanEntry>> GetAll();
+	Task<ICollection<IpBanEntry>> GetAll();
 
 	/// <summary>
 	/// Adds an IP Address or Address range to the ban list
@@ -32,22 +29,13 @@ public interface IIpBanService
 	Task Remove(string ipMask);
 }
 
-internal class IpBanService : IIpBanService
+internal class IpBanService(
+	ApplicationDbContext db,
+	ICacheService cache,
+	ILogger<IpBanService> logger)
+	: IIpBanService
 {
 	internal const string IpBanList = "IpBanList";
-	private readonly ApplicationDbContext _db;
-	private readonly ICacheService _cache;
-	private readonly ILogger<IpBanService> _logger;
-
-	public IpBanService(
-		ApplicationDbContext db,
-		ICacheService cache,
-		ILogger<IpBanService> logger)
-	{
-		_db = db;
-		_cache = cache;
-		_logger = logger;
-	}
 
 	public async ValueTask<bool> IsBanned(IPAddress? ipAddress)
 	{
@@ -60,24 +48,24 @@ internal class IpBanService : IIpBanService
 		return bans.Any(b => b.Contains(ipAddress));
 	}
 
-	public async Task<IEnumerable<IpBanEntry>> GetAll()
+	public async Task<ICollection<IpBanEntry>> GetAll()
 	{
-		return await _db.IpBans
-			.Select(b => new IpBanEntry(b.Mask, b.CreateUserName, b.CreateTimestamp))
+		return await db.IpBans
+			.Select(b => new IpBanEntry(b.Mask, b.CreateTimestamp))
 			.ToListAsync();
 	}
 
 	private async ValueTask<IEnumerable<IPAddressRange>> BannedIps()
 	{
-		if (_cache.TryGetValue(IpBanList, out List<IpBan> list))
+		if (cache.TryGetValue(IpBanList, out List<IpBan> list))
 		{
 			return list.Select(r => ToAddressRange(r.Mask))
 				.Where(i => i is not null)
 				.ToList()!;
 		}
 
-		var rawIps = await _db.IpBans.ToListAsync();
-		_cache.Set(IpBanList, rawIps);
+		var rawIps = await db.IpBans.ToListAsync();
+		cache.Set(IpBanList, rawIps);
 
 		var parsed = rawIps
 			.Select(r => ToAddressRange(r.Mask))
@@ -102,7 +90,7 @@ internal class IpBanService : IIpBanService
 				{
 					processed = mask.Replace("*.*", "0.0") + "/255.255.0.0";
 				}
-				else if (mask.EndsWith("*"))
+				else if (mask.EndsWith('*'))
 				{
 					processed = mask.Replace("*", "0") + "/255.255.255.0";
 				}
@@ -139,33 +127,33 @@ internal class IpBanService : IIpBanService
 			return false;
 		}
 
-		_db.IpBans.Add(new IpBan { Mask = ipMask });
+		db.IpBans.Add(new IpBan { Mask = ipMask });
 
 		try
 		{
-			await _db.SaveChangesAsync();
+			await db.SaveChangesAsync();
 		}
 		catch
 		{
 			return false;
 		}
 
-		_cache.Remove(IpBanList);
+		cache.Remove(IpBanList);
 		return true;
 	}
 
 	public async Task Remove(string ipMask)
 	{
-		var entry = await _db.IpBans.SingleOrDefaultAsync(b => b.Mask == ipMask);
+		var entry = await db.IpBans.SingleOrDefaultAsync(b => b.Mask == ipMask);
 		if (entry != null)
 		{
-			_db.IpBans.Remove(entry);
-			await _db.SaveChangesAsync();
-			_cache.Remove(IpBanList);
+			db.IpBans.Remove(entry);
+			await db.SaveChangesAsync();
+			cache.Remove(IpBanList);
 		}
 	}
 
-	private void LogError(string mask) => _logger.LogError("Unable to parse ban address mask {mask}", mask);
+	private void LogError(string mask) => logger.LogError("Unable to parse ban address mask {mask}", mask);
 }
 
-public record IpBanEntry(string Mask, string? CreateUserName, DateTime DateCreated);
+public record IpBanEntry(string Mask, DateTime DateCreated);

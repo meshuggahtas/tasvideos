@@ -1,14 +1,11 @@
 ﻿@page "{id}"
 @model PublicationHistoryModel
 @{
-	ViewData["Title"] = $"Publication History of {Model.Game.DisplayName}";
+	ViewData.SetTitle($"Publication History of {Model.History.GameDisplayName}");
 	ViewData["Highlight"] = Model.Highlight;
-	ViewData["HighlightClass"] = "fw-bold fst-italic border border-info p-1";
 }
 @section PageTitle {
-	<div class="container mb-2">
-		<h1 class="card card-header d-block">@ViewData["Title"]</h1>
-	</div>
+	Publication History of <game-link id="@Model.History.GameId">@Model.History.GameDisplayName</game-link>
 }
 
 <partial name="_PublicationHistory" model="Model.History" />

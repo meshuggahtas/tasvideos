@@ -1,37 +1,25 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Wiki.Models;
+﻿using TASVideos.Core.Services.Wiki;
 
 namespace TASVideos.Pages.Wiki;
 
 [RequireEdit]
-public class EditModel : BasePageModel
+public class EditModel(IWikiPages wikiPages, ApplicationDbContext db, IExternalMediaPublisher publisher) : BasePageModel
 {
-	private readonly IWikiPages _wikiPages;
-	private readonly ApplicationDbContext _db;
-	private readonly ExternalMediaPublisher _publisher;
-
-	public EditModel(
-		IWikiPages wikiPages,
-		ApplicationDbContext db,
-		ExternalMediaPublisher publisher)
-	{
-		_wikiPages = wikiPages;
-		_db = db;
-		_publisher = publisher;
-	}
-
 	[FromQuery]
 	public string? Path { get; set; }
 
 	[BindProperty]
-	public WikiEditModel PageToEdit { get; set; } = new();
+	public DateTime EditStart { get; set; } = DateTime.UtcNow;
 
-	public int? Id { get; set; }
+	[BindProperty]
+	[DoNotTrim]
+	public string Markup { get; set; } = "";
+
+	public string OriginalMarkup => Markup;
+
+	[BindProperty]
+	[MaxLength(500)]
+	public string? EditComments { get; set; }
 
 	public async Task<IActionResult> OnGet()
 	{
@@ -46,18 +34,17 @@ public class EditModel : BasePageModel
 			return NotFound();
 		}
 
-		if (WikiHelper.IsHomePage(Path) && !await UserNameExists(Path))
+		if (WikiHelper.IsHomePage(Path))
 		{
-			return NotFound();
+			var existingUser = await UserName(Path);
+			if (string.IsNullOrEmpty(existingUser))
+			{
+				return NotFound();
+			}
 		}
 
-		var page = await _wikiPages.Page(Path);
-
-		PageToEdit = new WikiEditModel
-		{
-			Markup = page?.Markup ?? ""
-		};
-		Id = page?.Id;
+		var page = await wikiPages.Page(Path);
+		Markup = page?.Markup ?? "";
 
 		return Page();
 	}
@@ -75,9 +62,15 @@ public class EditModel : BasePageModel
 			return Home();
 		}
 
-		if (WikiHelper.IsHomePage(Path) && !await UserNameExists(Path))
+		var existingUser = await UserName(Path);
+		if (WikiHelper.IsHomePage(Path))
 		{
-			return Home();
+			if (string.IsNullOrEmpty(existingUser))
+			{
+				return Home();
+			}
+
+			Path = Path.Replace(existingUser, existingUser, StringComparison.InvariantCultureIgnoreCase); // Normalize user name
 		}
 
 		if (!ModelState.IsValid)
@@ -85,58 +78,82 @@ public class EditModel : BasePageModel
 			return Page();
 		}
 
-		var page = new WikiPage
+		var page = new WikiCreateRequest
 		{
-			CreateTimestamp = PageToEdit.EditStart,
+			CreateTimestamp = EditStart,
 			PageName = Path.Trim('/'),
-			Markup = PageToEdit.Markup,
-			MinorEdit = PageToEdit.MinorEdit,
-			RevisionMessage = PageToEdit.RevisionMessage,
+			Markup = Markup,
+			MinorEdit = HttpContext.Request.MinorEdit(),
+			RevisionMessage = EditComments,
 			AuthorId = User.GetUserId()
 		};
-		var result = await _wikiPages.Add(page);
-		if (!result)
+		var result = await wikiPages.Add(page);
+		if (result is null)
 		{
 			ModelState.AddModelError("", "Unable to save. The content on this page may have been modified by another user.");
 			return Page();
 		}
 
-		var subId = WikiHelper.IsSubmissionPage(page.PageName);
-		if (subId.HasValue)
-		{
-			var sub = await _db.Submissions.SingleOrDefaultAsync(s => s.Id == subId.Value);
-			if (sub != null)
-			{
-				sub.WikiContentId = page.Id;
-				await _db.SaveChangesAsync();
-			}
-		}
-
-		var pubId = WikiHelper.IsPublicationPage(page.PageName);
-		if (pubId.HasValue)
-		{
-			var pub = await _db.Publications.SingleOrDefaultAsync(p => p.Id == pubId.Value);
-			if (pub != null)
-			{
-				pub.WikiContentId = page.Id;
-				await _db.SaveChangesAsync();
-			}
-		}
-
-		if (page.Revision == 1 || !PageToEdit.MinorEdit)
-		{
-			await _publisher.SendGeneralWiki(
-				$"Page {Path} {(page.Revision > 1 ? "edited" : "created")} by {User.Name()}",
-				$"{PageToEdit.RevisionMessage}",
-				Path);
-		}
+		await Announce(result, result.Revision == 1);
 
 		return BaseRedirect("/" + page.PageName);
 	}
 
-	private async Task<bool> UserNameExists(string path)
+	public async Task<IActionResult> OnPostRollbackLatest()
+	{
+		var latestRevision = await wikiPages.Page(Path);
+		if (latestRevision is null)
+		{
+			return NotFound();
+		}
+
+		if (latestRevision.Revision == 1)
+		{
+			return BadRequest("Cannot rollback the first revision of a page, just delete instead.");
+		}
+
+		var previousRevision = await db.WikiPages
+			.Where(wp => wp.PageName == Path)
+			.ThatAreNotCurrent()
+			.OrderByDescending(wp => wp.Revision)
+			.FirstOrDefaultAsync();
+
+		if (previousRevision is null)
+		{
+			return NotFound();
+		}
+
+		var rollBackRevision = new WikiCreateRequest
+		{
+			PageName = Path!,
+			RevisionMessage = $"Rolling back Revision {latestRevision.Revision} \"{latestRevision.RevisionMessage}\"",
+			Markup = previousRevision.Markup,
+			AuthorId = User.GetUserId(),
+			MinorEdit = false
+		};
+
+		var result = await wikiPages.Add(rollBackRevision);
+		if (result is not null)
+		{
+			await Announce(result);
+		}
+
+		return BasePageRedirect("PageHistory", new { Path, Latest = true });
+	}
+
+	private async Task<string?> UserName(string path)
 	{
 		var userName = WikiHelper.ToUserName(path);
-		return await _db.Users.Exists(userName);
+		return await db.Users
+			.ForUser(userName)
+			.Select(u => u.UserName)
+			.SingleOrDefaultAsync();
 	}
+
+	private async Task Announce(IWikiPage page, bool force = false)
+		=> await publisher.SendWiki(
+			$"Page [{Path}]({{0}}) {(page.Revision > 1 ? "edited" : "created")} by {User.Name()}",
+			$"{page.RevisionMessage}",
+			Path!,
+			force);
 }

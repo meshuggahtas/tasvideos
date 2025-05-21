@@ -1,34 +1,8 @@
 ﻿<small>
-	<i id="forum-header-restore" class="fa fa-plus border border-info bg-info p-1 mb-1 text-white border-r d-none" style="cursor: pointer; border-radius: 5px"></i>
+	<i id="forum-header-restore" class="fa fa-chevron-down border border-info btn-info p-1 mb-1 border-r d-none" style="cursor: pointer; border-radius: 5px"></i>
 </small>
 <info-alert id="forum-header" class="d-none">
 	<button id="forum-header-dismiss" type="button" class="btn-close float-end" aria-label="close"></button>
-	@await Component.RenderWiki("System/ForumHeader")
-	<script>
-		{
-			let forumHeader = document.getElementById("forum-header");
-			let forumHeaderRestore = document.getElementById("forum-header-restore");
-			let dismissBtn = document.getElementById("forum-header-dismiss");
-
-			const dismiss = localStorage.getItem("DismissForumHeader");
-			if (dismiss !== "true") {
-				forumHeader.classList.remove("d-none");
-				forumHeaderRestore.classList.add("d-none");
-			} else {
-				forumHeaderRestore.classList.remove("d-none");
-			}
-
-			dismissBtn.onclick = function () {
-				localStorage.setItem("DismissForumHeader", true);
-				forumHeader.classList.add("d-none");
-				forumHeaderRestore.classList.remove("d-none");
-			}
-
-			forumHeaderRestore.onclick = function () {
-				localStorage.removeItem('DismissForumHeader');
-				forumHeaderRestore.classList.add("d-none");
-				forumHeader.classList.remove("d-none");
-			}
-		}
-	</script>
+	@await Html.RenderWiki(SystemWiki.ForumHeader)
+	<script src="/js/forum-header.js"></script>
 </info-alert>

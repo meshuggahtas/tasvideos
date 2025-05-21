@@ -1,10 +1,10 @@
 ﻿@page
 @model CreateModel
 @{
-	ViewData["Title"] = "Create Private Message";
+	ViewData.SetTitle("Create Private Message");
 }
 
-<div condition="Model.IsReply" class="card bg-light mb-3">
+<div condition="Model.IsReply" class="card mb-3">
 	<div class="card-header">
 		<button type="button" id="quote-btn" class="float-end btn btn-sm btn-secondary">Quote</button>
 		@Model.ReplyingTo!.Subject
@@ -17,48 +17,39 @@
 	</div>
 </div>
 
-<form method="POST" id="create-form">
+<form client-side-validation="true" method="post" id="create-form">
 	<row>
-		<form-group class="col-lg-6">
-			<label asp-for="Subject" class="form-control-label"></label>
-			<input type="text" asp-for="Subject" list="search-username-list" class="form-control" autocomplete="off" />
-			<span asp-validation-for="Subject" class="text-danger"></span>
-		</form-group>
-		<form-group class="col-lg-6">
-			<label asp-for="ToUser" class="form-control-label"></label>
-			<input type="text" asp-for="ToUser" class="form-control" autocomplete="off" placeholder="@Html.DescriptionFor(m => m.ToUser)" />
-			<span asp-validation-for="ToUser" class="text-danger"></span>
-		</form-group>
+		<fieldset class="col-lg-6">
+			<label asp-for="Subject"></label>
+			<input asp-for="Subject" autocomplete="off" />
+			<span asp-validation-for="Subject"></span>
+		</fieldset>
+		<fieldset class="col-lg-6">
+			<div id="user-form-group" class="mb-2">
+				<label asp-for="ToUser"></label>
+				<input asp-for="ToUser" user-search="true" data-id="to-user" placeholder="Enter a UserName"/>
+				<span asp-validation-for="ToUser"></span>
+			</div>
+			<label for="group-select">To Group</label>
+			<select asp-for="ToUser" id="group-select" asp-items="@Model.AvailableGroupRoles"></select>
+		</fieldset>
 	</row>
-	<fullrow>
-		<partial name="Forum/_CreatePostHelper" model="@("Text")" />
-	</fullrow>
+	<post-helper></post-helper>
 	<row>
-		<form-group class="col-12">
-			<label asp-for="Text" class="form-control-label"></label>
-			<textarea asp-for="Text" class="form-control" rows="20"></textarea>
-			<span asp-validation-for="Text" class="text-danger"></span>
-		</form-group>
+		<fieldset class="col-12">
+			<label asp-for="MessageBody"></label>
+			<textarea asp-for="MessageBody" data-id="forum-edit" rows="20"></textarea>
+			<span asp-validation-for="MessageBody"></span>
+		</fieldset>
 	</row>
-	<div class="text-center">
-		<button type="button" class="btn btn-secondary" id="preview-button"><i class="fa fa-eye"></i> Preview</button>
-		<button type="submit" @(string.IsNullOrWhiteSpace(Model.ToUser) ? "disabled" : "") class="btn btn-primary"><i class="fa fa-save"></i> Save</button>
-		<a asp-page="Inbox" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</div>
+	<form-button-bar>
+		<preview-button></preview-button>
+		<submit-button disable="@string.IsNullOrWhiteSpace(Model.ToUser)"><i class="fa fa-save"></i> Send</submit-button>
+		<cancel-link asp-page="Inbox"></cancel-link>
+	</form-button-bar>
 </form>
-
-<partial name="_PreviewWindow" model="@((nameof(Model.Text), "/Forum/Preview"))" />
+<forum-preview></forum-preview>
 
 @section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-	<script src="/js/user-search.js"></script>
-	<script>
-		searchUsers("@Html.IdFor(m => m.ToUser)");
-		if (document.getElementById('quote-btn')) {
-			document.getElementById('quote-btn').onclick = function () {
-				const text = document.getElementById('replying-to-text').innerHTML;
-				document.getElementById('@Html.IdFor(m => m.Text)').innerHTML = `[quote]${text}[/quote]`;
-			};
-		}
-	</script>
+	<script src="/js/messages-create.js"></script>
 }

@@ -4,15 +4,8 @@ using TASVideos.Tests.Base;
 namespace TASVideos.Data.Tests.QueryableExtensions;
 
 [TestClass]
-public class WikiPageExtensionTests
+public class WikiPageExtensionTests : TestDbBase
 {
-	private readonly TestDbContext _db;
-
-	public WikiPageExtensionTests()
-	{
-		_db = TestDbContext.Create();
-	}
-
 	#region ThatAreSubpagesOf
 
 	[TestMethod]
@@ -25,7 +18,7 @@ public class WikiPageExtensionTests
 			new WikiPage { PageName = "Parent1" },
 			new WikiPage { PageName = "Parent2" },
 			new WikiPage { PageName = "Parent2/Child1" },
-			new WikiPage { PageName = "Parent2/Child1" }
+			new WikiPage { PageName = "Parent2/Child2" }
 		};
 		_db.WikiPages.AddRange(pages);
 		_db.SaveChanges();
@@ -37,8 +30,8 @@ public class WikiPageExtensionTests
 	[TestMethod]
 	public void ThatAreSubpagesOf_ReturnsAllDescendants()
 	{
-		string testPage = "TestPage";
-		string anotherPage = "AnotherPage";
+		const string testPage = "TestPage";
+		const string anotherPage = "AnotherPage";
 		var pages = new[]
 		{
 			new WikiPage { PageName = testPage },
@@ -58,8 +51,8 @@ public class WikiPageExtensionTests
 	[TestMethod]
 	public void ThatAreSubpagesOf_PageDoesNotExist_NoChildren_EmptyListReturned()
 	{
-		string testPage = "TestPage";
-		string anotherPage = "AnotherPage";
+		const string testPage = "TestPage";
+		const string anotherPage = "AnotherPage";
 		var pages = new[]
 		{
 			new WikiPage { PageName = testPage },
@@ -77,8 +70,8 @@ public class WikiPageExtensionTests
 	[TestMethod]
 	public void ThatAreSubpagesOf_PageDoesNotExist_ChildrenDo_ReturnsChildren()
 	{
-		string testPage = "TestPage";
-		string anotherPage = "AnotherPage";
+		const string testPage = "TestPage";
+		const string anotherPage = "AnotherPage";
 		var pages = new[]
 		{
 			new WikiPage { PageName = testPage + "/Child" },
@@ -97,7 +90,7 @@ public class WikiPageExtensionTests
 	[TestMethod]
 	public void ThatAreSubpagesOf_TrailingSlashesTrimmed()
 	{
-		string testPage = "TestPage";
+		const string testPage = "TestPage";
 
 		var pages = new[]
 		{
@@ -138,7 +131,7 @@ public class WikiPageExtensionTests
 	[TestMethod]
 	public void ThatAreParentsOf_NoParents_NothingIsReturned()
 	{
-		string parent = "Parent1";
+		const string parent = "Parent1";
 		var pages = new[]
 		{
 			new WikiPage { PageName = parent + "/Child1" }
@@ -153,7 +146,7 @@ public class WikiPageExtensionTests
 	[TestMethod]
 	public void ThatAreParentsOf_PageDoesNotExist_ParentsStillReturned()
 	{
-		string parent = "Parent1";
+		const string parent = "Parent1";
 		var pages = new[]
 		{
 			new WikiPage { PageName = parent }
@@ -168,7 +161,7 @@ public class WikiPageExtensionTests
 	[TestMethod]
 	public void ThatAreParentsOf_AncestorsReturned()
 	{
-		string testName = "Parent2/Child1/Descendant1";
+		const string testName = "Parent2/Child1/Descendant1";
 		var pages = new[]
 		{
 			new WikiPage { PageName = "Parent1" },
@@ -187,8 +180,8 @@ public class WikiPageExtensionTests
 	[TestMethod]
 	public void ThatAreParentsOf_TrailingSlashesTrimmed()
 	{
-		string testPage = "TestPage";
-		string childPage = testPage + "/Child";
+		const string testPage = "TestPage";
+		const string childPage = testPage + "/Child";
 
 		var pages = new[]
 		{
@@ -205,9 +198,9 @@ public class WikiPageExtensionTests
 	[TestMethod]
 	public void ThatAreParentsOf_DoesNotReturnSiblingsThatBeginWithPageName()
 	{
-		string parentPage = "Parent";
-		string childPage = parentPage + "/HugzForAll";
-		string siblingPage = parentPage + "/Hugz";
+		const string parentPage = "Parent";
+		const string childPage = parentPage + "/HugzForAll";
+		const string siblingPage = parentPage + "/Hugz";
 
 		var pages = new[]
 		{
@@ -226,13 +219,6 @@ public class WikiPageExtensionTests
 	#endregion
 
 	#region IsCurrent
-
-	[TestMethod]
-	public void IsCurrent_NullSafe()
-	{
-		var actual = ((WikiPage?)null).IsCurrent();
-		Assert.IsFalse(actual);
-	}
 
 	[TestMethod]
 	public void IsCurrent_Current_ReturnsTrue()

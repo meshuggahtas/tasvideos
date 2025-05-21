@@ -1,26 +1,24 @@
-﻿@model WikiPage
-@{
-	bool canEdit = WikiHelper.UserCanEditWikiPage(Model!.PageName, User.Name(), User.Permissions());
-}
+﻿@using Microsoft.AspNetCore.Mvc.TagHelpers
+@model TASVideos.Core.Services.Wiki.IWikiPage
 
-@if (canEdit)
-{
-	<div class="text-end mb-2">
-		<a asp-page="/Wiki/Edit" asp-route-path="@Model.PageName" class="btn btn-primary border border-warning"><i class="fa fa-pencil"></i> Edit</a>
-	</div>
-}
+<top-button-bar>
+	<partial name="_ListLanguages" model="Model" />
+	<edit-link condition="User.CanEditWiki(Model.PageName)" asp-page="/Wiki/Edit" asp-route-path="@Model.PageName" class="btn-sm"></edit-link>
+</top-button-bar>
 
 @if (Model.IsSystemPage())
 {
-	@await Component.SystemPageHeader(Model)
+	<info-alert>
+		@await Html.RenderWiki(SystemWiki.IsSystemPage)
+	</info-alert>
 }
 else if (Model.IsGameResourcesPage())
 {
-	@await Component.GameResourcesHeader(Model)
+	<info-alert>
+		@await Html.RenderWiki(SystemWiki.GameResourcesHeader)
+	</info-alert>
 }
 else if (Model.IsHomePage())
 {
-	@await Component.HomePageHeader(Model)
+	<partial name="_HomePageHeader" model="Model" />
 }
-
-@await Component.ListLanguages(Model)

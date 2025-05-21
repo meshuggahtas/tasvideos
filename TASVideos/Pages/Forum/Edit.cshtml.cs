@@ -1,39 +1,25 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Forum.Models;
-
-namespace TASVideos.Pages.Forum;
+﻿namespace TASVideos.Pages.Forum;
 
 [RequirePermission(PermissionTo.EditCategories)]
-public class EditModel : BasePageModel
+public class EditModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public EditModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
 	[BindProperty]
-	public CategoryEditModel Category { get; set; } = new();
+	public CategoryEdit Category { get; set; } = new();
 
 	public async Task<IActionResult> OnGet()
 	{
-		var category = await _db.ForumCategories
+		var category = await db.ForumCategories
 			.Where(c => c.Id == Id)
-			.Select(c => new CategoryEditModel
+			.Select(c => new CategoryEdit
 			{
 				Title = c.Title,
 				Description = c.Description,
 				Forums = c.Forums
 					.OrderBy(f => f.Ordinal)
-					.Select(f => new CategoryEditModel.ForumEditModel
+					.Select(f => new CategoryEdit.ForumEdit
 					{
 						Id = f.Id,
 						Name = f.Name,
@@ -60,7 +46,7 @@ public class EditModel : BasePageModel
 			return Page();
 		}
 
-		var category = await _db.ForumCategories
+		var category = await db.ForumCategories
 			.Include(c => c.Forums)
 			.SingleOrDefaultAsync(c => c.Id == Id);
 
@@ -74,13 +60,33 @@ public class EditModel : BasePageModel
 
 		foreach (var forum in category.Forums)
 		{
-			// This is a n squared problem but we don't anticipate enough forums in a single category to be a performance issue
+			// This is an n squared problem, but we don't anticipate enough forums in a single category to be a performance issue
 			// This could be optimized away by joining model.Forums against category.Forums then looping
 			var forumModel = Category.Forums.Single(f => f.Id == forum.Id);
 			forum.Ordinal = forumModel.Ordinal;
 		}
 
-		await _db.SaveChangesAsync();
+		await db.SaveChangesAsync();
 		return BasePageRedirect("Index");
+	}
+
+	public class CategoryEdit
+	{
+		[StringLength(30)]
+		public string Title { get; init; } = "";
+		public string? Description { get; init; }
+		public List<ForumEdit> Forums { get; init; } = [];
+
+		public class ForumEdit
+		{
+			public int Id { get; init; }
+
+			[StringLength(50)]
+			public string Name { get; init; } = "";
+
+			[StringLength(1000)]
+			public string? Description { get; init; }
+			public int Ordinal { get; init; }
+		}
 	}
 }

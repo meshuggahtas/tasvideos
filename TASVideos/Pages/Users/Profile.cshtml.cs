@@ -1,24 +1,8 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
-
-namespace TASVideos.Pages.Users;
+﻿namespace TASVideos.Pages.Users;
 
 [AllowAnonymous]
-public class ProfileModel : BasePageModel
+public class ProfileModel(IAwards awards, IUserManager userManager) : BasePageModel
 {
-	private readonly IAwards _awards;
-	private readonly UserManager _userManager;
-
-	public ProfileModel(
-		IAwards awards,
-		UserManager userManager)
-	{
-		_awards = awards;
-		_userManager = userManager;
-	}
-
 	// Allows for a query based call to this page for Users/List
 	[FromQuery]
 	public string? Name { get; set; }
@@ -41,14 +25,14 @@ public class ProfileModel : BasePageModel
 		}
 
 		var seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
-		var profile = await _userManager.GetUserProfile(UserName, false, seeRestricted);
+		var profile = await userManager.GetUserProfile(UserName, false, seeRestricted);
 		if (profile is null)
 		{
 			return NotFound();
 		}
 
 		Profile = profile;
-		Profile.Awards = await _awards.ForUser(Profile.Id);
+		Profile.Awards = await awards.ForUser(Profile.Id);
 		return Page();
 	}
 }

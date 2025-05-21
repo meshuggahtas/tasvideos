@@ -1,53 +1,46 @@
-﻿using System.ComponentModel.DataAnnotations;
-using AutoMapper;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
+﻿using TASVideos.Core.Services.Wiki;
+using TASVideos.Core.Settings;
 using TASVideos.Data.Entity.Game;
-using TASVideos.Pages.Games.Models;
 
 namespace TASVideos.Pages.Games;
 
 [RequirePermission(PermissionTo.CatalogMovies)]
-public class EditModel : BasePageModel
+public class EditModel(
+	ApplicationDbContext db,
+	IWikiPages wikiPages,
+	IExternalMediaPublisher publisher,
+	AppSettings settings)
+	: BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly IWikiPages _wikiPages;
-	private readonly IMapper _mapper;
-
-	public EditModel(
-		ApplicationDbContext db,
-		IWikiPages wikiPages,
-		IMapper mapper)
-	{
-		_db = db;
-		_wikiPages = wikiPages;
-		_mapper = mapper;
-	}
+	private readonly string _baseUrl = settings.BaseUrl;
 
 	[FromRoute]
 	public int? Id { get; set; }
 
 	[BindProperty]
-	public GameEditModel Game { get; set; } = new();
+	public GameEdit Game { get; set; } = new();
 
 	public bool CanDelete { get; set; }
 
-	[Display(Name = "Available Genres")]
-	public IEnumerable<SelectListItem> AvailableGenres { get; set; } = new List<SelectListItem>();
-
-	[Display(Name = "Available Groups")]
-	public IEnumerable<SelectListItem> AvailableGroups { get; set; } = new List<SelectListItem>();
+	public List<SelectListItem> AvailableGenres { get; set; } = [];
+	public List<SelectListItem> AvailableGroups { get; set; } = [];
 
 	public async Task<IActionResult> OnGet()
 	{
 		if (Id.HasValue)
 		{
-			var game = await _mapper.ProjectTo<GameEditModel>(
-				_db.Games.Where(g => g.Id == Id))
+			var game = await db.Games
+				.Where(g => g.Id == Id)
+				.Select(g => new GameEdit
+				{
+					DisplayName = g.DisplayName,
+					Abbreviation = g.Abbreviation,
+					Aliases = g.Aliases,
+					ScreenshotUrl = g.ScreenshotUrl,
+					GameResourcesPage = g.GameResourcesPage,
+					Genres = g.GameGenres.Select(gg => gg.GenreId).ToList(),
+					Groups = g.GameGroups.Select(gg => gg.GameGroupId).ToList()
+				})
 				.SingleOrDefaultAsync();
 
 			if (game is null)
@@ -64,6 +57,9 @@ public class EditModel : BasePageModel
 
 	public async Task<IActionResult> OnPost()
 	{
+		Game.GameResourcesPage = Game.GameResourcesPage?.Replace(_baseUrl, "").Trim('/');
+		Game.Aliases = Game.Aliases?.Replace(", ", ",");
+
 		if (!ModelState.IsValid)
 		{
 			await Initialize();
@@ -72,19 +68,30 @@ public class EditModel : BasePageModel
 
 		if (!string.IsNullOrEmpty(Game.GameResourcesPage))
 		{
-			var page = await _wikiPages.Page(Game.GameResourcesPage);
+			var page = await wikiPages.Page(Game.GameResourcesPage);
 			if (page is null)
 			{
 				ModelState.AddModelError($"{nameof(Game)}.{nameof(Game.GameResourcesPage)}", $"Page {Game.GameResourcesPage} not found");
-				await Initialize();
-				return Page();
 			}
 		}
 
+		if (Game.Abbreviation is not null && await db.Games.AnyAsync(g => g.Id != Id && g.Abbreviation == Game.Abbreviation))
+		{
+			ModelState.AddModelError($"{nameof(Game)}.{nameof(Game.Abbreviation)}", $"Abbreviation {Game.Abbreviation} already exists");
+		}
+
+		if (!ModelState.IsValid)
+		{
+			await Initialize();
+			return Page();
+		}
+
 		Game? game;
+		var action = "created";
 		if (Id.HasValue)
 		{
-			game = await _db.Games
+			action = "updated";
+			game = await db.Games
 				.Include(g => g.GameGenres)
 				.Include(g => g.GameGroups)
 				.SingleOrDefaultAsync(g => g.Id == Id.Value);
@@ -92,27 +99,38 @@ public class EditModel : BasePageModel
 			{
 				return NotFound();
 			}
-
-			_mapper.Map(Game, game);
-			SetGameValues(game, Game);
-			await ConcurrentSave(_db, $"Game {Id} updated", $"Unable to update Game {Id}");
 		}
 		else
 		{
-			game = _mapper.Map<Game>(Game);
-			_db.Games.Add(game);
-			SetGameValues(game, Game);
-			await ConcurrentSave(_db, $"Game {game.GoodName} created", "Unable to create game");
+			game = new Game();
+			db.Games.Add(game);
+			db.GameGoals.Add(new GameGoal
+			{
+				Game = game,
+				DisplayName = "baseline"
+			});
 		}
 
-		return BasePageRedirect("Index", new { game.Id });
-	}
+		game.DisplayName = Game.DisplayName;
+		game.Abbreviation = Game.Abbreviation;
+		game.Aliases = Game.Aliases;
+		game.ScreenshotUrl = Game.ScreenshotUrl;
+		game.GameResourcesPage = Game.GameResourcesPage;
+		game.GameGenres.SetGenres(Game.Genres);
+		game.GameGroups.SetGroups(Game.Groups);
+		var saveResult = await db.TrySaveChanges();
+		SetMessage(saveResult, $"Game {game.DisplayName} {action}", $"Unable to update Game {game.DisplayName}");
+		if (saveResult.IsSuccess())
+		{
+			await publisher.SendGameManagement(
+				$"Game [{game.DisplayName}]({{0}}) {action} by {User.Name()}",
+				"",
+				$"{game.Id}G");
+		}
 
-	private static void SetGameValues(Game game, GameEditModel editModel)
-	{
-		game.GameResourcesPage = editModel.GameResourcesPage;
-		game.GameGenres.SetGenres(editModel.Genres);
-		game.GameGroups.SetGroups(editModel.Groups);
+		return string.IsNullOrWhiteSpace(HttpContext.Request.ReturnUrl())
+			? RedirectToPage("Index", new { game.Id })
+			: BaseReturnUrlRedirect(new() { ["GameId"] = game.Id.ToString() });
 	}
 
 	public async Task<IActionResult> OnPostDelete()
@@ -122,37 +140,65 @@ public class EditModel : BasePageModel
 			return NotFound();
 		}
 
+		if (!User.Has(PermissionTo.DeleteGameEntries))
+		{
+			return AccessDenied();
+		}
+
 		if (!await CanBeDeleted())
 		{
 			ErrorStatusMessage($"Unable to delete Game {Id}, game is used by a publication or submission.");
 			return BasePageRedirect("List");
 		}
 
-		_db.Games.Attach(new Game { Id = Id ?? 0 }).State = EntityState.Deleted;
-		await ConcurrentSave(_db, $"Game {Id} deleted", $"Unable to delete Game {Id}");
+		var game = await db.Games.FindAsync(Id);
+		if (game is null)
+		{
+			return NotFound();
+		}
+
+		db.Games.Remove(game);
+		var saveMessage = $"Game #{Id} {game.DisplayName} deleted";
+		var saveResult = await db.TrySaveChanges();
+		SetMessage(saveResult, saveMessage, $"Unable to delete Game {Id}");
+		if (saveResult.IsSuccess())
+		{
+			await publisher.SendMessage(PostGroups.Game, $"{saveMessage} by {User.Name()}");
+		}
 
 		return BasePageRedirect("List");
 	}
 
 	private async Task Initialize()
 	{
-		AvailableGenres = await _db.Genres
-			.OrderBy(g => g.DisplayName)
-			.ToDropdown()
-			.ToListAsync();
-
-		AvailableGroups = await _db.GameGroups
-			.OrderBy(g => g.Name)
-			.ToDropdown()
-			.ToListAsync();
-
+		AvailableGenres = await db.Genres.ToDropDownList();
+		AvailableGroups = await db.GameGroups.ToDropDownList();
 		CanDelete = await CanBeDeleted();
 	}
 
 	private async Task<bool> CanBeDeleted()
+		=> Id > 0
+		&& !await db.Submissions.AnyAsync(s => s.GameId == Id)
+		&& !await db.Publications.AnyAsync(p => p.GameId == Id)
+		&& !await db.UserFiles.AnyAsync(u => u.GameId == Id);
+
+	public class GameEdit
 	{
-		return Id > 0
-			&& !await _db.Submissions.AnyAsync(s => s.Game!.Id == Id)
-			&& !await _db.Publications.AnyAsync(p => p.Game!.Id == Id);
+		[StringLength(100)]
+		public string DisplayName { get; set; } = "";
+
+		[StringLength(24)]
+		public string? Abbreviation { get; set; }
+
+		[StringLength(250)]
+		public string? Aliases { get; set; }
+
+		[StringLength(250)]
+		public string? ScreenshotUrl { get; init; }
+
+		[StringLength(300)]
+		public string? GameResourcesPage { get; set; }
+		public List<int> Genres { get; init; } = [];
+		public List<int> Groups { get; init; } = [];
 	}
 }

@@ -1,39 +1,25 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Forum;
-using TASVideos.Pages.Forum.Topics.Models;
+﻿using TASVideos.Data.Entity.Forum;
 
 namespace TASVideos.Pages.Forum.Topics;
 
 [RequirePermission(PermissionTo.SplitTopics)]
-public class SplitModel : BasePageModel
+public class SplitModel(
+	ApplicationDbContext db,
+	IExternalMediaPublisher publisher,
+	IForumService forumService)
+	: BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly IForumService _forumService;
-
-	public SplitModel(
-		ApplicationDbContext db,
-		ExternalMediaPublisher publisher,
-		IForumService forumService)
-	{
-		_db = db;
-		_publisher = publisher;
-		_forumService = forumService;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
-	[BindProperty]
-	public SplitTopicModel Topic { get; set; } = new();
+	[FromQuery]
+	public int CurrentPage { get; set; }
+	public int TotalPages { get; set; }
 
-	public IEnumerable<SelectListItem> AvailableForums { get; set; } = new List<SelectListItem>();
+	[BindProperty]
+	public TopicSplit Topic { get; set; } = new();
+
+	public List<SelectListItem> AvailableForums { get; set; } = [];
 
 	private bool CanSeeRestricted => User.Has(PermissionTo.SeeRestrictedForums);
 
@@ -59,11 +45,10 @@ public class SplitModel : BasePageModel
 			return Page();
 		}
 
-		bool seeRestricted = CanSeeRestricted;
-		var topic = await _db.ForumTopics
+		var topic = await db.ForumTopics
 			.Include(t => t.Forum)
 			.Include(t => t.ForumPosts)
-			.ExcludeRestricted(seeRestricted)
+			.ExcludeRestricted(CanSeeRestricted)
 			.SingleOrDefaultAsync(t => t.Id == Id);
 
 		if (topic is null)
@@ -71,9 +56,9 @@ public class SplitModel : BasePageModel
 			return NotFound();
 		}
 
-		var destinationForum = await _db.Forums
-			.ExcludeRestricted(seeRestricted)
-			.SingleOrDefaultAsync(f => f.Id == Topic.SplitToForumId);
+		var destinationForum = await db.Forums
+			.ExcludeRestricted(CanSeeRestricted)
+			.SingleOrDefaultAsync(f => f.Id == Topic.CreateNewTopicIn);
 
 		if (destinationForum is null)
 		{
@@ -91,7 +76,7 @@ public class SplitModel : BasePageModel
 		if (!postsToSplit.Any())
 		{
 			var splitOnPost = topic.ForumPosts
-				.SingleOrDefault(p => p.Id == Topic.PostToSplitId);
+				.SingleOrDefault(p => p.Id == Topic.SplitPostsStartingAt);
 
 			if (splitOnPost is null)
 			{
@@ -109,13 +94,13 @@ public class SplitModel : BasePageModel
 		var newTopic = new ForumTopic
 		{
 			Type = ForumTopicType.Regular,
-			Title = Topic.SplitTopicName,
+			Title = Topic.NewTopicName,
 			PosterId = User.GetUserId(),
-			ForumId = Topic.SplitToForumId
+			ForumId = Topic.CreateNewTopicIn
 		};
 
-		_db.ForumTopics.Add(newTopic);
-		await _db.SaveChangesAsync();
+		db.ForumTopics.Add(newTopic);
+		await db.SaveChangesAsync();
 
 		foreach (var post in postsToSplit)
 		{
@@ -123,63 +108,99 @@ public class SplitModel : BasePageModel
 			post.ForumId = destinationForum.Id;
 		}
 
-		await _db.SaveChangesAsync();
+		await db.SaveChangesAsync();
 
-		_forumService.ClearLatestPostCache();
-		_forumService.ClearTopicActivityCache();
+		forumService.ClearLatestPostCache();
+		forumService.ClearTopicActivityCache();
 
-		await _publisher.SendForum(
+		await publisher.SendForum(
 			destinationForum.Restricted || topic.Forum!.Restricted,
-			$"Topic SPLIT by {User.Name()}",
-			$@"""{newTopic.Title}"" from ""{Topic.Title}""",
+			$"[Topic]({{0}}) SPLIT by {User.Name()}",
+			$"\"{newTopic.Title}\" from \"{Topic.Title}\"",
 			$"Forum/Topics/{newTopic.Id}");
 
 		return RedirectToPage("Index", new { id = newTopic.Id });
 	}
 
-	private async Task<SplitTopicModel?> PopulatePosts()
+	private async Task<TopicSplit?> PopulatePosts()
 	{
-		bool seeRestricted = CanSeeRestricted;
-		return await _db.ForumTopics
-			.ExcludeRestricted(seeRestricted)
+		TopicSplit? topicSplit = await db.ForumTopics
+			.ExcludeRestricted(CanSeeRestricted)
 			.Where(t => t.Id == Id)
-			.Select(t => new SplitTopicModel
+			.Select(t => new TopicSplit
 			{
 				Title = t.Title,
-				SplitTopicName = "(Split from " + t.Title + ")",
-				SplitToForumId = t.Forum!.Id,
+				NewTopicName = "(Split from " + t.Title + ")",
+				CreateNewTopicIn = t.Forum!.Id,
 				ForumId = t.Forum.Id,
 				ForumName = t.Forum.Name,
-				Posts = t.ForumPosts
-					.Select(p => new SplitTopicModel.Post
-					{
-						Id = p.Id,
-						PostCreateTimestamp = p.CreateTimestamp,
-						EnableBbCode = p.EnableBbCode,
-						EnableHtml = p.EnableHtml,
-						Subject = p.Subject,
-						Text = p.Text,
-						PosterId = p.PosterId,
-						PosterName = p.Poster!.UserName,
-						PosterAvatar = p.Poster.Avatar
-					})
-					.OrderBy(p => p.PostCreateTimestamp)
-					.ToList()
+				PostsCount = t.ForumPosts.Count,
 			})
 			.SingleOrDefaultAsync();
+
+		if (topicSplit is not null)
+		{
+			const int PageSize = 500;
+			TotalPages = ((topicSplit!.PostsCount - 1) / PageSize) + 1;
+
+			if (CurrentPage <= 0 || CurrentPage > TotalPages)
+			{
+				CurrentPage = TotalPages;
+			}
+
+			int leftover = topicSplit!.PostsCount % PageSize;
+			int take = CurrentPage == 1 ? leftover : PageSize;
+			int skip = CurrentPage == 1 ? 0 : leftover + (PageSize * (CurrentPage - 2));
+
+			topicSplit.Posts = await db.ForumPosts
+				.Where(fp => fp.TopicId == Id)
+				.Select(p => new TopicSplit.Post
+				{
+					Id = p.Id,
+					PostCreateTimestamp = p.CreateTimestamp,
+					EnableBbCode = p.EnableBbCode,
+					EnableHtml = p.EnableHtml,
+					Subject = p.Subject,
+					Text = p.Text,
+					PosterName = p.Poster!.UserName,
+					PosterAvatar = p.Poster.Avatar
+				})
+				.OrderBy(p => p.PostCreateTimestamp)
+				.Skip(skip)
+				.Take(take)
+				.ToListAsync();
+		}
+
+		return topicSplit;
 	}
 
 	private async Task PopulateAvailableForums()
 	{
-		var seeRestricted = CanSeeRestricted;
-		AvailableForums = await _db.Forums
-			.ExcludeRestricted(seeRestricted)
-			.Select(f => new SelectListItem
-			{
-				Text = f.Name,
-				Value = f.Id.ToString(),
-				Selected = f.Id == Topic.ForumId
-			})
-			.ToListAsync();
+		AvailableForums = await db.Forums.ToDropdownList(CanSeeRestricted, Topic.ForumId);
+	}
+
+	public class TopicSplit
+	{
+		public int? SplitPostsStartingAt { get; init; }
+		public int CreateNewTopicIn { get; init; }
+		public string NewTopicName { get; init; } = "";
+		public string Title { get; init; } = "";
+		public int ForumId { get; init; }
+		public string ForumName { get; init; } = "";
+		public int PostsCount { get; set; }
+		public List<Post> Posts { get; set; } = [];
+
+		public class Post
+		{
+			public int Id { get; init; }
+			public DateTime PostCreateTimestamp { get; init; }
+			public bool EnableHtml { get; init; }
+			public bool EnableBbCode { get; init; }
+			public string? Subject { get; init; }
+			public string Text { get; init; } = "";
+			public string PosterName { get; init; } = "";
+			public string? PosterAvatar { get; init; }
+			public bool Selected { get; init; }
+		}
 	}
 }

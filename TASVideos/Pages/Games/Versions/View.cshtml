@@ -1,0 +1,100 @@
+﻿@page "/Games/{gameId}/Versions/View/{id?}"
+@model ViewModel
+@{
+	ViewData.SetTitle($"Game Version #{Model.Id} {Model.Version.Name}");
+}
+
+<top-button-bar>
+	<h4 class="heading"><label asp-for="Game"></label> <game-link id="@Model.GameId">@Model.Game</game-link></h4>
+	<back-link asp-page="/Games/Versions/List" asp-route-gameId="@Model.GameId"></back-link>
+	<edit-link permission="CatalogMovies" asp-page="/Games/Versions/Edit" asp-route-gameId="@Model.GameId" asp-route-id="@Model.Id"></edit-link>
+</top-button-bar>
+<card>
+	<card-body>
+		<row>
+			<column md="6">
+				<div class="info-entry">
+					<label asp-for="Version.SystemCode"></label>
+					<label>@Model.Version.SystemCode</label>
+				</div>
+				<div class="info-entry">
+					<label asp-for="Version.Name"></label>
+					<label>@Model.Version.Name</label>
+				</div>
+				<div class="info-entry">
+					<label asp-for="Version.Type"></label>
+					<label>@Model.Version.Type</label>
+				</div>
+				<div class="info-entry">
+					<label asp-for="Version.TitleOverride"></label>
+					<label>@Model.Version.TitleOverride</label>
+				</div>
+				<div class="info-entry">
+					<label asp-for="Version.Version"></label>
+					<label>@Model.Version.Version</label>
+				</div>
+				<div class="info-entry">
+					<label asp-for="Version.Region"></label>
+					<label>@Model.Version.Region</label>
+				</div>
+			</column>
+			<column md="6">
+				<div class="info-entry">
+					<label asp-for="Version.Sha1"></label>
+					<label>@Model.Version.Sha1</label>
+				</div>
+				<div class="info-entry">
+					<label asp-for="Version.Md5"></label>
+					<label>@Model.Version.Md5</label>
+				</div>
+				<div class="info-entry">
+					<label asp-for="Version.SourceDb"></label>
+					<label>@Model.Version.SourceDb</label>
+				</div>
+			</column>
+		</row>
+		<row class="mt-2" condition="@Model.Publications.Any() || Model.Submissions.Any()">
+			<column md="6" condition="@Model.Publications.Any()">
+				<h4>Publications</h4>
+				<ul>
+					@foreach (var pub in Model.Publications)
+					{
+						<li><pub-link id="@pub.Id">@pub.Title</pub-link></li>
+					}
+				</ul>
+			</column>
+			<column md="6" condition="@Model.Submissions.Any()">
+				<h4>Submissions</h4>
+				<ul>
+					@foreach (var sub in Model.Submissions)
+					{
+						<li><sub-link id="@sub.Id">@sub.Title</sub-link></li>
+					}
+				</ul>
+			</column>
+		</row>
+		<row condition="!string.IsNullOrWhiteSpace(Model.Version.Notes)" class="mt-2">
+			<column sm="12">
+				<h4>Notes</h4>
+				@Model.Version.Notes
+			</column>
+		</row>
+	</card-body>
+</card>
+
+
+<style>
+	.info-entry {
+		margin-bottom: .5rem;
+	}
+
+	.info-entry > label:first-child {
+		min-width: 100px;
+		font-weight: bold;
+	}
+
+	.info-entry > label:last-child:empty::after {
+		content: "N/A";
+		opacity: 0.5;
+	}
+</style>

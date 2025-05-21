@@ -1,0 +1,16 @@
+@model string
+@using TASVideos.Core.Services.Wiki
+@inject IWikiPages WikiPages
+@{
+	var wikiPage = await WikiPages.Page(Model);
+	if (wikiPage is not null)
+	{
+		ViewData.SetWikiPage(wikiPage);
+		ViewData.SetTitle(wikiPage.PageName);
+	}
+}
+
+@if (wikiPage is not null)
+{
+	<wiki-markup markup="@wikiPage.Markup" page-data="@wikiPage"></wiki-markup>
+}

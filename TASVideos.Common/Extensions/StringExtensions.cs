@@ -2,7 +2,7 @@
 
 namespace TASVideos.Extensions;
 
-public static class StringExtensions
+public static partial class StringExtensions
 {
 	/// <summary>
 	/// Truncates the end of a string to the given character <see cref="limit"/> if the
@@ -81,26 +81,55 @@ public static class StringExtensions
 	}
 
 	/// <summary>
-	/// Takes a comma separated string and returns a list of values.
+	/// Uses <see cref="SplitCamelCase"/> to split the string,
+	/// but also checks for a HomePages path and undoes the split for the usernames in the path.
 	/// </summary>
-	public static IEnumerable<string> CsvToStrings(this string? param)
+	public static string SplitPathCamelCase(this string? str)
 	{
-		return string.IsNullOrWhiteSpace(param)
-			? Enumerable.Empty<string>()
-			: param
-				.SplitWithEmpty(",")
-				.Where(p => !string.IsNullOrWhiteSpace(p))
-				.Select(p => p.Trim());
+		if (str is null)
+		{
+			return "";
+		}
+
+		if (!str.StartsWith("HomePages/"))
+		{
+			return SplitCamelCase(str);
+		}
+
+		var pathFragments = str.SplitWithEmpty("/");
+		for (int i = 0; i < pathFragments.Length; i++)
+		{
+			if (i != 1)
+			{
+				pathFragments[i] = SplitCamelCase(pathFragments[i]);
+			}
+		}
+
+		return string.Join(" / ", pathFragments);
 	}
 
 	/// <summary>
 	/// Takes a comma separated string and returns a list of values.
 	/// </summary>
-	public static IEnumerable<int> CsvToInts(this string? param)
+	public static ICollection<string> CsvToStrings(this string? param)
+	{
+		return string.IsNullOrWhiteSpace(param)
+			? []
+			: param
+				.SplitWithEmpty(",")
+				.Where(p => !string.IsNullOrWhiteSpace(p))
+				.Select(p => p.Trim())
+				.ToList();
+	}
+
+	/// <summary>
+	/// Takes a comma separated string and returns a list of values.
+	/// </summary>
+	public static ICollection<int> CsvToInts(this string? param)
 	{
 		if (string.IsNullOrWhiteSpace(param))
 		{
-			return Enumerable.Empty<int>();
+			return [];
 		}
 
 		var candidates = param.CsvToStrings();
@@ -119,14 +148,21 @@ public static class StringExtensions
 
 	public static string[] SplitWithEmpty(this string str, string separator)
 	{
-		return str.Split(new[] { separator }, StringSplitOptions.RemoveEmptyEntries);
+		return str.Split([separator], StringSplitOptions.RemoveEmptyEntries);
 	}
 
+	private static readonly Regex SplitCamelCaseRegex = SplitCamelCaseCompiledRegex();
 	private static string SplitCamelCaseInternal(this string? str)
 	{
 		return !string.IsNullOrWhiteSpace(str)
-			? Regex.Replace(str, @"(\/)|(\p{Ll})(?=[\p{Lu}\p{Nd}])|(\p{Nd})(?=[\p{Lu}])|([\p{L}\p{Nd}])(?=[^\p{L}\p{Nd}])|([^\p{L}\p{Nd}])(?=[\p{L}\p{Nd}])", "$1$2$3$4$5 ")
+			? SplitCamelCaseRegex.Replace(str, "$1$2$3$4$5 ")
 			: "";
+	}
+
+	private static readonly Regex SpaceRegex = SpaceCompiledRegex();
+	public static string RemoveAllSpaces(this string? str)
+	{
+		return SpaceRegex.Replace(str ?? "", "");
 	}
 
 	public static string UnicodeAwareSubstring(this string s, int startIndex)
@@ -189,7 +225,7 @@ public static class StringExtensions
 	/// </summary>
 	public static string NewlinesToSpaces(this string s)
 	{
-		return Regex.Replace(s, @"\r\n?|\n", " ");
+		return NewLinesToSpacesRegex().Replace(s, " ");
 	}
 
 	/// <summary>
@@ -202,4 +238,62 @@ public static class StringExtensions
 			? null
 			: s;
 	}
+
+	/// <summary>
+	/// Replaces the first occurrence of the given string.
+	/// </summary>
+	public static string ReplaceFirst(this string? text, string search, string replace)
+	{
+		if (text is null)
+		{
+			return "";
+		}
+
+		int pos = text.IndexOf(search);
+		if (pos < 0)
+		{
+			return text;
+		}
+
+		return string.Concat(text.AsSpan(0, pos), replace, text.AsSpan(pos + search.Length));
+	}
+
+	public static string PascalToCamelCase(this string str)
+	{
+		if (string.IsNullOrWhiteSpace(str))
+		{
+			return str;
+		}
+
+		return char.ToLowerInvariant(str[0]) + str[1..];
+	}
+
+	/// <summary>
+	/// Replaces the characters &lt; and &gt; with their fullwidth versions ＜ and ＞, because YouTube doesn't allow the regular symbols in titles and descriptions.
+	/// </summary>
+	public static string FormatForYouTube(this string s)
+	{
+		return s.Replace('<', '＜').Replace('>', '＞');
+	}
+
+	public static List<string> RemoveEmpty(this IEnumerable<string> strList)
+	{
+		return strList.Where(a => !string.IsNullOrWhiteSpace(a)).ToList();
+	}
+
+	public static string RemoveUrls(this string s)
+	{
+		return SimpleUrlsRegex().Replace(s, "");
+	}
+
+	[GeneratedRegex(@"(\/)|(\p{Ll})(?=[\p{Lu}\p{Nd}])|(\p{Nd})(?=[\p{Lu}])|([\p{L}\p{Nd}])(?=[^\p{L}\p{Nd}])|([^\p{L}\p{Nd}])(?=[\p{L}\p{Nd}])")]
+	private static partial Regex SplitCamelCaseCompiledRegex();
+
+	[GeneratedRegex(" +")]
+	private static partial Regex SpaceCompiledRegex();
+
+	[GeneratedRegex(@"\r\n?|\n")]
+	private static partial Regex NewLinesToSpacesRegex();
+	[GeneratedRegex(@"https?:\/\/\S*")]
+	private static partial Regex SimpleUrlsRegex();
 }

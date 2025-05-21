@@ -1,19 +1,32 @@
 ﻿@page
+@inject AppSettings Settings
+@using System.Globalization
 @model NewsModel
 @{
 	Layout = null;
-	ViewData["BaseUrl"] = Model.BaseUrl;
-	string title = "TASVideos News";
-	string link = "News";
+	const string title = "TASVideos News";
+	const string link = "News";
 }
 <?xml version="1.0" encoding="utf-8" ?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+<rss>
 	<channel>
 		<partial model="@((title, link))" name="_RssChannel" />
-		<atom:link href="@(Model.BaseUrl)/sublications.rss" rel="self" type="application/rss+xml" xmlns="atom" />
+		<atom:link rel="self" type="application/rss+xml" href="@(Settings.BaseUrl)/news.rss" />
 		@foreach (var news in Model.News)
 		{
-			<partial model="news" name="_RssNews" />
+			var postUrl = $"{Settings.BaseUrl}/Forum/Posts/{news.PostId}";
+			<item>
+				<title>@news.Subject</title>
+				<rss-link>@postUrl</rss-link>
+				<description>
+					<html-encode>
+						<forum-markup markup="@news.Text" enable-html="@news.EnableHtml" enable-bb-code="@news.EnableBbCode"></forum-markup>
+					</html-encode>
+				</description>
+				<comments>@postUrl</comments>
+				<guid>@postUrl</guid>
+				<pubDate>@news.PubDate.ToString("r", CultureInfo.InvariantCulture)</pubDate>
+			</item>
 		}
 	</channel>
 </rss>

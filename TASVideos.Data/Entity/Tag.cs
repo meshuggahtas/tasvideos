@@ -1,16 +1,15 @@
-﻿namespace TASVideos.Data.Entity;
+﻿using TASVideos.Data.AutoHistory;
 
+namespace TASVideos.Data.Entity;
+
+[IncludeInAutoHistory]
 public class Tag
 {
 	public int Id { get; set; }
 
-	[Required]
-	[StringLength(25)]
 	public string Code { get; set; } = "";
 
-	[Required]
-	[StringLength(50)]
 	public string DisplayName { get; set; } = "";
 
-	public virtual ICollection<PublicationTag> PublicationTags { get; set; } = new HashSet<PublicationTag>();
+	public ICollection<PublicationTag> PublicationTags { get; init; } = [];
 }

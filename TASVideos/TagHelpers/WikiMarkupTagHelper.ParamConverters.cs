@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using TASVideos.Services;
+﻿using System.Globalization;
 
 namespace TASVideos.TagHelpers;
 
@@ -71,7 +67,7 @@ public partial class WikiMarkup
 	{
 		public override bool? Convert(string? input)
 		{
-			return input != null;
+			return input is not null;
 		}
 	}
 

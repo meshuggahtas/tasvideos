@@ -1,49 +1,48 @@
-﻿using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity.Game;
-
-namespace TASVideos.Core.Services;
+﻿namespace TASVideos.Core.Services;
 
 public enum SystemEditResult { Success, Fail, NotFound, DuplicateCode, DuplicateId }
 public enum SystemDeleteResult { Success, Fail, NotFound, InUse }
 
-
 public interface IGameSystemService
 {
-	ValueTask<ICollection<GameSystem>> GetAll();
-	ValueTask<GameSystem?> GetById(int id);
+	ValueTask<ICollection<SystemsResponse>> GetAll();
+	ValueTask<SystemsResponse?> GetById(int id);
 	Task<bool> InUse(int id);
 	ValueTask<int> NextId();
 	Task<SystemEditResult> Add(int id, string code, string displayName);
 	Task<SystemEditResult> Edit(int id, string code, string displayName);
 	Task<SystemDeleteResult> Delete(int id);
+	Task FlushCache();
 }
 
-internal class GameSystemService : IGameSystemService
+internal class GameSystemService(ApplicationDbContext db, ICacheService cache) : IGameSystemService
 {
 	internal const string SystemsKey = "AllSystems";
-	private readonly ApplicationDbContext _db;
-	private readonly ICacheService _cache;
 
-	public GameSystemService(ApplicationDbContext db, ICacheService cache)
+	public async ValueTask<ICollection<SystemsResponse>> GetAll()
 	{
-		_db = db;
-		_cache = cache;
-	}
-
-	public async ValueTask<ICollection<GameSystem>> GetAll()
-	{
-		if (_cache.TryGetValue(SystemsKey, out List<GameSystem> systems))
+		if (cache.TryGetValue(SystemsKey, out List<SystemsResponse> systems))
 		{
 			return systems;
 		}
 
-		systems = await _db.GameSystems.ToListAsync();
-		_cache.Set(SystemsKey, systems);
+		systems = await db.GameSystems
+			.Select(s => new SystemsResponse(
+				s.Id,
+				s.Code,
+				s.DisplayName,
+				s.SystemFrameRates.Select(sf => new FrameRatesResponse(
+					sf.Id,
+					sf.FrameRate,
+					sf.RegionCode,
+					sf.Preliminary,
+					sf.Obsolete))))
+			.ToListAsync();
+		cache.Set(SystemsKey, systems);
 		return systems;
 	}
 
-	public async ValueTask<GameSystem?> GetById(int id)
+	public async ValueTask<SystemsResponse?> GetById(int id)
 	{
 		var systems = await GetAll();
 		return systems.SingleOrDefault(s => s.Id == id);
@@ -51,22 +50,22 @@ internal class GameSystemService : IGameSystemService
 
 	public async Task<bool> InUse(int id)
 	{
-		if (await _db.GameRoms.AnyAsync(r => r.SystemId == id))
+		if (await db.GameVersions.AnyAsync(r => r.SystemId == id))
 		{
 			return true;
 		}
 
-		if (await _db.Publications.AnyAsync(p => p.SystemId == id))
+		if (await db.Publications.AnyAsync(p => p.SystemId == id))
 		{
 			return true;
 		}
 
-		if (await _db.Submissions.AnyAsync(s => s.SystemId == id))
+		if (await db.Submissions.AnyAsync(s => s.SystemId == id))
 		{
 			return true;
 		}
 
-		if (await _db.UserFiles.AnyAsync(uf => uf.SystemId == id))
+		if (await db.UserFiles.AnyAsync(uf => uf.SystemId == id))
 		{
 			return true;
 		}
@@ -87,13 +86,13 @@ internal class GameSystemService : IGameSystemService
 
 	public async Task<SystemEditResult> Add(int id, string code, string displayName)
 	{
-		var system = await _db.GameSystems.SingleOrDefaultAsync(s => s.Id == id);
+		var system = await db.GameSystems.SingleOrDefaultAsync(s => s.Id == id);
 		if (system is not null)
 		{
 			return SystemEditResult.DuplicateId;
 		}
 
-		_db.GameSystems.Add(new GameSystem
+		db.GameSystems.Add(new GameSystem
 		{
 			Id = id,
 			Code = code,
@@ -102,8 +101,8 @@ internal class GameSystemService : IGameSystemService
 
 		try
 		{
-			await _db.SaveChangesAsync();
-			_cache.Remove(SystemsKey);
+			await db.SaveChangesAsync();
+			cache.Remove(SystemsKey);
 			return SystemEditResult.Success;
 		}
 		catch (DbUpdateConcurrencyException)
@@ -123,7 +122,7 @@ internal class GameSystemService : IGameSystemService
 
 	public async Task<SystemEditResult> Edit(int id, string code, string displayName)
 	{
-		var system = await _db.GameSystems.SingleOrDefaultAsync(s => s.Id == id);
+		var system = await db.GameSystems.SingleOrDefaultAsync(s => s.Id == id);
 		if (system is null)
 		{
 			return SystemEditResult.NotFound;
@@ -134,8 +133,8 @@ internal class GameSystemService : IGameSystemService
 
 		try
 		{
-			await _db.SaveChangesAsync();
-			_cache.Remove(SystemsKey);
+			await db.SaveChangesAsync();
+			cache.Remove(SystemsKey);
 			return SystemEditResult.Success;
 		}
 		catch (DbUpdateConcurrencyException)
@@ -162,15 +161,15 @@ internal class GameSystemService : IGameSystemService
 
 		try
 		{
-			var system = await _db.GameSystems.SingleOrDefaultAsync(t => t.Id == id);
+			var system = await db.GameSystems.FindAsync(id);
 			if (system is null)
 			{
 				return SystemDeleteResult.NotFound;
 			}
 
-			_db.GameSystems.Remove(system);
-			await _db.SaveChangesAsync();
-			_cache.Remove(SystemsKey);
+			db.GameSystems.Remove(system);
+			await db.SaveChangesAsync();
+			cache.Remove(SystemsKey);
 		}
 		catch (DbUpdateConcurrencyException)
 		{
@@ -179,4 +178,13 @@ internal class GameSystemService : IGameSystemService
 
 		return SystemDeleteResult.Success;
 	}
+
+	public async Task FlushCache()
+	{
+		cache.Remove(SystemsKey);
+		await GetAll();
+	}
 }
+
+public record SystemsResponse(int Id, string Code, string DisplayName, IEnumerable<FrameRatesResponse> SystemFrameRates);
+public record FrameRatesResponse(int Id, double FrameRate, string RegionCode, bool Preliminary, bool Obsolete);

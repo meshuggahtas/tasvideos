@@ -1,25 +1,17 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
-
-namespace TASVideos.Pages.Account;
+﻿namespace TASVideos.Pages.Account;
 
 [Authorize]
 [IgnoreAntiforgeryToken]
-public class LogoutModel : BasePageModel
+public class LogoutModel(ISignInManager signInManager) : BasePageModel
 {
-	private readonly SignInManager _signInManager;
-
-	public LogoutModel(SignInManager signInManager)
+	public IActionResult OnGet()
 	{
-		_signInManager = signInManager;
+		return Login();
 	}
 
 	public async Task<IActionResult> OnPost()
 	{
-		var user = await _signInManager.UserManager.GetUserAsync(User);
-		await _signInManager.UserManager.RemoveClaimsAsync(user, User.Claims);
-		await _signInManager.SignOutAsync();
+		await signInManager.Logout(User);
 		return Login();
 	}
 }

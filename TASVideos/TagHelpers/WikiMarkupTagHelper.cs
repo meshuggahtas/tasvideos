@@ -1,47 +1,32 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text.Encodings.Web;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
+﻿using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
-using TASVideos.Data.Entity;
-using TASVideos.Extensions;
-using TASVideos.Services;
+using TASVideos.Core.Services.Wiki;
 using TASVideos.WikiEngine;
 using TASVideos.WikiEngine.AST;
 
 namespace TASVideos.TagHelpers;
 
-public partial class WikiMarkup : TagHelper, IWriterHelper
+public partial class WikiMarkup(IViewComponentHelper viewComponentHelper) : TagHelper, IWriterHelper
 {
-	private readonly IViewComponentHelper _viewComponentHelper;
-
-	public WikiMarkup(IViewComponentHelper viewComponentHelper)
-	{
-		_viewComponentHelper = viewComponentHelper;
-	}
-
 	[ViewContext]
 	[HtmlAttributeNotBound]
 	public ViewContext ViewContext { get; set; } = new();
 
-	public string Markup { get; set; } = "";
-	public WikiPage PageData { get; set; } = new();
+	public string? Markup { get; set; }
+	public IWikiPage? PageData { get; set; }
 
 	public override async Task ProcessAsync(TagHelperContext context, TagHelperOutput output)
 	{
-		((IViewContextAware)_viewComponentHelper).Contextualize(ViewContext);
+		((IViewContextAware)viewComponentHelper).Contextualize(ViewContext);
 		output.TagName = "article";
 		output.AddCssClass("wiki");
-		await Util.RenderHtmlAsync(Markup, new TagHelperTextWriter(output.Content), this);
+		await Util.RenderHtmlAsync(Markup ?? "", new TagHelperTextWriter(output.Content), this);
 	}
 
 	bool IWriterHelper.CheckCondition(string condition)
 	{
-		return HtmlExtensions.WikiCondition(ViewContext, condition);
+		return ViewContext.WikiCondition(condition);
 	}
 
 	async Task IWriterHelper.RunViewComponentAsync(TextWriter w, string name, IReadOnlyDictionary<string, string> pp)
@@ -52,18 +37,14 @@ public partial class WikiMarkup : TagHelper, IWriterHelper
 			throw new InvalidOperationException($"Unknown ViewComponent: {name}");
 		}
 
-		var invokeMethod = viewComponent!.GetMethod("InvokeAsync")
-			?? viewComponent.GetMethod("Invoke");
-
-		if (invokeMethod is null)
-		{
-			throw new InvalidOperationException($"Could not find an Invoke method on ViewComponent {viewComponent}");
-		}
+		var invokeMethod = (viewComponent!.GetMethod("InvokeAsync")
+			?? viewComponent.GetMethod("Invoke"))
+			?? throw new InvalidOperationException($"Could not find an Invoke method on ViewComponent {viewComponent}");
 
 		var paramObject = ModuleParamHelpers
 			.GetParameterData(w, name, invokeMethod, PageData, pp);
 
-		var content = await _viewComponentHelper.InvokeAsync(viewComponent, paramObject);
+		var content = await viewComponentHelper.InvokeAsync(viewComponent, paramObject);
 		content.WriteTo(w, HtmlEncoder.Default);
 	}
 

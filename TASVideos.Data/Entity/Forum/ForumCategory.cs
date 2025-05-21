@@ -3,14 +3,11 @@
 public class ForumCategory : BaseEntity
 {
 	public int Id { get; set; }
-	public virtual ICollection<Forum> Forums { get; set; } = new HashSet<Forum>();
+	public ICollection<Forum> Forums { get; init; } = [];
 
-	[Required]
-	[StringLength(30)]
 	public string Title { get; set; } = "";
 
 	public int Ordinal { get; set; }
 
-	[StringLength(1000)]
 	public string? Description { get; set; }
 }

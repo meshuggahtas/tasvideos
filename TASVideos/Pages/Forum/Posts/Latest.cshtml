@@ -1,21 +1,21 @@
 ﻿@page
 @model LatestModel
 @{
-	ViewData["Title"] = "Latest Forum Posts";
+	ViewData.SetTitle("Latest Forum Posts");
 }
 
+<partial Name="_ForumHeader" />
 <div condition="@Model.Posts.Any()">
-	<partial Name="_ForumHeader" />
-	<fullrow>
-		<partial name="_Pager" model="Model.Posts" />
-	</fullrow>
-	<table class="table table-sm">
-		<tr>
-			<th class="d-none d-md-table-cell">Forum</th>
-			<th>Topic</th>
-			<th>Posted</th>
-			<th>Post</th>
-		</tr>
+	<partial name="_Pager" model="Model.Posts" />
+	<standard-table>
+		<thead>
+			<tr>
+				<th class="d-none d-md-table-cell">Forum</th>
+				<th>Topic</th>
+				<th>Posted</th>
+				<th>Post</th>
+			</tr>
+		</thead>
 		@foreach (var post in Model.Posts)
 		{
 			<tr>
@@ -29,16 +29,14 @@
 					<timezone-convert asp-for="@post.CreateTimestamp"/>
 				</td>
 				<td>
-					<a asp-page="/Forum/Posts/Index" asp-route-id="@post.Id"><i class="fa fa-bookmark-o"></i> @post.PosterName</a>
-					<br />
+					<a asp-page="/Forum/Posts/Index" asp-route-id="@post.Id"><i class="fa-regular fa-bookmark"></i> @post.PosterName</a>
+					<br/>
 					<small class="d-none d-md-inline-block">
 						@post.Text.CapAndEllipse(50)
 					</small>
 				</td>
 			</tr>
 		}
-	</table>
-	<fullrow class="mt-2">
-		<partial name="_Pager" model="Model.Posts" />
-	</fullrow>
+	</standard-table>
+	<partial name="_Pager" model="Model.Posts" />
 </div>

@@ -1,85 +1,82 @@
 ﻿@page
-@using TASVideos.Pages.Submissions.Models
 @model IndexModel
 @inject IQueueService QueueService
 @{
-	ViewData["Title"] = "Submissions";
-
-	var selectAvailableYears = Model.Search.AvailableYears
-		.Select(n => new SelectListItem
-		{
-			Text = n.ToString(),
-			Value = n.ToString()
-		});
+	ViewData.SetTitle("Submissions");
+	var verifiedOptions= new List<SelectListItem>
+	{
+		new() { Value = "", Text = "All" },
+		new() { Value = "True", Text = "Sync Verified" },
+		new() { Value = "False", Text = "Unverified" }
+	};
 }
 
 <div permission="SubmitMovies" class="float-end">
 	<div class="mb-1">
-		<a asp-page="Submit" class="btn btn-primary">Submit a Movie</a>
+		<a asp-page="Submit" class="btn btn-primary"><i class="fa fa-upload"></i> Submit a Movie</a>
 	</div>
 	<div>
-		<a asp-page="Index" asp-route-user="@User.Name()" class="btn btn-secondary">
-			My Submissions
-		</a>
+		<a asp-page="Index" asp-route-user="@User.Name()" class="btn btn-secondary">My Submissions</a>
 	</div>
 </div>
+@await Html.RenderWiki(SystemWiki.SubmissionHeader)
 
-@await Component.RenderWiki("System/SubmissionHeader")
-<hr />
 <form method="get" id="submission-form">
-	<two-column-select available-list="AvailableStatuses" id-list="Search.StatusFilter" />
-	<row class="mt-2 mb-2">
-		<column md="5">
-			<label asp-for="Search.Years" class="form-control-label"></label>
-			<select asp-for="Search.Years" asp-items="selectAvailableYears" multiple class="form-control"></select>
+	<row class="mt-3">
+		<column md="6">
+			<label asp-for="Search.Statuses"></label>
+			<select asp-for="Search.Statuses" multiselect="true" asp-items="IndexModel.AvailableStatuses"></select>
+			<label condition="@User.Has(PermissionTo.CatalogMovies)" asp-for="Search.ShowVerified"></label>
+			<select asp-for="Search.ShowVerified" asp-items="verifiedOptions" condition="@User.Has(PermissionTo.CatalogMovies)" class="form-control"></select>
 		</column>
-		<column class="offset-md-2" md="5">
-			<label asp-for="Search.User" class="form-control-label"></label>
-			<input autocomplete="off" asp-for="Search.User" type="text" list="@Html.IdFor(m => m.Search.User)-autocomplete" class="form-control" />
-			
-			<label asp-for="Search.System" class="form-control-label"></label>
-			<select asp-for="Search.System" asp-items="Model.SystemList" class="form-control"></select>
+		<column md="6">
+			<label asp-for="Search.Years"></label>
+			<select asp-for="Search.Years" asp-items="Model.AvailableYears" multiselect="true"></select>
+			<label asp-for="Search.User"></label>
+			<input asp-for="Search.User" user-search="true" />
+			<label asp-for="Search.System"></label>
+			<select asp-for="Search.System" asp-items="Model.SystemList"></select>
 		</column>
 	</row>
-	<button type="submit" class="btn btn-secondary mt-1"><i class="fa fa-filter"></i> Filter</button>
+	<submit-button class="mt-1"><i class="fa fa-filter"></i> Filter</submit-button>
 </form>
 <hr />
 <partial name="_Pager" model="Model.Submissions" />
-<div class="table-container">
-	<table class="table table-striped table-bordered">
-		<sortable-table-head model-type="typeof(SubmissionListEntry)" sorting="Model.Search" />
-		@foreach (var item in Model.Submissions)
-		{
-			var showPublicationClass = !string.IsNullOrWhiteSpace(item.IntendedClass) && item.IntendedClass != "Standard";
-			<tr>
-				<td>@item.System</td>
-				<td><sub-link id="item.Id">@item.GameName</sub-link></td>
-				<td>@item.Branch</td>
-				<td>@(item.Time.ToStringWithOptionalDaysAndHours())</td>
-				<td><author-list authors="item.Authors" additional-authors="@item.AdditionalAuthors"></author-list></td>
-				<td><timezone-convert asp-for="@item.Submitted" date-only="true" /></td>
-				<td>
-					@item.Status.EnumDisplayName()
-					<small condition="showPublicationClass">
-						(@item.IntendedClass)
+<standard-table>
+	<sortable-table-head model-type="typeof(IndexModel.SubmissionEntry)" sorting="Model.Search" />
+	@foreach (var item in Model.Submissions)
+	{
+		var showPublicationClass = !string.IsNullOrWhiteSpace(item.IntendedClass) && item.IntendedClass != "Standard";
+		var hoursRemaining = QueueService.HoursRemainingForJudging(item);
+		<tr>
+			<td>@item.System</td>
+			<td><sub-link id="item.Id">@item.Game</sub-link></td>
+			<td>@(item.Goal == "baseline" ? "" : item.Goal)</td>
+			<td>@(item.Time.ToStringWithOptionalDaysAndHours())</td>
+			<td><author-list authors="item.By" additional-authors="@item.AdditionalAuthors"></author-list></td>
+			<td><timezone-convert asp-for="@item.Date" date-only="true" /></td>
+			<td>
+				@item.Status.EnumDisplayName()
+				<small condition="showPublicationClass">
+					(@item.IntendedClass)
+				</small>
+				<small condition="item.Judge is not null && item.Publisher is null">
+					<br /><profile-link username="@item.Judge"></profile-link>
+				</small>
+				<small condition="item.Publisher is not null">
+					<br /><profile-link username="@item.Publisher"></profile-link>
+				</small>
+				<small condition="hoursRemaining > 0">
+					<br />(Available for judging in @hoursRemaining hours)
+				</small>
+				<div>
+					<small condition="item.SyncedOn.HasValue">
+						<i class="fa fa-check-square"></i> Sync Verified
 					</small>
-					<small condition="item.Judge != null && item.Publisher == null">
-						<br /><profile-link username="@item.Judge"></profile-link>
-					</small>
-					<small condition="item.Publisher != null">
-						<br /><profile-link username="@item.Publisher"></profile-link>
-					</small>
-					<small condition="QueueService.HoursRemainingForJudging(item) > 0">
-						<br />(Available for judging in @QueueService.HoursRemainingForJudging(item) hours)
-					</small>
-				</td>
-			</tr>
-		}
-	</table>
-</div>
-@section Scripts {
-	<script src="/js/user-search.js"></script>
-	<script>
-		searchUsers("@Html.IdFor(m => m.Search.User)");
-	</script>
-}
+				</div>
+			</td>
+			<td><partial name="_VoteCounts" model="item.Votes" /></td>
+		</tr>
+	}
+</standard-table>
+<partial name="_Pager" model="Model.Submissions" />

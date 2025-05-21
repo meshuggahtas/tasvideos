@@ -1,46 +1,34 @@
-﻿using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity.Forum;
-
-namespace TASVideos.Core.Services;
+﻿namespace TASVideos.Core.Services;
 
 public interface ITASVideoAgent
 {
 	Task<int> PostSubmissionTopic(int submissionId, string postTitle);
 	Task PostSubmissionPublished(int submissionId, int publicationId);
 	Task PostSubmissionUnpublished(int submissionId);
+
+	Task SendWelcomeMessage(int userId);
+	Task SendAutoAssignedRole(int userId, string roleName);
+	Task SendPublishedAuthorRole(int userId, string roleName, string publicationTitle);
 }
 
-internal class TASVideoAgent : ITASVideoAgent
+internal class TASVideoAgent(ApplicationDbContext db, IForumService forumService) : ITASVideoAgent
 {
-	private readonly ApplicationDbContext _db;
-	private readonly IForumService _forumService;
-
-	public TASVideoAgent(ApplicationDbContext db, IForumService forumService)
-	{
-		_db = db;
-		_forumService = forumService;
-	}
-
 	public async Task<int> PostSubmissionTopic(int submissionId, string title)
 	{
 		var poll = new ForumPoll
 		{
-			CreateUserName = SiteGlobalConstants.TASVideoAgent,
 			Question = SiteGlobalConstants.PollQuestion,
-			PollOptions = new ForumPollOption[]
-			{
-					new () { Text = SiteGlobalConstants.PollOptionNo, Ordinal = 0 },
-					new () { Text = SiteGlobalConstants.PollOptionYes, Ordinal = 1 },
-					new () { Text = SiteGlobalConstants.PollOptionsMeh, Ordinal = 2 }
-			}
+			PollOptions =
+			[
+				new() { Text = SiteGlobalConstants.PollOptionNo, Ordinal = 0 },
+				new() { Text = SiteGlobalConstants.PollOptionYes, Ordinal = 1 },
+				new() { Text = SiteGlobalConstants.PollOptionsMeh, Ordinal = 2 }
+			]
 		};
 
 		// Create Topic in workbench
 		var topic = new ForumTopic
 		{
-			CreateUserName = SiteGlobalConstants.TASVideoAgent,
-			LastUpdateUserName = SiteGlobalConstants.TASVideoAgent,
 			ForumId = ForumConstants.WorkBenchForumId,
 			Title = title,
 			PosterId = SiteGlobalConstants.TASVideoAgentId,
@@ -51,8 +39,6 @@ internal class TASVideoAgent : ITASVideoAgent
 		// Create first post
 		var post = new ForumPost
 		{
-			CreateUserName = SiteGlobalConstants.TASVideoAgent,
-			LastUpdateUserName = SiteGlobalConstants.TASVideoAgent,
 			Topic = topic,
 			ForumId = ForumConstants.WorkBenchForumId,
 			PosterId = SiteGlobalConstants.TASVideoAgentId,
@@ -62,35 +48,34 @@ internal class TASVideoAgent : ITASVideoAgent
 			PosterMood = ForumPostMood.Normal
 		};
 
-		_db.ForumPolls.Add(poll);
-		_db.ForumTopics.Add(topic);
-		_db.ForumPosts.Add(post);
-		await _db.SaveChangesAsync();
+		db.ForumPolls.Add(poll);
+		db.ForumTopics.Add(topic);
+		db.ForumPosts.Add(post);
+		await db.SaveChangesAsync();
 
 		poll.TopicId = topic.Id;
-		poll.LastUpdateUserName = SiteGlobalConstants.TASVideoAgent; // Necessary for LastUpdatedUser to not change
-		await _db.SaveChangesAsync();
+		await db.SaveChangesAsync();
 
-		_forumService.CacheLatestPost(
+		forumService.CacheLatestPost(
 			ForumConstants.WorkBenchForumId,
 			topic.Id,
 			new LatestPost(post.Id, post.CreateTimestamp, SiteGlobalConstants.TASVideoAgent));
-		_forumService.CacheNewPostActivity(post.ForumId, topic.Id, post.CreateTimestamp);
+		forumService.CacheNewPostActivity(post.ForumId, topic.Id, post.Id, post.CreateTimestamp);
 
 		return topic.Id;
 	}
 
 	public async Task PostSubmissionPublished(int submissionId, int publicationId)
 	{
-		var topic = await _db.ForumTopics.SingleOrDefaultAsync(f => f.SubmissionId == submissionId);
+		var topic = await db.ForumTopics.SingleOrDefaultAsync(f => f.SubmissionId == submissionId);
 
-		// We intentionally silently fail here.
-		// Otherwise we would leave publication in a partial state
+		// We intentionally silently fail here,
+		// otherwise we would leave publication in a partial state
 		// which would be worse than a missing forum post
 		if (topic is not null)
 		{
 			topic.ForumId = SiteGlobalConstants.PublishedMoviesForumId;
-			var postsToMove = await _db.ForumPosts
+			var postsToMove = await db.ForumPosts
 				.ForTopic(topic.Id)
 				.ToListAsync();
 			foreach (var post in postsToMove)
@@ -98,12 +83,10 @@ internal class TASVideoAgent : ITASVideoAgent
 				post.ForumId = SiteGlobalConstants.PublishedMoviesForumId;
 			}
 
-			_db.ForumPosts.Add(new ForumPost
+			db.ForumPosts.Add(new ForumPost
 			{
 				TopicId = topic.Id,
 				ForumId = topic.ForumId,
-				CreateUserName = SiteGlobalConstants.TASVideoAgent,
-				LastUpdateUserName = SiteGlobalConstants.TASVideoAgent,
 				PosterId = SiteGlobalConstants.TASVideoAgentId,
 				EnableBbCode = true,
 				EnableHtml = false,
@@ -111,21 +94,24 @@ internal class TASVideoAgent : ITASVideoAgent
 				Text = SiteGlobalConstants.NewPublicationPost.Replace("{PublicationId}", publicationId.ToString()),
 				PosterMood = ForumPostMood.Happy
 			});
-			await _db.SaveChangesAsync();
+			await db.SaveChangesAsync();
+
+			forumService.ClearLatestPostCache();
+			forumService.ClearTopicActivityCache();
 		}
 	}
 
 	public async Task PostSubmissionUnpublished(int submissionId)
 	{
-		var topic = await _db.ForumTopics.SingleOrDefaultAsync(f => f.SubmissionId == submissionId);
+		var topic = await db.ForumTopics.SingleOrDefaultAsync(f => f.SubmissionId == submissionId);
 
-		// We intentionally silently fail here.
-		// Otherwise we would leave publication in a partial state
+		// We intentionally silently fail here,
+		// otherwise we would leave publication in a partial state
 		// which would be worse than a missing forum post
 		if (topic is not null)
 		{
 			topic.ForumId = SiteGlobalConstants.WorkbenchForumId;
-			var postsToMove = await _db.ForumPosts
+			var postsToMove = await db.ForumPosts
 				.ForTopic(topic.Id)
 				.ToListAsync();
 			foreach (var post in postsToMove)
@@ -133,12 +119,10 @@ internal class TASVideoAgent : ITASVideoAgent
 				post.ForumId = SiteGlobalConstants.WorkbenchForumId;
 			}
 
-			_db.ForumPosts.Add(new ForumPost
+			db.ForumPosts.Add(new ForumPost
 			{
 				TopicId = topic.Id,
 				ForumId = topic.ForumId,
-				CreateUserName = SiteGlobalConstants.TASVideoAgent,
-				LastUpdateUserName = SiteGlobalConstants.TASVideoAgent,
 				PosterId = SiteGlobalConstants.TASVideoAgentId,
 				EnableBbCode = true,
 				EnableHtml = false,
@@ -146,7 +130,54 @@ internal class TASVideoAgent : ITASVideoAgent
 				Text = SiteGlobalConstants.UnpublishPost,
 				PosterMood = ForumPostMood.Puzzled
 			});
-			await _db.SaveChangesAsync();
+			await db.SaveChangesAsync();
+
+			forumService.ClearLatestPostCache();
+			forumService.ClearTopicActivityCache();
 		}
+	}
+
+	public Task SendWelcomeMessage(int userId)
+		=> SendPm(userId, SiteGlobalConstants.WelcomeToTasvideosPostId, t => t);
+
+	public Task SendAutoAssignedRole(int userId, string roleName)
+	{
+		return SendPm(
+			userId,
+			SiteGlobalConstants.AutoAssignedRolePostId,
+			t => t.Replace("[[role]]", roleName));
+	}
+
+	public Task SendPublishedAuthorRole(int userId, string roleName, string publicationTitle)
+	{
+		return SendPm(
+			userId,
+			SiteGlobalConstants.PublishedAuthorRoleAddedPostId,
+			t => t.Replace("[[role]]", roleName).Replace("[[publicationTitle]]", publicationTitle));
+	}
+
+	private async Task SendPm(int userId, int postId, Func<string, string> processTemplate)
+	{
+		var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId);
+		if (user is null)
+		{
+			return;
+		}
+
+		var post = await db.ForumPosts.SingleOrDefaultAsync(p => p.Id == postId);
+		if (post is null)
+		{
+			return;
+		}
+
+		db.PrivateMessages.Add(new PrivateMessage
+		{
+			FromUserId = SiteGlobalConstants.TASVideoAgentId,
+			ToUserId = user.Id,
+			Subject = post.Subject,
+			Text = processTemplate(post.Text).Replace("[[username]]", user.UserName),
+			EnableBbCode = true
+		});
+		await db.SaveChangesAsync();
 	}
 }

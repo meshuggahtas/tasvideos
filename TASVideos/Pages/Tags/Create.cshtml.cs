@@ -1,22 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
-
-namespace TASVideos.Pages.Tags;
+﻿namespace TASVideos.Pages.Tags;
 
 [RequirePermission(PermissionTo.TagMaintenance)]
-public class CreateModel : BasePageModel
+public class CreateModel(ITagService tagService) : BasePageModel
 {
-	private readonly ITagService _tagService;
-
-	public CreateModel(ITagService tagService)
-	{
-		_tagService = tagService;
-	}
-
-	[FromRoute]
-	public int Id { get; set; }
-
 	[BindProperty]
 	public Tag Tag { get; set; } = new();
 
@@ -27,7 +13,7 @@ public class CreateModel : BasePageModel
 			return Page();
 		}
 
-		var (_, result) = await _tagService.Add(Tag.Code, Tag.DisplayName);
+		var (_, result) = await tagService.Add(Tag.Code, Tag.DisplayName);
 		switch (result)
 		{
 			default:

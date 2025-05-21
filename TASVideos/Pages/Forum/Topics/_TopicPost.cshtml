@@ -1,19 +1,25 @@
-﻿@model TASVideos.Pages.Forum.Posts.Models.ForumPostEntry
-<card id="@Model!.Id" class="@(Model.Highlight ? "forum-post-highlight border-warning border-2" : "border-primary") border mb-2">
-	<cardheader class="px-2 py-1">
+﻿@model TASVideos.Pages.Forum.Topics.IndexModel.PostEntry
+@{
+	DateTime minimumDate = DateTime.UtcNow.AddDays(-ForumConstants.DaysPostsCountAsActive);
+	bool isCreateActivity = Model.CreateTimestamp > minimumDate;
+	bool isEditActivity = Model.PostEditedTimestamp > minimumDate;
+	string addClass = isCreateActivity || isEditActivity ? "activity-post" : "";
+}
+<card id="@Model.Id" class="@(Model.Highlight ? "forum-post-highlight border-warning-subtle border-2" : "border-primary-subtle") border mb-2">
+	<card-header class="px-2 py-1">
 		<row class="align-items-center">
-			<div class="col-lg-2 col-md-3 col-auto">
+			<div class="col-auto">
 				<small>
-					<a href="/Forum/Posts/@(Model!.Id)"
+					<a href="/Forum/Posts/@(Model.Id)"
 					   title="Link to this post"
-					   class="float-start text-decoration-none text-dark">
-						<i class="fa fa-bookmark-o"></i>
+					   class="float-start text-decoration-none text-body">
+						<i class="fa fa-bookmark @addClass" data-post-id="@Model.Id" data-unix-created="@(isCreateActivity ? Model.CreateTimestamp.UnixTimestamp() : "")" data-unix-edited="@(isEditActivity ? Model.PostEditedTimestamp?.UnixTimestamp() : "")"></i>
 						Posted: <timezone-convert asp-for="@Model.CreateTimestamp" />
-						<span condition="@(Model.CreateTimestamp != Model.LastUpdateTimestamp)"><br />(Edited: <timezone-convert asp-for="@Model.LastUpdateTimestamp" />)</span>
+						<span condition="@(Model.PostEditedTimestamp is not null)">@{var postEditedTimestamp = (DateTime)Model.PostEditedTimestamp!;}<br />(Edited: <timezone-convert asp-for="@postEditedTimestamp" />)</span>
 					</a>
 				</small>
 			</div>
-			<div condition="!string.IsNullOrWhiteSpace(Model.Subject)" class="col-auto col-md order-last order-md-0">
+			<div condition="!string.IsNullOrWhiteSpace(Model.Subject)" class="col-auto">
 				<small>
 					Post subject: @Model.Subject
 				</small>
@@ -26,31 +32,32 @@
 					   class="btn btn-secondary btn-sm d-none d-md-inline-block">
 						<i class="fa fa-envelope"></i> PM
 					</a>
-					<a asp-page="/Forum/Posts/Create"
+					<a condition="User.Has(PermissionTo.CreateForumPosts)"
+					   asp-page="/Forum/Posts/Create"
 					   asp-route-topicId="@Model.TopicId"
 					   asp-route-quoteId="@Model.Id"
 					   class="btn btn-secondary btn-sm">
 						<i class="fa fa-quote-right"></i> Quote
 					</a>
-					<a condition="Model.IsEditable"
-					   asp-page="/Forum/Posts/Edit"
-					   asp-route-id="@Model.Id"
-					   class="btn btn-primary btn-sm border border-warning">
-						<i class="fa fa-pencil"></i> Edit
-					</a>
+					<edit-link condition="Model.IsEditable" asp-page="/Forum/Posts/Edit" asp-route-id="@Model.Id" class="btn-sm"></edit-link>
+					<delete-button condition="!Model.Restricted && User.Has(PermissionTo.DeleteForumPosts) && User.Has(PermissionTo.AssignRoles) && Model.PosterId != User.GetUserId()"
+								   asp-href="@($"/Forum/Posts/Edit/{Model.Id}?handler=Spam")"
+									warning-message="Are you sure you want to mark this post as spam and ban this user?"
+									action-name="Spam"
+								   class="btn-sm border border-danger">
+						<i title="Mark as spam" class="fa fa-exclamation-triangle"></i>
+					</delete-button>
 					<delete-button condition="Model.IsDeletable"
 								   asp-href="@($"/Forum/Posts/Edit/{Model.Id}?handler=Delete")"
 								   warning-message="Are you sure you want to delete this post?"
-								   class="btn-sm border border-warning">
-						<i title="Delete this post" class="fa fa-remove"></i>
-					</delete-button>
+								   class="btn-sm"></delete-button>
 				</small>
 			</div>
 		</row>
-	</cardheader>
-	<cardbody class="px-2 py-0">
+	</card-header>
+	<card-body class="px-2 py-0">
 		<row class="gx-3">
-			<div class="col-lg-2 col-md-3 py-2" style="background-color: var(--bs-gray-200)">
+			<div class="forum-profile-section col-lg-2 col-md-3 py-2">
 				<row class="gx-0">
 					<div class="col-10 col-md-12">
 						<row class="my-auto my-md-0 h-100 justify-content-center align-items-center">
@@ -59,11 +66,11 @@
 									<h6 class="col-auto col-md-12 ms-2 ms-md-0 me-auto my-0">
 										<profile-link username="@Model.PosterName"></profile-link>
 									</h6>
-									<small condition="@(Model.PosterPronouns != PreferredPronounTypes.Unspecified)" class="text-muted col-auto col-md-12" style="line-height: 22px;">@Html.DisplayFor(m => m.PosterPronouns)</small>
+									<small condition="@(Model.PosterPronouns != PreferredPronounTypes.Unspecified)" class="text-body-tertiary col-auto col-md-12" style="line-height: 22px;">@Html.DisplayFor(m => m.PosterPronouns)</small>
 								</row>
 								<div class="ms-2 ms-md-0" style="line-height: 1">
-									<small>@string.Join(", ", Model.PosterRoles.Select(s => s.Replace(' ', '\u00A0')).OrderBy(s => s))
-										<span condition="Model.PosterPlayerPoints >= 5">(@Math.Round(Model.PosterPlayerPoints))</span>
+									<small>@Model.CalculatedRoles
+										<span condition="!Model.PosterIsBanned && Model.PosterPlayerPoints >= 5">(@Math.Round(Model.PosterPlayerPoints))</span>
 									</small>
 								</div>
 							</div>
@@ -89,14 +96,14 @@
 			</div>
 			<div class="col-lg-10 col-md-9 col d-flex flex-column py-2">
 				<div class="mb-auto">
-					<forum-markup markup=@Model.Text enable-html=@Model.EnableHtml enable-bb-code=@Model.EnableBbCode></forum-markup>
+					<forum-markup markup="@Model.Text" enable-html="@Model.EnableHtml" enable-bb-code="@Model.EnableBbCode"></forum-markup>
 				</div>
-				<div condition="!string.IsNullOrWhiteSpace(Model.Signature)" class="forum-signature mt-2 text-muted lh-sm d-none d-md-block">
+				<div condition="!string.IsNullOrWhiteSpace(Model.Signature)" class="forum-signature mt-2 text-body-tertiary lh-sm d-none d-md-block">
 					<small>
-						<forum-markup markup=@Model.Signature enable-html=false enable-bb-code=true></forum-markup>
+						<forum-markup markup="@Model.Signature" enable-html="false" enable-bb-code="true"></forum-markup>
 					</small>
 				</div>
 			</div>
 		</row>
-	</cardbody>
+	</card-body>
 </card>

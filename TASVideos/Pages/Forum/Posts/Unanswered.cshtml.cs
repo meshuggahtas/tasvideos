@@ -1,44 +1,31 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Forum;
-using TASVideos.Pages.Forum.Posts.Models;
+﻿using TASVideos.Data.Entity.Forum;
 
 namespace TASVideos.Pages.Forum.Posts;
 
 [AllowAnonymous]
-public class UnansweredModel : BasePageModel
+public class UnansweredModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public UnansweredModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
 	[FromQuery]
 	public PagingModel Search { get; set; } = new();
 
-	public PageOf<UnansweredPostsModel> Posts { get; set; } = PageOf<UnansweredPostsModel>.Empty();
+	public PageOf<UnansweredPosts> Posts { get; set; } = new([], new());
 
 	public async Task OnGet()
 	{
-		Posts = await _db.ForumTopics
-			.ExcludeRestricted(User.Has(PermissionTo.SeeRestrictedForums))
+		Posts = await db.ForumTopics
+			.ExcludeRestricted(UserCanSeeRestricted)
 			.Where(t => t.ForumPosts.Count == 1)
-			.Select(t => new UnansweredPostsModel
-			{
-				ForumId = t.ForumId,
-				ForumName = t.Forum!.Name,
-				TopicId = t.Id,
-				TopicName = t.Title,
-				AuthorId = t.PosterId,
-				AuthorName = t.Poster!.UserName,
-				PostDate = t.CreateTimestamp
-			})
-			.OrderByDescending(t => t.PostDate)
+			.OrderByDescending(t => t.CreateTimestamp)
+			.Select(t => new UnansweredPosts(
+				t.ForumId,
+				t.Forum!.Name,
+				t.Id,
+				t.Title,
+				t.PosterId,
+				t.Poster!.UserName,
+				t.CreateTimestamp))
 			.PageOf(Search);
 	}
+
+	public record UnansweredPosts(int ForumId, string ForumName, int TopicId, string TopicName, int AuthorId, string AuthorName, DateTime PostDate);
 }

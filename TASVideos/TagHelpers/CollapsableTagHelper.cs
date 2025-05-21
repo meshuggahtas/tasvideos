@@ -1,8 +1,4 @@
-﻿using System;
-using System.Linq;
-using System.Threading.Tasks;
-
-using Microsoft.AspNetCore.Razor.TagHelpers;
+﻿using Microsoft.AspNetCore.Razor.TagHelpers;
 using static TASVideos.TagHelpers.TagHelperExtensions;
 
 namespace TASVideos.TagHelpers;
@@ -19,22 +15,14 @@ public class CollapsableHeaderTagHelper : TagHelper
 		output.TagName = "div";
 
 		// TODO: sr and aria tags could use something more informative than BodyId
-		output.Content.AppendHtml($@"
-				<a class='collapsed' data-bs-toggle='collapse' {Attr("href", "#" + BodyId)} aria-expanded='false' aria-controls='collapse1' role='button'>
-					{content}
-				</a>
-				<a
-					data-bs-toggle='collapse'
-					class='collapsed btn btn-default btn-xs text-end'
-					{Attr("href", "#" + BodyId)}
-					{Attr("aria-label", $"Expand/Collapse {BodyId}")}
-					aria-expanded='false'
-					role='button'
-				>
-					<i class='fa' aria-hidden='true'></i>
-					<span class='sr-only'>Expand/Collapse {Text(BodyId)}</span>
-				</a>
-			");
+		output.Content.AppendHtml($"""
+									<a class='collapsed' data-bs-toggle='collapse' {Attr("href", "#" + BodyId)} aria-expanded='false' aria-controls='collapse1' role='button'>
+										{content}
+									</a>
+										<i class='fa' aria-hidden='true'></i>
+										<span class='sr-only'>Expand/Collapse {Text(BodyId)}</span>
+									</a>
+									""");
 	}
 }
 
@@ -46,11 +34,8 @@ public class CollapsableBodyTagHelper : TagHelper
 	public override void Process(TagHelperContext context, TagHelperOutput output)
 	{
 		output.TagName = "div";
-		var id = output.Attributes.FirstOrDefault(a => a.Name.ToLower() == "id");
-		if (id is null)
-		{
-			throw new InvalidOperationException("collapsablecontent-body requires an id attribute");
-		}
+		_ = output.Attributes.FirstOrDefault(a => a.Name.Equals("id", StringComparison.InvariantCultureIgnoreCase))
+			?? throw new InvalidOperationException("collapsablecontent-body requires an id attribute");
 
 		output.AddCssClass("collapse");
 		if (StartShown)

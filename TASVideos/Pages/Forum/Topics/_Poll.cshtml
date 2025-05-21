@@ -1,13 +1,13 @@
-﻿@model ForumTopicModel.PollModel
+﻿@model IndexModel.TopicDisplay.PollModel
 @{
-	int totalVotes = Model!.Options.SelectMany(m => m.Voters).Count();
+	int totalVotes = Model.Options.SelectMany(m => m.Voters).Count();
 	bool viewResults = Model.ViewPollResults;
 	bool canVote = false;
 	int userId = -1;
 	if (User.IsLoggedIn())
 	{
 		userId = User.GetUserId();
-		bool votePermission = ViewData.UserHas(PermissionTo.VoteInPolls);
+		bool votePermission = User.Has(PermissionTo.VoteInPolls);
 		bool hasAlreadyVoted = Model.Options.Any(o => o.Voters.Any(v => v == userId));
 		bool pollIsClosed = Model.CloseDate <= DateTime.UtcNow;
 		canVote = votePermission && !hasAlreadyVoted && !pollIsClosed;
@@ -19,7 +19,7 @@
 }
 
 <info-alert>
-	<forum-markup markup=@Model.Question enable-bb-code=true></forum-markup>
+	<forum-markup markup="@Model.Question" enable-bb-code="true"></forum-markup>
 	<form asp-page="Index" asp-page-handler="Vote">
 		<input type="hidden" asp-for="@Model.PollId" />
 		@foreach (var option in Model.Options.OrderBy(o => o.Ordinal))
@@ -49,31 +49,22 @@
 				</div>
 			</row>
 		}
-		<script condition="canVote">
-			Array.from(document.querySelectorAll('[name="ordinal"]'))
-				.forEach(element => {
-					element.addEventListener('change', () => {
-						document.getElementById('vote-btn').removeAttribute('hidden');
-					});
-				});
-		</script>
 		<button condition="canVote" hidden="hidden" type="submit" class="btn btn-sm btn-success" id="vote-btn">Vote!</button>
 	</form>
 	<a condition="!viewResults"
 		asp-route-ViewPollResults="True"
-		class="btn btn-sm btn-outline-info mt-2">
+		class="btn btn-sm btn-outline-info">
 		View Results
 	</a>
 	<a condition="viewResults && canVote"
 		asp-route-ViewPollResults=""
-		class="btn btn-sm btn-outline-info mt-2">
+		class="btn btn-sm btn-outline-info">
 		Return To Voting
 	</a>
-	<a condition="ViewData.UserHas(PermissionTo.SeePollResults) && totalVotes > 0"
+	<a condition="User.Has(PermissionTo.SeePollResults) && totalVotes > 0"
 		asp-page="PollResults"
 		asp-route-id="@Model.PollId"
-		class="btn btn-sm bg-info text-dark mt-2">
+		class="btn btn-sm btn-info">
 		See All Votes
 	</a>
 </info-alert>
-

@@ -1,42 +1,42 @@
 ﻿@page "{id}"
 @model ViewModel
 @{
-	ViewData["Title"] = $"{Model.Publication.Title} - Movie #{Model.Id}";
+	ViewData.UseGreenFavicon();
+	ViewData.IgnorePageTitle();
+	ViewData.SetTitle($"{Model.Publication.Title} - Movie #{Model.Id}");
+	ViewData.SetMetaTags(new MetaTag
+	{
+		Title = Model.Publication.Title,
+		Description = $"Publication [{Model.Id}] from {Model.Publication.CreateTimestamp.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}",
+		Image = $"{HttpContext.Request.ToBaseUrl()}/media/{Model.Publication.Screenshot.Path}",
+		UseTwitterCard = true
+	});
 }
-
-@section Header {
-	<meta property="og:type" content="website" />
-	<meta property="og:site_name" content="TASVideos" />
-	<meta property="og:title" content="@Model.Publication.Title" />
-	<meta property="og:description" content="@($"Publication [{Model.Id}] from {Model.Publication.CreateTimestamp.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}")" />
-	<meta property="og:url" content="@HttpContext.Request.ToUrl()" />
-	<meta property="og:image" content="@($"{HttpContext.Request.ToBaseUrl()}/media/{Model.Publication.Screenshot.Path}")" />
-	<meta property="twitter:card" content="summary_large_image" />
-}
-
-@section PageTitle { }
 
 <partial name="_MovieModule" model="Model.Publication" />
-<hr />
-<div class="text-muted">
-	@await Component.RenderWiki("System/MovieLinkInstruction")
+<div class="text-body-tertiary">
+	@await Html.RenderWiki(SystemWiki.MovieLinkInstruction)
 </div>
-<br />
+<hr />
 <a asp-page="/Wiki/PageHistory"
    asp-route-path="@(LinkConstants.PublicationWikiPage + Model.Id)"
-   class="btn bg-info text-dark btn-sm">
-	<span class="fa fa-history"></span> Page History
+   class="btn btn-info btn-sm">
+   <span class="fa fa-history"></span> Page History
 </a>
-<a
-	asp-page="/Wiki/Diff"
-	asp-route-path="@(LinkConstants.PublicationWikiPage + Model.Id)"
-	class="btn bg-info text-dark btn-sm">
-	Latest diff
+<a asp-page="/Wiki/PageHistory"
+   asp-route-path="@(LinkConstants.PublicationWikiPage + Model.Id)"
+   asp-route-latest="true"
+   class="btn btn-info btn-sm">
+   Latest diff
 </a>
-<a
-	asp-page="/Wiki/Referrers"
-	asp-route-path="@($"{Model.Id}M")"
-	class="btn bg-info text-dark btn-sm">
-	List Referrers
+<a asp-page="/Wiki/Referrers"
+   asp-route-path="@(Model.Id + "M")"
+   class="btn btn-info btn-sm">
+   List referrers
 </a>
-
+<a asp-page="/Logs/Index"
+   asp-route-table="Publications"
+   asp-route-rowId="@Model.Id"
+   class="btn btn-info btn-sm">
+	<i class="fa fa-plus-minus"></i> Change Log
+</a>

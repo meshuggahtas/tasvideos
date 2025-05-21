@@ -1,57 +1,49 @@
 ﻿@page "{id}/{handler?}/{publicationFileId?}"
 @model EditFilesModel
 @{
-	ViewData["Title"] = $"Edit Files for {Model.Title}";
+	ViewData.SetTitle($"Edit Files for {Model.Title}");
 }
 
 <h4>Files</h4>
-<row condition="Model.Files.Any()">
-	<table class="table table-bordered">
+<standard-table condition="Model.Files.Any()">
+	<tr>
+		<td>URL</td>
+		<td>Type</td>
+		<td>Description</td>
+		<td></td>
+	</tr>
+	@foreach (var file in Model.Files.OrderBy(u => u.Type))
+	{
 		<tr>
-			<td>Url</td>
-			<td>Type</td>
-			<td>Description</td>
-			<td></td>
+			<td>@file.Path</td>
+			<td>@file.Type</td>
+			<td>@file.Description</td>
+			<td-action-column>
+				<delete-button class="btn-sm" warning-message="Are you sure you want to remove this file?"
+							   asp-href="/Publications/EditFiles/@Model.Id/Delete/@file.Id"></delete-button>
+			</td-action-column>
 		</tr>
-		@foreach (var file in Model.Files.OrderBy(u => u.Type))
-		{
-			<tr>
-				<td>@file.Path</td>
-				<td>@file.Type</td>
-				<td>@file.Description</td>
-				<td>
-					<delete-button warning-message="Are you sure you want to remove this file?"
-								   asp-href="/Publications/EditFiles/@Model.Id/Delete/@file.Id">
-						<span class="fa fa-times"></span> Delete
-					</delete-button>
-				</td>
-			</tr>
-		}
-	</table>
-</row>
+	}
+</standard-table>
 <hr />
-<form method="post" enctype="multipart/form-data">
+<form client-side-validation="true" method="post" enctype="multipart/form-data">
 	<input type="hidden" asp-for="Title" />
 	<row>
 		<column lg="6">
-			<form-group>
-				<label asp-for="NewFile"></label>
-				<input type="file" asp-for="NewFile" class="form-control" />
-				<span asp-validation-for="NewFile" class="text-danger"></span>
-			</form-group>
-			<form-group id="description-group">
+			<fieldset>
+				<label asp-for="NewScreenshot"></label>
+				<input asp-for="NewScreenshot" />
+				<span asp-validation-for="NewScreenshot"></span>
+			</fieldset>
+			<fieldset id="description-group">
 				<label asp-for="Description"></label>
-				<input type="text" asp-for="Description" class="form-control" />
-				<span asp-validation-for="Description" class="text-danger"></span>
-			</form-group>
-			<div class="text-center mt-3">
-				<submit-button class="btn btn-primary"><span class="fa fa-plus"></span> Add</submit-button>
-				<a asp-page="Edit" asp-route-id="@Model.Id" class="btn btn-secondary"><span class="fa fa-arrow-left"></span> Back To Edit</a>
-			</div>
+				<input asp-for="Description" />
+				<span asp-validation-for="Description"></span>
+			</fieldset>
+			<form-button-bar>
+				<submit-button><span class="fa fa-plus"></span> Add</submit-button>
+				<cancel-link asp-page="Edit" asp-route-id="@Model.Id"></cancel-link>
+			</form-button-bar>
 		</column>
 	</row>
 </form>
-
-@section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-}

@@ -1,55 +1,33 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Forum;
-using TASVideos.Pages.Forum.Topics.Models;
+﻿using TASVideos.Data.Entity.Forum;
 
 namespace TASVideos.Pages.Forum.Topics;
 
 [RequirePermission(PermissionTo.MoveTopics)]
-public class MoveModel : BasePageModel
+public class MoveModel(
+	ApplicationDbContext db,
+	IExternalMediaPublisher publisher,
+	IForumService forumService)
+	: BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly IForumService _forumService;
-
-	public MoveModel(
-		ApplicationDbContext db,
-		ExternalMediaPublisher publisher,
-		IForumService forumService)
-	{
-		_db = db;
-		_publisher = publisher;
-		_forumService = forumService;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
 	[BindProperty]
-	public MoveTopicModel Topic { get; set; } = new();
+	public TopicMove Topic { get; set; } = new();
 
-	public IEnumerable<SelectListItem> AvailableForums { get; set; } = new List<SelectListItem>();
-
-	public bool CanSeeRestricted => User.Has(PermissionTo.SeeRestrictedForums);
+	public List<SelectListItem> AvailableForums { get; set; } = [];
 
 	public async Task<IActionResult> OnGet()
 	{
-		var seeRestricted = CanSeeRestricted;
-
-		var topic = await _db.ForumTopics
+		var topic = await db.ForumTopics
 			.Where(t => t.Id == Id)
 			.Include(t => t.Forum)
-			.ExcludeRestricted(seeRestricted)
-			.Select(t => new MoveTopicModel
+			.ExcludeRestricted(UserCanSeeRestricted)
+			.Select(t => new TopicMove
 			{
-				TopicTitle = t.Title,
-				ForumId = t.Forum!.Id,
-				ForumName = t.Forum.Name
+				Topic = t.Title,
+				NewForum = t.Forum!.Id,
+				CurrentForum = t.Forum.Name
 			})
 			.SingleOrDefaultAsync();
 
@@ -72,10 +50,9 @@ public class MoveModel : BasePageModel
 			return Page();
 		}
 
-		var seeRestricted = CanSeeRestricted;
-		var topic = await _db.ForumTopics
+		var topic = await db.ForumTopics
 			.Include(t => t.Forum)
-			.ExcludeRestricted(seeRestricted)
+			.ExcludeRestricted(UserCanSeeRestricted)
 			.SingleOrDefaultAsync(t => t.Id == Id);
 
 		if (topic is null)
@@ -83,7 +60,7 @@ public class MoveModel : BasePageModel
 			return NotFound();
 		}
 
-		var forum = await _db.Forums.SingleOrDefaultAsync(f => f.Id == Topic.ForumId);
+		var forum = await db.Forums.SingleOrDefaultAsync(f => f.Id == Topic.NewForum);
 
 		if (forum is null)
 		{
@@ -91,9 +68,9 @@ public class MoveModel : BasePageModel
 		}
 
 		var topicWasRestricted = topic.Forum?.Restricted ?? false;
-		topic.ForumId = Topic.ForumId;
+		topic.ForumId = Topic.NewForum;
 
-		var postsToMove = await _db.ForumPosts
+		var postsToMove = await db.ForumPosts
 			.ForTopic(topic.Id)
 			.ToListAsync();
 
@@ -102,15 +79,15 @@ public class MoveModel : BasePageModel
 			post.ForumId = forum.Id;
 		}
 
-		await _db.SaveChangesAsync();
+		await db.SaveChangesAsync();
 
-		_forumService.ClearLatestPostCache();
-		_forumService.ClearTopicActivityCache();
+		forumService.ClearLatestPostCache();
+		forumService.ClearTopicActivityCache();
 
-		await _publisher.SendForum(
+		await publisher.SendForum(
 			topicWasRestricted || forum.Restricted,
-			$"Topic MOVED by {User.Name()}",
-			$@"""{Topic.TopicTitle}"" from {Topic.ForumName} to {forum.Name}",
+			$"[Topic]({{0}}) MOVED by {User.Name()}",
+			$"\"{Topic.Topic}\" from {Topic.CurrentForum} to {forum.Name}",
 			$"Forum/Topics/{Id}");
 
 		return RedirectToPage("Index", new { Id });
@@ -118,14 +95,13 @@ public class MoveModel : BasePageModel
 
 	private async Task PopulateAvailableForums()
 	{
-		AvailableForums = await _db.Forums
-			.ExcludeRestricted(CanSeeRestricted)
-			.Select(f => new SelectListItem
-			{
-				Text = f.Name,
-				Value = f.Id.ToString(),
-				Selected = f.Id == Topic.ForumId
-			})
-			.ToListAsync();
+		AvailableForums = await db.Forums.ToDropdownList(UserCanSeeRestricted, Topic.NewForum);
+	}
+
+	public class TopicMove
+	{
+		public int NewForum { get; init; }
+		public string Topic { get; init; } = "";
+		public string CurrentForum { get; init; } = "";
 	}
 }

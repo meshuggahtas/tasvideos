@@ -1,42 +1,35 @@
 ﻿@page "{id}"
-@model TASVideos.Pages.GamesGroups.IndexModel
+@model IndexModel
 @{
-	ViewData["Title"] = $"Games for Group: {Model.Name}";
+	ViewData.SetTitle($"Games for Group: {Model.Name}");
+	if (int.TryParse(Model.Id, out var id))
+	{
+		ViewData.SetNavigation(id, "/GameGroups/{0}");
+	}
 }
 
 <warning-alert condition="!Model.Games.Any()">
 	No Games Listed for this Game Group
 </warning-alert>
-<a asp-page="List" class="mb-2">See All Groups</a>
-<a asp-page="Edit" asp-route-id="@Model.Id" class="btn btn-primary mb-3 float-end" permission="CatalogMovies"><i class="fa fa-pencil"></i> Edit</a>
-<table condition="Model.Games.Any()" class="table table-bordered table-striped">
-	<tr>
-		<th>Game</th>
-		<th>Publications</th>
-		<th>Submissions</th>
-		<th>Resource Page</th>
-	</tr>
-	@foreach (var game in Model.Games)
+<top-button-bar>
+	<label class="heading">Abbreviation: @Model.Abbreviation</label>
+	<edit-link asp-page="Edit" asp-route-id="@Model.Id" permission="CatalogMovies"></edit-link>
+	<a asp-page="List" class="btn btn-secondary">All Groups</a>
+</top-button-bar>
+<card condition="!string.IsNullOrWhiteSpace(Model.Description)" class="mb-2">
+	<card-header>Description</card-header>
+	<card-body><wiki-markup markup="@Model.Description"></wiki-markup></card-body>
+</card>
+<standard-table condition="Model.Games.Any()">
+	<table-head columns="Game,Systems,Publications,Submissions,Resource Page"></table-head>
+	@foreach (var game in Model.Games.OrderBy(g => g.Name).ThenBy(g => g.SystemsString()))
 	{
 		<tr>
-			<td>
-				<game-link id="game.Id">
-					@game.Name
-				</game-link>
-			</td>
-			<td>
-				<a href="/Movies-@(game.Id)G">
-					@game.PublicationCount
-				</a>
-			</td>
-			<td>
-				@game.SubmissionsCount
-			</td>
-			<td>
-				<a href="/@game.GameResourcesPage">
-					@game.GameResourcesPage
-				</a>
-			</td>
+			<td><game-link id="game.Id">@game.Name</game-link></td>
+			<td>@game.SystemsString()</td>
+			<td><a href="/Movies-@(game.Id)G">@game.PubCount</a></td>
+			<td><a href="/Subs-List?GameId=@(game.Id)">@game.SubCount</a></td>
+			<td><a href="/@game.GameResourcesPage">@game.GameResourcesPage</a></td>
 		</tr>
 	}
-</table>
+</standard-table>

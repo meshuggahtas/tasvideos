@@ -4,14 +4,9 @@
 [TestCategory("LmpParsers")]
 public class LmpTests : BaseParserTests
 {
-	private readonly Lmp _lmpParser;
+	private readonly Lmp _lmpParser = new();
 
-	public override string ResourcesPath { get; } = "TASVideos.MovieParsers.Tests.LmpSampleFiles.";
-
-	public LmpTests()
-	{
-		_lmpParser = new Lmp();
-	}
+	protected override string ResourcesPath => "TASVideos.MovieParsers.Tests.LmpSampleFiles.";
 
 	[TestMethod]
 	public async Task FileDoesNotEndIn0x80_ReturnsError()
@@ -22,7 +17,6 @@ public class LmpTests : BaseParserTests
 		Assert.IsNotNull(result);
 		Assert.IsFalse(result.Success);
 		AssertNoWarnings(result);
-		Assert.IsNotNull(result.Errors);
 		Assert.AreEqual(1, result.Errors.Count());
 	}
 

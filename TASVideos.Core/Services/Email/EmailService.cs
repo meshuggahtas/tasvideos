@@ -6,43 +6,60 @@ namespace TASVideos.Core.Services.Email;
 
 public interface IEmailService
 {
-	Task ResetPassword(string recipient, string link);
+	Task SendEmail(string recipient, string subject, string message);
+	Task ResetPassword(string recipient, string link, string userName);
 	Task EmailConfirmation(string recipient, string link);
 	Task PasswordResetConfirmation(string recipient, string resetLink);
 	Task TopicReplyNotification(IEnumerable<string> recipients, TopicReplyNotificationTemplate template);
 	Task NewPrivateMessage(string recipient, string userName);
 }
 
-internal class EmailService : IEmailService
+internal class EmailService(
+	IHostEnvironment env,
+	IEmailSender emailSender,
+	AppSettings appSettings)
+	: IEmailService
 {
-	private readonly IHostEnvironment _env;
-	private readonly IEmailSender _emailSender;
-	private readonly string _baseUrl;
+	private readonly string _baseUrl = appSettings.BaseUrl;
 
-	public EmailService(
-		IHostEnvironment env,
-		IEmailSender emailSender,
-		AppSettings appSettings)
+	public async Task SendEmail(string recipient, string subject, string message)
 	{
-		_env = env;
-		_emailSender = emailSender;
-		_baseUrl = appSettings.BaseUrl;
+		await emailSender.SendEmail(new SingleEmail
+		{
+			Recipient = recipient,
+			Subject = subject,
+			Message = message,
+			ContainsHtml = false
+		});
 	}
 
-	public async Task ResetPassword(string recipient, string link)
+	public async Task ResetPassword(string recipient, string link, string userName)
 	{
-		await _emailSender.SendEmail(new SingleEmail
+		await emailSender.SendEmail(new SingleEmail
 		{
 			Recipient = recipient,
 			Subject = "TASVideos - Reset Password",
-			Message = $"Please reset your password for your TASVideos user account by clicking here: <a href='{link}'>link</a>",
+			Message = $"""
+						<p>
+							Hello {HtmlEncoder.Default.Encode(userName)},<br>
+							We received a request to reset your password for your TASVideos user account.<br>
+							If you made this request, please click the link below to reset your password:
+						</p>
+						<p>
+							<a href='{HtmlEncoder.Default.Encode(link)}'>Reset your password.</a>
+						</p>
+						<p>
+							If you did not request a password reset, please ignore this email.<br>
+							This link will expire in 24 hours.
+						</p>
+						""",
 			ContainsHtml = true
 		});
 	}
 
 	public async Task EmailConfirmation(string recipient, string link)
 	{
-		await _emailSender.SendEmail(new SingleEmail
+		await emailSender.SendEmail(new SingleEmail
 		{
 			Recipient = recipient,
 			Subject = "TASVideos - Confirm your email",
@@ -53,7 +70,7 @@ internal class EmailService : IEmailService
 
 	public async Task PasswordResetConfirmation(string recipient, string resetLink)
 	{
-		await _emailSender.SendEmail(new SingleEmail
+		await emailSender.SendEmail(new SingleEmail
 		{
 			Recipient = recipient,
 			Subject = "TASVideos - Your Password Was Changed",
@@ -71,32 +88,43 @@ internal class EmailService : IEmailService
 		}
 
 		string siteName = "TASVideos";
-		if (!_env.IsProduction())
+		if (!env.IsProduction())
 		{
-			siteName += $" - {_env.EnvironmentName} environment";
+			siteName += $" - {env.EnvironmentName} environment";
 		}
 
 		string subject = "Topic Reply Notification - " + template.TopicTitle;
-		string message = $@"Hello,
+		string message = $"""
+						<p>
+						    Hello,<br>
+						    <br>
+						    The {siteName} forum topic "{HtmlEncoder.Default.Encode(template.TopicTitle)}" has received a new post since your last visit.
+						</p>
+						<p>
+						    <a href="{template.BaseUrl}/Forum/Posts/{template.PostId}">{template.BaseUrl}/Forum/Posts/{template.PostId}</a>
+						</p>
+						<p>
+						    No more notification emails for this topic will be sent until you visit it.<br>
+						    If the post was moved or deleted you can find the topic <a href="{template.BaseUrl}/Forum/Topics/{template.TopicId}">here</a>.
+						</p>
+						<hr />
+						<p>
+						    To stop this particular topic from notifying you, visit <a href="{template.BaseUrl}/Forum/Topics/{template.TopicId}?handler=Unwatch">this link</a>.<br>
+						    To stop all topic notification emails, visit <a href="{template.BaseUrl}/Profile/WatchedTopics">this link</a> and press "Stop Watching All".
+						</p>
+						<hr />
+						<p>
+						    Thanks,<br>
+						    TASVideos staff
+						</p>
+						""";
 
-You are receiving this email because you are watching the topic, ""{template.TopicTitle}"" at {siteName}. This topic has received a reply since your last visit. You can use the following link to view the replies made, no more notifications will be sent until you visit the topic.
-
-{template.BaseUrl}/Forum/Posts/{template.PostId}
-
-If you no longer wish to watch this topic you can either click the ""Stop watching this topic link"" found at the top of the topic above, or by clicking the following link:
-
-{template.BaseUrl}/Forum/Topics/20848?handler=Unwatch
-
---
-Thanks,
-on behalf of TASVideos staff";
-
-		await _emailSender.SendEmail(new StandardEmail
+		await emailSender.SendEmail(new StandardEmail
 		{
 			Recipients = recipientsList,
 			Subject = subject,
 			Message = message,
-			ContainsHtml = false
+			ContainsHtml = true
 		});
 	}
 
@@ -104,18 +132,20 @@ on behalf of TASVideos staff";
 	{
 		string link = $"{_baseUrl}/Messages/Inbox";
 
-		await _emailSender.SendEmail(new SingleEmail
+		await emailSender.SendEmail(new SingleEmail
 		{
 			ContainsHtml = false,
 			Recipient = recipient,
 			Subject = "New Private Message has arrived",
-			Message = $@"Hello {userName}
+			Message = $"""
+						Hello {userName}
 
-You have received a new private message to your account on ""TASVideos"" and you have requested that you be notified on this event. You can view your new message by clicking on the following link:
+						You have received a new private message to your account on "TASVideos" and you have requested that you be notified on this event. You can view your new message by clicking on the following link:
 
-{link}
+						{link}
 
-Remember that you can always choose not to be notified of new messages by changing the appropriate setting in your profile."
+						Remember that you can always choose not to be notified of new messages by changing the appropriate setting in your profile.
+						"""
 		});
 	}
 }

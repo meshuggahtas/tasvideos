@@ -1,15 +1,12 @@
-﻿using TASVideos.Data.Entity;
-using TASVideos.Pages.Submissions.Models;
-
-namespace TASVideos.Pages.Submissions;
+﻿namespace TASVideos.Pages.Submissions;
 
 /// <summary>
-/// Converts legacy query string parameters from Subs-List to a <see cref="SubmissionSearchRequest"/> model
+/// Converts legacy query string parameters from Subs-List to a <see cref="IndexModel.SubmissionSearchRequest"/> model
 /// Does not support user filtering since the user is the wiki site id which we do not keep
 /// </summary>
 public static class LegacySubListConverter
 {
-	public static SubmissionSearchRequest? ToSearchRequest(string? query)
+	public static IndexModel.SubmissionSearchRequest? ToSearchRequest(string? query)
 	{
 		var tokens = query.ToTokens();
 
@@ -18,7 +15,7 @@ public static class LegacySubListConverter
 			return null;
 		}
 
-		var request = new SubmissionSearchRequest();
+		var request = new IndexModel.SubmissionSearchRequest();
 
 		var statuses = new List<SubmissionStatus>();
 		foreach ((var key, SubmissionStatus value) in StatusTokenMapping)
@@ -31,11 +28,11 @@ public static class LegacySubListConverter
 
 		if (statuses.Any())
 		{
-			request.StatusFilter = statuses;
+			request.Statuses = statuses;
 		}
 
 		var years = Enumerable.Range(2000, DateTime.UtcNow.AddYears(1).Year - 2000 + 1);
-		request.Years = years.Where(y => tokens.Contains("y" + y));
+		request.Years = years.Where(y => tokens.Contains("y" + y)).ToList();
 
 		return request;
 	}

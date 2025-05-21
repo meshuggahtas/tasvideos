@@ -1,31 +1,35 @@
-﻿@model ForumCategoryDisplayDto
+﻿@model ForumCategoryDisplay
 
 <card class="mb-2">
-	<cardheader>
-		<a permission="EditCategories" asp-page="Edit" asp-route-id="@Model!.Id" class="btn btn-primary btn-sm border border-warning float-end"><i class="fa fa-pencil"></i> Edit</a>
-		<h4>@Model!.Title</h4>
+	<card-header>
+		<edit-link permission="EditCategories" asp-page="Edit" asp-route-id="@Model.Id" class="btn-sm float-end"></edit-link>
+		<h4>@Model.Title</h4>
 		@if (!string.IsNullOrWhiteSpace(Model.Description))
 		{
 			<div class="text-small">
 				@Html.Raw(Model.Description)
 			</div>
 		}
-	</cardheader>
-	<cardheader class="py-0 text-muted">
+	</card-header>
+	<card-header class="py-0 text-body-tertiary">
 		<row>
 			<div class="col-8"><small>Subforum</small></div>
 			<div class="col-4"><small>Last Post</small></div>
 		</row>
-	</cardheader>
-	<cardbody class="py-0">
-		@foreach (var forum in Model!.Forums
+	</card-header>
+	<card-body class="py-0">
+		@foreach (var forum in Model.Forums
 			.OrderBy(f => f.Ordinal)
-			.Where(f => ViewData.UserHas(PermissionTo.SeeRestrictedForums) || !f.Restricted))
+			.Where(f => User.Has(PermissionTo.SeeRestrictedForums) || !f.Restricted))
 		{
 		<row class="py-1 border-bottom border-card align-items-center">
 				<div class="col-8">
 					<strong>
-						<span condition="@(!string.IsNullOrEmpty(forum.ActivityTopics))"><i class="fa fa-file text-warning activity-subforum d-none" data-activity-json="@forum.ActivityTopics"></i></span>
+						<a condition="@(!string.IsNullOrEmpty(forum.ActivityPostsCreated) || !string.IsNullOrEmpty(forum.ActivityPostsEdited))" class="text-decoration-none">
+							<i class="fa fa-file activity-subforum d-none"
+							data-activity-posts-created="@forum.ActivityPostsCreated"
+						    data-activity-posts-edited="@forum.ActivityPostsEdited"></i>
+						</a>
 						<a asp-page="/Forum/Subforum/Index" asp-route-id="@forum.Id">@forum.Name</a>
 					</strong>
 				<div class="ps-3">
@@ -34,15 +38,14 @@
 					</small>
 				</div>
 			</div>
-			@if (forum.LastPost != null)
+			@if (forum.LastPost is not null)
 			{
 				<div class="col-4 align-items-center">
 					<timezone-convert asp-for="@forum.LastPost.Timestamp" /> <br />
-					<profile-link username="@forum.LastPost.PosterName"></profile-link>
-					<a href="/Forum/Posts/@forum.LastPost.Id" class="fa fa-arrow-circle-right"></a>
+					<a href="/Forum/Posts/@forum.LastPost.Id">@forum.LastPost.PosterName <i class="fa fa-arrow-circle-right"></i></a>
 				</div>
 			}
 			</row>
 		}
-	</cardbody>
+	</card-body>
 </card>

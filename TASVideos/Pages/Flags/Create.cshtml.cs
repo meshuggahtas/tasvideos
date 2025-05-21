@@ -1,39 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
-
-namespace TASVideos.Pages.Flags;
+﻿namespace TASVideos.Pages.Flags;
 
 [RequirePermission(PermissionTo.FlagMaintenance)]
-public class CreateModel : BasePageModel
+public class CreateModel(IFlagService flagService) : BasePageModel
 {
-	private readonly IFlagService _flagService;
-
-	public ICollection<SelectListItem> AvailablePermissions { get; } = UiDefaults.DefaultEntry.Concat(PermissionUtil
-		.AllPermissions()
-		.Select(p => new SelectListItem
-		{
-			Value = ((int)p).ToString(),
-			Text = p.ToString().SplitCamelCase(),
-		}))
-		.ToList();
-
-	public CreateModel(IFlagService flagService)
-	{
-		_flagService = flagService;
-	}
-
-	[FromRoute]
-	public int Id { get; set; }
-
 	[BindProperty]
 	public Flag Flag { get; set; } = new();
-
-	public IActionResult OnGet()
-	{
-		return Page();
-	}
 
 	public async Task<IActionResult> OnPost()
 	{
@@ -42,7 +13,7 @@ public class CreateModel : BasePageModel
 			return Page();
 		}
 
-		var result = await _flagService.Add(Flag);
+		var result = await flagService.Add(Flag);
 		switch (result)
 		{
 			default:

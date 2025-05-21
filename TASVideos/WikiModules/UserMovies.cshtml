@@ -1,0 +1,17 @@
+﻿@model UserMovies
+<standard-table>
+	<table-head columns="Uploaded,By,Filename,Title"></table-head>
+	@foreach (var item in Model.Movies)
+	{
+		<tr>
+			<td><timezone-convert asp-for="@item.UploadTimestamp" date-only="true" /></td>
+			<td>@item.Author</td>
+			<td><a asp-page="/Userfiles/Info" asp-route-id="@item.Id">@item.FileName</a></td>
+			<td>@item.Title</td>
+		</tr>
+	}
+</standard-table>
+<a asp-page="/UserFiles/Index">More User Files...</a>
+<div class="mt-4">
+	<a asp-page="/UserFiles/Upload" class="btn btn-primary"><i class="fa fa-upload"></i> Upload a User File</a>
+</div>

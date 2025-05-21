@@ -1,72 +1,54 @@
-﻿using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.UserFiles.Models;
-
-namespace TASVideos.Pages.UserFiles;
+﻿namespace TASVideos.Pages.UserFiles;
 
 [AllowAnonymous]
-public class IndexModel : BasePageModel
+public class IndexModel(ApplicationDbContext db, IExternalMediaPublisher publisher) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly IMapper _mapper;
-	private readonly ExternalMediaPublisher _publisher;
-
-	public IndexModel(
-		ApplicationDbContext db,
-		IMapper mapper,
-		ExternalMediaPublisher publisher)
-	{
-		_db = db;
-		_mapper = mapper;
-		_publisher = publisher;
-	}
-
-	public UserFileIndexModel Data { get; set; } = new();
+	public List<UserWithMovie> UsersWithMovies { get; set; } = [];
+	public List<UserMovie> LatestMovies { get; set; } = [];
+	public List<GameWithMovie> GamesWithMovies { get; set; } = [];
+	public List<Uncataloged.UncatalogedViewModel> UncatalogedFiles { get; set; } = [];
 
 	public async Task OnGet()
 	{
-		Data = new UserFileIndexModel
-		{
-			UsersWithMovies = await _db.UserFiles
-				.ThatArePublic()
-				.GroupBy(gkey => gkey.Author!.UserName, gvalue => gvalue.UploadTimestamp).Select(
-					uf => new UserFileIndexModel.UserWithMovie { UserName = uf.Key, Latest = uf.Max() })
-				.ToListAsync(),
-			LatestMovies = await _mapper.ProjectTo<UserMovieListModel>(
-				_db.UserFiles
-					.ThatArePublic()
-					.ByRecentlyUploaded())
-					.Take(10)
-				.ToListAsync(),
-			GamesWithMovies = await _db.Games
-				.Where(g => g.UserFiles.Any(uf => !uf.Hidden))
-				.OrderBy(g => g.DisplayName)
-				.Select(g => new UserFileIndexModel.GameWithMovie
-				{
-					GameId = g.Id,
-					GameName = g.DisplayName,
-					Dates = g.UserFiles.Select(uf => uf.UploadTimestamp).ToList()
-				})
-				.ToListAsync()
-		};
+		UsersWithMovies = await db.UserFiles
+			.ThatArePublic()
+			.GroupBy(gkey => gkey.Author!.UserName, gvalue => gvalue.UploadTimestamp)
+			.Select(uf => new UserWithMovie(uf.Key, uf.Max()))
+			.ToListAsync();
+		LatestMovies = await db.UserFiles
+			.ThatArePublic()
+			.ByRecentlyUploaded()
+			.ToUserMovieListModel()
+			.Take(10)
+			.ToListAsync();
+		GamesWithMovies = await db.Games
+			.Where(g => g.UserFiles.Any(uf => !uf.Hidden))
+			.OrderBy(g => g.DisplayName)
+			.Select(g => new GameWithMovie(
+				g.Id,
+				g.DisplayName,
+				g.UserFiles.Select(uf => uf.UploadTimestamp).ToList()))
+			.ToListAsync();
+		UncatalogedFiles = await db.UserFiles
+			.Where(uf => uf.GameId == null)
+			.ThatArePublic()
+			.ByRecentlyUploaded()
+			.ToUnCatalogedModel()
+			.Take(25)
+			.ToListAsync();
 	}
 
 	public async Task<IActionResult> OnPostDelete(long fileId)
 	{
-		var userFile = await _db.UserFiles.SingleOrDefaultAsync(u => u.Id == fileId);
+		var userFile = await db.UserFiles.SingleOrDefaultAsync(u => u.Id == fileId);
 		if (userFile is not null)
 		{
 			if (User.GetUserId() == userFile.AuthorId
 				|| User.Has(PermissionTo.EditUserFiles))
 			{
-				_db.UserFiles.Remove(userFile);
+				db.UserFiles.Remove(userFile);
 
-				await ConcurrentSave(_db, $"{userFile.FileName} deleted", $"Unable to delete {userFile.FileName}");
+				SetMessage(await db.TrySaveChanges(), $"{userFile.FileName} deleted", $"Unable to delete {userFile.FileName}");
 			}
 		}
 
@@ -78,10 +60,10 @@ public class IndexModel : BasePageModel
 		if (User.Has(PermissionTo.CreateForumPosts)
 			&& !string.IsNullOrWhiteSpace(comment))
 		{
-			var userFile = await _db.UserFiles.SingleOrDefaultAsync(u => u.Id == fileId);
+			var userFile = await db.UserFiles.SingleOrDefaultAsync(u => u.Id == fileId);
 			if (userFile is not null)
 			{
-				_db.UserFileComments.Add(new UserFileComment
+				db.UserFileComments.Add(new UserFileComment
 				{
 					UserFileId = fileId,
 					Text = comment,
@@ -90,12 +72,8 @@ public class IndexModel : BasePageModel
 					CreationTimeStamp = DateTime.UtcNow
 				});
 
-				await _db.SaveChangesAsync();
-				await _publisher.SendUserFile(
-					userFile.Hidden,
-					$@"New user file comment by {User.Name()}",
-					$"UserFiles/Info/{fileId}",
-					$"{userFile.Title}");
+				await db.SaveChangesAsync();
+				await SendUserFile(userFile, $"New [user file]({{0}}) comment by {User.Name()}");
 			}
 		}
 
@@ -107,7 +85,7 @@ public class IndexModel : BasePageModel
 		if (User.Has(PermissionTo.CreateForumPosts)
 			&& !string.IsNullOrWhiteSpace(comment))
 		{
-			var fileComment = await _db.UserFileComments
+			var fileComment = await db.UserFileComments
 				.Include(c => c.UserFile)
 				.SingleOrDefaultAsync(u => u.Id == commentId);
 
@@ -115,14 +93,11 @@ public class IndexModel : BasePageModel
 			{
 				fileComment.Text = comment;
 
-				var result = await ConcurrentSave(_db, "Comment edited", "Unable to edit comment");
-				if (result)
+				var result = await db.TrySaveChanges();
+				SetMessage(result, "Comment edited", "Unable to edit comment");
+				if (result.IsSuccess())
 				{
-					await _publisher.SendUserFile(
-						fileComment.UserFile!.Hidden,
-						$"User file comment edited by {User.Name()}",
-						$"UserFiles/Info/{fileComment.UserFile.Id}",
-						$"{fileComment.UserFile!.Title}");
+					await SendUserFile(fileComment.UserFile!, $"[User file]({{0}}) comment edited by {User.Name()}");
 				}
 			}
 		}
@@ -134,26 +109,35 @@ public class IndexModel : BasePageModel
 	{
 		if (User.Has(PermissionTo.CreateForumPosts))
 		{
-			var fileComment = await _db.UserFileComments
+			var fileComment = await db.UserFileComments
 				.Include(c => c.UserFile)
 				.Include(c => c.User)
 				.SingleOrDefaultAsync(u => u.Id == commentId);
 
 			if (fileComment is not null)
 			{
-				_db.UserFileComments.Remove(fileComment);
-				var result = await ConcurrentSave(_db, "Comment deleted", "Unable to delete comment");
-				if (result)
+				db.UserFileComments.Remove(fileComment);
+				var result = await db.TrySaveChanges();
+				SetMessage(result, "Comment deleted", "Unable to delete comment");
+				if (result.IsSuccess())
 				{
-					await _publisher.SendUserFile(
-						fileComment.UserFile!.Hidden,
-						$"User file comment DELETED by {User.Name()}",
-						$"UserFiles/Info/{fileComment.UserFile.Id}",
-						$"{fileComment.UserFile!.Title}");
+					await SendUserFile(fileComment.UserFile!, $"[User file]({{0}}) comment DELETED by {User.Name()}");
 				}
 			}
 		}
 
 		return BaseReturnUrlRedirect();
 	}
+
+	private async Task SendUserFile(UserFile file, string message) => await publisher.SendUserFile(
+		file.Hidden, message, file.Id, file.Title);
+
+	public record UserWithMovie(string UserName, DateTime Latest);
+
+	public record GameWithMovie(int GameId, string GameName, List<DateTime> Dates)
+	{
+		public DateTime Latest => Dates.Max();
+	}
+
+	public record UserMovie(long Id, string Author, DateTime UploadTimestamp, string FileName, string Title);
 }

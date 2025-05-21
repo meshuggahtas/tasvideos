@@ -1,44 +1,42 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.UserFiles.Models;
-
-namespace TASVideos.Pages.UserFiles;
+﻿namespace TASVideos.Pages.UserFiles;
 
 [RequirePermission(PermissionTo.UploadUserFiles)]
-public class UploadModel : BasePageModel
+public class UploadModel(
+	IUserFiles userFiles,
+	ApplicationDbContext db,
+	IExternalMediaPublisher publisher)
+	: BasePageModel
 {
-	private readonly IUserFiles _userFiles;
-	private readonly ApplicationDbContext _db;
-	private readonly ExternalMediaPublisher _publisher;
-
-	public UploadModel(
-		IUserFiles userFiles,
-		ApplicationDbContext db,
-		ExternalMediaPublisher publisher)
-	{
-		_userFiles = userFiles;
-		_db = db;
-		_publisher = publisher;
-	}
+	[BindProperty]
+	[Required]
+	public IFormFile? UserFile { get; init; }
 
 	[BindProperty]
-	public UserFileUploadModel UserFile { get; set; } = new();
+	[StringLength(255)]
+	public string Title { get; init; } = "";
+
+	[BindProperty]
+	[DoNotTrim]
+	public string Description { get; init; } = "";
+
+	[BindProperty]
+	public int? System { get; init; }
+
+	[BindProperty]
+	public int? Game { get; init; }
+
+	[BindProperty]
+	public bool Hidden { get; init; }
 
 	public int StorageUsed { get; set; }
 
-	public IEnumerable<SelectListItem> AvailableSystems { get; set; } = new List<SelectListItem>();
+	public List<SelectListItem> AvailableSystems { get; set; } = [];
 
-	public IEnumerable<SelectListItem> AvailableGames { get; set; } = new List<SelectListItem>();
+	public List<SelectListItem> AvailableGames { get; set; } = [];
 
-	public async Task OnGet()
-	{
-		await Initialize();
-	}
+	public List<string> SupportedFileExtensions { get; set; } = [];
+
+	public async Task OnGet() => await Initialize();
 
 	public async Task<IActionResult> OnPost()
 	{
@@ -48,74 +46,76 @@ public class UploadModel : BasePageModel
 			return Page();
 		}
 
-		if (UserFile.File.IsCompressed())
+		if (UserFile.IsCompressed())
 		{
+			await Initialize();
 			ModelState.AddModelError(
-				$"{nameof(UserFile)}.{nameof(UserFile.File)}",
+				nameof(UserFile),
 				"Compressed files are not supported.");
 			return Page();
 		}
 
-		var fileExt = UserFile.File.FileExtension();
+		var fileExt = UserFile.FileExtension();
 
-		if (!await _userFiles.IsSupportedFileExtension(fileExt))
+		if (!(await userFiles.SupportedFileExtensions()).Contains(fileExt))
 		{
+			await Initialize();
 			ModelState.AddModelError(
-				$"{nameof(UserFile)}.{nameof(UserFile.File)}",
+				nameof(UserFile),
 				$"Unsupported file type: {fileExt}");
 			return Page();
 		}
 
-		if (!await _userFiles.SpaceAvailable(User.GetUserId(), UserFile.File!.Length))
+		if (!await userFiles.SpaceAvailable(User.GetUserId(), UserFile!.Length))
 		{
+			await Initialize();
 			ModelState.AddModelError(
-				$"{nameof(UserFile)}.{nameof(UserFile.File)}",
-				"File exceeds your available storage space. Remove unecessary files and try again.");
+				nameof(UserFile),
+				"File exceeds your available storage space. Remove unnecessary files and try again.");
 			return Page();
 		}
 
-		byte[] actualFileData = await UserFile.File.ActualFileData();
-		var (id, parseResult) = await _userFiles.Upload(User.GetUserId(), new(
-			UserFile.Title,
-			UserFile.Description,
-			UserFile.SystemId,
-			UserFile.GameId,
-			actualFileData,
-			UserFile.File.FileName,
-			UserFile.Hidden));
+		byte[] fileData = (await UserFile.DecompressOrTakeRaw()).ToArray();
+
+		var (id, parseResult) = await userFiles.Upload(User.GetUserId(), new(
+			Title,
+			Description,
+			System,
+			Game,
+			fileData,
+			UserFile.FileName,
+			Hidden));
 
 		if (parseResult is not null && !parseResult.Success)
 		{
-			ModelState.AddParseErrors(parseResult, $"{nameof(UserFile)}.{nameof(UserFile.File)}");
 			await Initialize();
+			ModelState.AddParseErrors(parseResult, $"{nameof(UserFile)}");
 			return Page();
 		}
 
-		await _publisher.SendUserFile(
-			UserFile.Hidden,
-			$"New user file uploaded by {User.Name()}",
-			$"/UserFiles/Info/{id}",
-			$"{UserFile.Title}");
+		await publisher.SendUserFile(
+			Hidden,
+			$"New [user file]({{0}}) uploaded by {User.Name()}",
+			id!.Value,
+			Title);
 
 		return BasePageRedirect("/Profile/UserFiles");
 	}
 
 	private async Task Initialize()
 	{
-		StorageUsed = await _userFiles.StorageUsed(User.GetUserId());
+		SupportedFileExtensions = (await userFiles.SupportedFileExtensions())
+			.Select(s => s.Replace(".", ""))
+			.ToList();
 
-		AvailableSystems = UiDefaults.DefaultEntry.Concat(await _db.GameSystems
-			.OrderBy(s => s.Code)
-			.Select(s => new SelectListItem
-			{
-				Value = s.Id.ToString(),
-				Text = s.Code
-			})
-			.ToListAsync());
+		StorageUsed = await userFiles.StorageUsed(User.GetUserId());
 
-		AvailableGames = UiDefaults.DefaultEntry.Concat(await _db.Games
-			.OrderBy(g => g.DisplayName)
-			.ToDropDown()
-			.ToListAsync());
+		AvailableSystems = (await db.GameSystems
+			.ToDropDownListWithId())
+			.WithDefaultEntry();
+
+		AvailableGames = (await db.Games
+			.ToDropDownList())
+			.WithDefaultEntry();
 	}
 }

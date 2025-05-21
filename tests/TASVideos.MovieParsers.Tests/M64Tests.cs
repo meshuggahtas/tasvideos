@@ -4,14 +4,9 @@
 [TestCategory("M64Parsers")]
 public class M64Tests : BaseParserTests
 {
-	private readonly M64 _m64Parser;
+	private readonly M64 _m64Parser = new();
 
-	public override string ResourcesPath { get; } = "TASVideos.MovieParsers.Tests.M64SampleFiles.";
-
-	public M64Tests()
-	{
-		_m64Parser = new M64();
-	}
+	protected override string ResourcesPath => "TASVideos.MovieParsers.Tests.M64SampleFiles.";
 
 	[TestMethod]
 	public async Task InvalidHeader()
@@ -19,7 +14,6 @@ public class M64Tests : BaseParserTests
 		var result = await _m64Parser.Parse(Embedded("wrongheader.m64"), EmbeddedLength("wrongheader.m64"));
 		Assert.IsFalse(result.Success);
 		AssertNoWarnings(result);
-		Assert.IsNotNull(result.Errors);
 		Assert.AreEqual(1, result.Errors.Count());
 	}
 

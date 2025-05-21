@@ -1,8 +1,7 @@
-﻿using System.Text.Json;
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-using TASVideos.Core.Settings;
 using TASVideos.Core.HttpClientExtensions;
+using TASVideos.Core.Settings;
 
 namespace TASVideos.Core.Services.ExternalMediaPublisher.Distributors;
 
@@ -24,7 +23,7 @@ public sealed class DiscordDistributor : IPostDistributor
 		_logger = logger;
 	}
 
-	public IEnumerable<PostType> Types => new[] { PostType.Administrative, PostType.General, PostType.Announcement };
+	public IEnumerable<PostType> Types => [PostType.Administrative, PostType.General, PostType.Announcement];
 
 	public async Task Post(IPostable post)
 	{
@@ -35,9 +34,31 @@ public sealed class DiscordDistributor : IPostDistributor
 
 		var messageContent = new DiscordMessage(post).ToStringContent();
 
-		string channel = post.Type == PostType.Administrative
-			? _settings.PrivateChannelId
-			: _settings.PublicChannelId;
+		string channel;
+
+		if (post.Type == PostType.Administrative)
+		{
+			channel = post.Group == PostGroups.UserManagement
+				? _settings.PrivateUserChannelId
+				: _settings.PrivateChannelId;
+		}
+		else
+		{
+			if (post.Group == PostGroups.Game)
+			{
+				channel = _settings.PublicGameChannelId;
+			}
+			else if (post.Group is PostGroups.Publication
+					or PostGroups.Submission
+					or PostGroups.UserFiles)
+			{
+				channel = _settings.PublicTasChannelId;
+			}
+			else
+			{
+				channel = _settings.PublicChannelId;
+			}
+		}
 
 		var response = await _client.PostAsync($"channels/{channel}/messages", messageContent);
 		if (!response.IsSuccessStatusCode)
@@ -55,8 +76,17 @@ public sealed class DiscordDistributor : IPostDistributor
 		public DiscordMessage(IPostable post)
 		{
 			var body = string.IsNullOrWhiteSpace(post.Body) ? "" : $" ({post.Body})";
-			var link = string.IsNullOrWhiteSpace(post.Link) ? "" : post.Type == PostType.Announcement ? $" {post.Link}" : $" <{post.Link}>";
-			Content = $"{post.Title}{body}{link}";
+			if (string.IsNullOrWhiteSpace(post.Link))
+			{
+				Content = $"{post.Title}{body}";
+			}
+			else
+			{
+				var link = post.Type == PostType.Announcement ? post.Link : $"<{post.Link}>";
+				Content = string.IsNullOrWhiteSpace(post.FormattedTitle)
+					? $"{post.Title}{body} {link}"
+					: $"{string.Format(post.FormattedTitle, link)}{body}";
+			}
 		}
 
 		[JsonPropertyName("content")]

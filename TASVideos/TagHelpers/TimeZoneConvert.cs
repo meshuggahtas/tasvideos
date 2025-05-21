@@ -1,33 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Security.Claims;
-using System.Threading.Tasks;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
 using TASVideos.Common;
-using TASVideos.Core.Services;
 
 namespace TASVideos.TagHelpers;
 
 [HtmlTargetElement("timezone-convert", TagStructure = TagStructure.WithoutEndTag, Attributes = "asp-for")]
-public class TimeZoneConvert : TagHelper
+public class TimeZoneConvert(
+	ClaimsPrincipal claimsPrincipal,
+	IUserManager userManager) : TagHelper
 {
-	private static readonly IReadOnlyDictionary<string, TimeZoneInfo> Timezones = TimeZoneInfo
+	private static readonly Dictionary<string, TimeZoneInfo> Timezones = TimeZoneInfo
 		.GetSystemTimeZones()
 		.ToDictionary(tkey => tkey.Id);
-
-	private readonly ClaimsPrincipal _claimsPrincipal;
-	private readonly UserManager _userManager;
-
-	public TimeZoneConvert(
-		ClaimsPrincipal claimsPrincipal,
-		UserManager userManager)
-	{
-		_claimsPrincipal = claimsPrincipal;
-		_userManager = userManager;
-	}
 
 	public ModelExpression AspFor { get; set; } = null!;
 
@@ -35,17 +20,21 @@ public class TimeZoneConvert : TagHelper
 	public bool RelativeTime { get; set; } = true;
 	public bool InLine { get; set; }
 
-	public DateTime ConvertedDateTime => (DateTime)AspFor.Model;
+	private DateTime? ConvertedDateTime => (DateTime?)AspFor.Model;
 
 	public override async Task ProcessAsync(TagHelperContext context, TagHelperOutput output)
 	{
 		ValidateExpression();
 
-		var user = await _userManager.GetUserAsync(_claimsPrincipal);
+		if (ConvertedDateTime is null)
+		{
+			return;
+		}
 
-		var dateTime = ConvertedDateTime;
+		var dateTime = ConvertedDateTime.Value;
 
 		TimeZoneInfo? userTimeZone = null;
+		var user = await userManager.GetUser(claimsPrincipal);
 		if (user is not null)
 		{
 			// Simply do not convert, if the user has no known timezone;
@@ -96,7 +85,7 @@ public class TimeZoneConvert : TagHelper
 	private void ValidateExpression()
 	{
 		var type = AspFor.ModelExplorer.ModelType;
-		if (!typeof(DateTime).IsAssignableFrom(type))
+		if (!typeof(DateTime).IsAssignableFrom(type) && !typeof(DateTime?).IsAssignableFrom(type))
 		{
 			throw new ArgumentException($"Invalid property type {type}, {nameof(AspFor)} must be a {nameof(DateTime)}");
 		}

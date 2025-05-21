@@ -1,18 +1,14 @@
-﻿using TASVideos.MovieParsers.Result;
-
-namespace TASVideos.MovieParsers.Parsers;
+﻿namespace TASVideos.MovieParsers.Parsers;
 
 [FileExtension("lmp")]
-internal class Lmp : ParserBase, IParser
+internal class Lmp : Parser, IParser
 {
-	public override string FileExtension => "lmp";
-
 	private delegate bool TryParseLmp(byte[] movie, ref int frames);
 
+	// order is important here to minimize false detections
+	// especially the last 3, which are impossible to always detect correctly
 	private static readonly TryParseLmp[] LmpParsers =
-	{
-		// order is important here to minimize false detections
-		// especially the last 3, which are impossible to always detect correctly
+	[
 		TryParseDoomClassic,
 		TryParseStrife,
 		TryParseNewDoom,
@@ -20,7 +16,7 @@ internal class Lmp : ParserBase, IParser
 		TryParseNewHexen,
 		TryParseHeretic,
 		TryParseOldDoom,
-	};
+	];
 
 	private static bool CheckSizeSanity(int len, int headerLen, int inputLen)
 	{
@@ -29,12 +25,7 @@ internal class Lmp : ParserBase, IParser
 			return false;
 		}
 
-		if ((len - headerLen - 1) % inputLen != 0)
-		{
-			return false;
-		}
-
-		return true;
+		return (len - headerLen - 1) % inputLen == 0;
 	}
 
 	private static int CalcFrames(int len, int headerLen, int inputLen, int playerCount)
@@ -98,13 +89,13 @@ internal class Lmp : ParserBase, IParser
 			}
 		}
 
-		if (players > 0)
+		if (players == 0)
 		{
-			frames = CalcFrames(movie.Length, 13, 4, players);
-			return true;
+			return false;
 		}
 
-		return false;
+		frames = CalcFrames(movie.Length, 13, 4, players);
+		return true;
 	}
 
 	private static bool TryParseDoomClassic(byte[] movie, ref int frames)
@@ -179,7 +170,7 @@ internal class Lmp : ParserBase, IParser
 
 	private static bool TryParseOldHexen(byte[] movie, ref int frames)
 	{
-		// Hexen demo and Hexen 1.0 has a 11 byte header, and 6 bytes per input
+		// Hexen demo and Hexen 1.0 has an 11 byte header, and 6 bytes per input
 		if (!CheckSizeSanity(movie.Length, 11, 6))
 		{
 			return false;
@@ -193,7 +184,7 @@ internal class Lmp : ParserBase, IParser
 				players++;
 			}
 
-			if (movie[3 + (i * 2)] is not 0 or 1 || movie[3 + (i * 2) + 1] > 2) // invalid values
+			if (movie[3 + (i * 2)] is not (0 or 1) || movie[3 + (i * 2) + 1] > 2) // invalid values
 			{
 				return false;
 			}
@@ -224,7 +215,7 @@ internal class Lmp : ParserBase, IParser
 				players++;
 			}
 
-			if (movie[3 + (i * 2)] is not 0 or 1 || movie[3 + (i * 2) + 1] > 2) // invalid values
+			if (movie[3 + (i * 2)] is not (0 or 1) || movie[3 + (i * 2) + 1] > 2) // invalid values
 			{
 				return false;
 			}
@@ -276,17 +267,16 @@ internal class Lmp : ParserBase, IParser
 
 	public async Task<IParseResult> Parse(Stream file, long length)
 	{
-		var result = new ParseResult
+		var result = new SuccessResult(FileExtension)
 		{
 			Region = RegionType.Ntsc,
-			FileExtension = FileExtension,
 			SystemCode = SystemCodes.Doom
 		};
 
 		/* A lmp consists of a header, inputs, and a terminator byte
 		 * the size of the header and each input depends on the game used
 		 * the terminator byte is always 0x80 (note: source ports might have a footer after)
-		 * a bit of heuristics are needed here to detect the variant used
+		 * a bit of heuristics is needed here to detect the variant used
 		 * as the header doesn't give an easy answer to the variant used
 		 */
 
@@ -295,7 +285,7 @@ internal class Lmp : ParserBase, IParser
 
 		if (movie[length - 1] != 0x80) // fixme: this might be ok if there is a source port footer (not easy to detect however)
 		{
-			return new ErrorResult("Invalid file format, does not seem to be a .lmp");
+			return InvalidFormat();
 		}
 
 		int frames = -1;
@@ -309,7 +299,7 @@ internal class Lmp : ParserBase, IParser
 
 		if (frames < 0)
 		{
-			return new ErrorResult("Invalid file format, does not seem to be a .lmp");
+			return InvalidFormat();
 		}
 
 		result.Frames = frames;

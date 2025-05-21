@@ -1,12 +1,8 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-
-namespace TASVideos.Pages.Submissions;
+﻿namespace TASVideos.Pages.Submissions;
 
 // Handles legacy queue.cgi links
 [AllowAnonymous]
-public class LegacyQueueModel : PageModel
+public class LegacyQueueModel : BasePageModel
 {
 	[FromQuery]
 	public string? Mode { get; set; }

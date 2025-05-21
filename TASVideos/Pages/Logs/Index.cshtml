@@ -1,0 +1,31 @@
+﻿@page "{table?}/{rowId?}"
+@model IndexModel
+@{
+	ViewData.SetTitle(!string.IsNullOrWhiteSpace(Model.Table) ? $"History for {Model.Table}" : "All History");
+	ViewData.UseDiff();
+}
+
+<back-link condition="@(Model.Table.Equals("submissions", StringComparison.InvariantCultureIgnoreCase) && Model.RowId is not null)" href="/@(Model.RowId)S" name-override="Back to Submission"></back-link>
+<back-link condition="@(Model.Table.Equals("publications", StringComparison.InvariantCultureIgnoreCase) && Model.RowId is not null)" href="/@(Model.RowId)M" name-override="Back to Publication"></back-link>
+<partial name="_Pager" model="Model.History" />
+<standard-table>
+	<sortable-table-head sorting="@Model.Search" model-type="typeof(IndexModel.LogEntry)" page-override="@HttpContext.Request.Path" />
+	@foreach (var entry in Model.History)
+	{
+		<tr>
+			<td>@entry.RowId</td>
+			<td>@entry.UserName</td>
+			<td>
+				<timezone-convert asp-for="@entry.Created"/>
+			</td>
+			<td>@entry.TableName</td>
+			<td>@entry.Kind</td>
+			<partial name="_ChangedCol" model="@((entry.Changed, entry.Kind))" />
+		</tr>
+	}
+</standard-table>
+<partial name="_Pager" model="Model.History" />
+
+@section Scripts {
+	<script src="/js/logs.js"></script>
+}

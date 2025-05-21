@@ -1,37 +1,27 @@
 ﻿@page
 @model SaveboxModel
 @{
-	ViewData["Title"] = $"Saved messages for {User.Name()}";
+	ViewData.SetTitle($"Saved messages for {User.Name()}");
 }
 
-<a asp-page="Inbox" class="btn btn-secondary mb-1"><span class="fa fa-arrow-left"></span> Inbox</a>
-<table class="table table-bordered table-striped">
-	<tr>
-		<th>@Html.DisplayNameFor(m => m.SaveBox.First().Subject)</th>
-		<th>@Html.DisplayNameFor(m => m.SaveBox.First().FromUser)</th>
-		<th>@Html.DisplayNameFor(m => m.SaveBox.First().ToUser)</th>
-		<th>@Html.DisplayNameFor(m => m.SaveBox.First().SendDate)</th>
-		<th>Actions</th>
-	</tr>
-	@foreach (var entry in Model.SaveBox
-		.OrderBy(m => m.ToUser == User.Name())
-		.ThenByDescending(m => m.SendDate))
+<back-link asp-page="Inbox" class="mb-1" name-override="Inbox"></back-link>
+<standard-table>
+	<table-head columns="Subject,From,To,Date,"></table-head>
+	@foreach (var entry in Model.SaveBox)
 	{
 		<tr>
 			<td>
 				<a asp-page="Index" asp-route-id="@entry.Id">@entry.Subject</a>
 			</td>
-			<td><profile-link username="@entry.FromUser"></profile-link></td>
-			<td><profile-link username="@entry.ToUser"></profile-link></td>
+			<td><profile-link username="@entry.From"></profile-link></td>
+			<td><profile-link username="@entry.To"></profile-link></td>
 			<td>@entry.SendDate</td>
-			<td>
+			<td-action-column>
 				<delete-button
 					asp-href="/Messages/InBox/@entry.Id/Delete"
 					warning-message="Are you sure you want to remove this message?"
-					class="btn-sm">
-					Delete
-				</delete-button>
-			</td>
+					class="btn-sm"></delete-button>
+			</td-action-column>
 		</tr>
 	}
-</table>
+</standard-table>

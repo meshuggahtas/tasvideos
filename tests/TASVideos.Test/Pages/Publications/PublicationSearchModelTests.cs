@@ -1,5 +1,4 @@
-﻿using TASVideos.Pages.Publications.Models;
-
+﻿using static TASVideos.Pages.Publications.IndexModel;
 namespace TASVideos.RazorPages.Tests.Pages.Publications;
 
 [TestClass]
@@ -8,9 +7,9 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void Empty()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Years = Array.Empty<int>()
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -20,10 +19,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void Class()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Classes = new[] { "Standard" },
-			Years = Array.Empty<int>()
+			Classes = ["Standard"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -33,10 +32,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void Classes()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Classes = new[] { "Standard", "Stars" },
-			Years = Array.Empty<int>()
+			Classes = ["Standard", "Stars"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -46,10 +45,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void SystemCode()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			SystemCodes = new[] { "NES" },
-			Years = Array.Empty<int>()
+			SystemCodes = ["NES"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -59,10 +58,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void Systems()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			SystemCodes = new[] { "NES", "N64" },
-			Years = Array.Empty<int>()
+			SystemCodes = ["NES", "N64"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -72,11 +71,11 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void ClassesAndSystems()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Classes = new[] { "Standard", "Stars" },
-			SystemCodes = new[] { "NES", "N64" },
-			Years = Array.Empty<int>()
+			Classes = ["Standard", "Stars"],
+			SystemCodes = ["NES", "N64"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -86,9 +85,9 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void Year()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Years = new[] { 2000 }
+			Years = [2000]
 		};
 
 		var actual = model.ToUrl();
@@ -98,9 +97,9 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void Years()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Years = new[] { 2000, 2001 }
+			Years = [2000, 2001]
 		};
 
 		var actual = model.ToUrl();
@@ -110,10 +109,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void YearsAndClasses()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Classes = new[] { "Standard", "Stars" },
-			Years = new[] { 2000, 2001 }
+			Classes = ["Standard", "Stars"],
+			Years = [2000, 2001]
 		};
 
 		var actual = model.ToUrl();
@@ -123,11 +122,11 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void YearsAndSystemsAndClasses()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Classes = new[] { "Standard", "Stars" },
-			SystemCodes = new[] { "NES", "N64" },
-			Years = new[] { 2000, 2001 }
+			Classes = ["Standard", "Stars"],
+			SystemCodes = ["NES", "N64"],
+			Years = [2000, 2001]
 		};
 
 		var actual = model.ToUrl();
@@ -137,10 +136,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void Tag()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Tags = new[] { "1p" },
-			Years = Array.Empty<int>()
+			Tags = ["1p"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -150,10 +149,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void Tags()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Tags = new[] { "1p", "2p" },
-			Years = Array.Empty<int>()
+			Tags = ["1p", "2p"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -163,10 +162,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void TagsAndYears()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Tags = new[] { "1p", "2p" },
-			Years = new[] { 2000, 2001 }
+			Tags = ["1p", "2p"],
+			Years = [2000, 2001]
 		};
 
 		var actual = model.ToUrl();
@@ -176,11 +175,11 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void TagsAndSystemsAndYears()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Tags = new[] { "1p", "2p" },
-			SystemCodes = new[] { "NES", "N64" },
-			Years = new[] { 2000, 2001 }
+			Tags = ["1p", "2p"],
+			SystemCodes = ["NES", "N64"],
+			Years = [2000, 2001]
 		};
 
 		var actual = model.ToUrl();
@@ -190,10 +189,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void Genres()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Genres = new[] { "action", "adventure" },
-			Years = Array.Empty<int>()
+			Genres = ["action", "adventure"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -203,11 +202,11 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void TagsAndGenres()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Tags = new[] { "1p", "2p" },
-			Genres = new[] { "action", "adventure" },
-			Years = Array.Empty<int>()
+			Tags = ["1p", "2p"],
+			Genres = ["action", "adventure"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -217,10 +216,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void Flags()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Flags = new[] { "atlas", "verified" },
-			Years = Array.Empty<int>()
+			Flags = ["atlas", "verified"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -230,11 +229,11 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void SystemsAndFlags()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Flags = new[] { "atlas", "verified" },
-			SystemCodes = new[] { "NES", "N64" },
-			Years = Array.Empty<int>()
+			Flags = ["atlas", "verified"],
+			SystemCodes = ["NES", "N64"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -244,12 +243,12 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void SystemsAndTagsAndGenres()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			SystemCodes = new[] { "NES", "N64" },
-			Tags = new[] { "1p", "2p" },
-			Genres = new[] { "action", "adventure" },
-			Years = Array.Empty<int>()
+			SystemCodes = ["NES", "N64"],
+			Tags = ["1p", "2p"],
+			Genres = ["action", "adventure"],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -259,10 +258,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void Games()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Games = new[] { 1, 2 },
-			Years = Array.Empty<int>()
+			Games = [1, 2],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -272,11 +271,11 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void GenresAndGame()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Genres = new[] { "action", "adventure" },
-			Games = new[] { 1, 2 },
-			Years = Array.Empty<int>()
+			Genres = ["action", "adventure"],
+			Games = [1, 2],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -286,10 +285,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void GameGroups()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			GameGroups = new[] { 1, 2 },
-			Years = Array.Empty<int>()
+			GameGroups = [1, 2],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -299,11 +298,11 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void GamesAndGameGroups()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			Games = new[] { 3, 4 },
-			GameGroups = new[] { 1, 2 },
-			Years = Array.Empty<int>()
+			Games = [3, 4],
+			GameGroups = [1, 2],
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -313,10 +312,10 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void ShowObsolete_Empty()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
 			ShowObsoleted = true,
-			Years = Array.Empty<int>()
+			Years = []
 		};
 
 		var actual = model.ToUrl();
@@ -326,11 +325,11 @@ public class PublicationSearchModelTests
 	[TestMethod]
 	public void SystemAndObsolete()
 	{
-		var model = new PublicationSearchModel
+		var model = new PublicationSearch
 		{
-			SystemCodes = new[] { "NES", "N64" },
+			SystemCodes = ["NES", "N64"],
 			ShowObsoleted = true,
-			Years = Array.Empty<int>()
+			Years = []
 		};
 
 		var actual = model.ToUrl();

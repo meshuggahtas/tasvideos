@@ -1,6 +1,32 @@
 ﻿@page
+@addTagHelper *, AspNetCore.ReCaptcha
+@model EmailConfirmationSentModel
 @{
-	ViewData["Title"] = "Email Sent";
+	ViewData.SetTitle("Email Sent");
 }
 
-<p>To complete the registration process look for an email in your inbox that will provide further instructions.</p>
+@await Html.RenderWiki(SystemWiki.EmailConfirmationSentMessage)
+<form client-side-validation="true" method="post">
+	<row>
+		<column md="6">
+			<fieldset>
+				<label asp-for="UserName"></label>
+				<input asp-for="UserName" autocomplete="username" />
+				<span asp-validation-for="UserName"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Email"></label>
+				<input asp-for="Email" autocomplete="off" />
+				<span asp-validation-for="Email"></span>
+			</fieldset>
+		</column>
+	</row>
+	<form-button-bar>
+		<environment exclude="Development">
+			<recaptcha class-name="btn btn-primary" callback="onSubmit" text="Resend Confirmation Email"/>
+		</environment>
+		<environment include="Development">
+			<submit-button>Resend Confirmation Email</submit-button>
+		</environment>
+	</form-button-bar>
+</form>

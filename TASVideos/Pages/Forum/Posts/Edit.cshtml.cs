@@ -1,12 +1,4 @@
-﻿using System.ComponentModel;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Forum;
-using TASVideos.Pages.Forum.Posts.Models;
+﻿using TASVideos.Data.Entity.Forum;
 
 namespace TASVideos.Pages.Forum.Posts;
 
@@ -14,42 +6,31 @@ namespace TASVideos.Pages.Forum.Posts;
 	true,
 	PermissionTo.SeeRestrictedForums,
 	PermissionTo.CreateForumPosts,
+	PermissionTo.EditForumPosts,
 	PermissionTo.DeleteForumPosts,
-	PermissionTo.EditForumPosts)]
-public class EditModel : BaseForumModel
+	PermissionTo.EditUsersForumPosts)]
+public class EditModel(
+	ApplicationDbContext db,
+	IExternalMediaPublisher publisher,
+	IForumService forumService,
+	IUserManager userManager)
+	: BaseForumModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly IForumService _forumService;
-
-	public EditModel(
-		ApplicationDbContext db,
-		ExternalMediaPublisher publisher,
-		IForumService forumService)
-	{
-		_db = db;
-		_publisher = publisher;
-		_forumService = forumService;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
 	[BindProperty]
 	public ForumPostEditModel Post { get; set; } = new();
 
-	[BindProperty]
-	[DisplayName("Minor Edit")]
-	public bool MinorEdit { get; set; } = false;
-	public IEnumerable<MiniPostModel> PreviousPosts { get; set; } = new List<MiniPostModel>();
+	public bool IsFirstPost { get; set; }
+	public List<CreateModel.MiniPost> PreviousPosts { get; set; } = [];
 
 	public AvatarUrls UserAvatars { get; set; } = new(null, null);
 
 	public async Task<IActionResult> OnGet()
 	{
-		var seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
-		var post = await _db.ForumPosts
-			.ExcludeRestricted(seeRestricted)
+		var post = await db.ForumPosts
+			.ExcludeRestricted(UserCanSeeRestricted)
 			.Where(p => p.Id == Id)
 			.Select(p => new ForumPostEditModel
 			{
@@ -71,41 +52,38 @@ public class EditModel : BaseForumModel
 			return NotFound();
 		}
 
-		Post = post;
-		var firstPostId = (await _db.ForumPosts
-			.ForTopic(Post.TopicId)
-			.OldestToNewest()
-			.FirstAsync())
-			.Id;
-
-		Post.IsFirstPost = Id == firstPostId;
-
-		if (!User.Has(PermissionTo.EditForumPosts)
-			&& Post.PosterId != User.GetUserId())
+		if (!CanEditPost(post.PosterId))
 		{
 			return AccessDenied();
 		}
 
-		PreviousPosts = await _db.ForumPosts
+		Post = post;
+		var firstPostId = await db.ForumPosts
+			.ForTopic(Post.TopicId)
+			.OldestToNewest()
+			.Select(p => p.Id)
+			.FirstAsync();
+
+		IsFirstPost = Id == firstPostId;
+
+		PreviousPosts = await db.ForumPosts
 			.ForTopic(Post.TopicId)
 			.Where(fp => fp.CreateTimestamp < Post.CreateTimestamp)
 			.ByMostRecent()
-			.Select(fp => new MiniPostModel
-			{
-				CreateTimestamp = fp.CreateTimestamp,
-				PosterName = fp.Poster!.UserName,
-				PosterPronouns = fp.Poster.PreferredPronouns,
-				Text = fp.Text,
-				EnableBbCode = fp.EnableBbCode,
-				EnableHtml = fp.EnableHtml
-			})
+			.Select(fp => new CreateModel.MiniPost(
+				fp.CreateTimestamp,
+				fp.Poster!.UserName,
+				fp.Poster.PreferredPronouns,
+				fp.Text,
+				fp.EnableBbCode,
+				fp.EnableHtml))
 			.Take(10)
 			.Reverse()
 			.ToListAsync();
 
 		if (Post.PosterId == User.GetUserId())
 		{
-			UserAvatars = await _forumService.UserAvatars(User.GetUserId());
+			UserAvatars = await forumService.UserAvatars(User.GetUserId());
 		}
 
 		return Page();
@@ -117,18 +95,16 @@ public class EditModel : BaseForumModel
 		{
 			if (Post.PosterId == User.GetUserId())
 			{
-				UserAvatars = await _forumService.UserAvatars(User.GetUserId());
+				UserAvatars = await forumService.UserAvatars(User.GetUserId());
 			}
 
 			return Page();
 		}
 
-		var seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
-
-		var forumPost = await _db.ForumPosts
+		var forumPost = await db.ForumPosts
 			.Include(p => p.Topic)
 			.Include(p => p.Topic!.Forum)
-			.ExcludeRestricted(seeRestricted)
+			.ExcludeRestricted(UserCanSeeRestricted)
 			.SingleOrDefaultAsync(p => p.Id == Id);
 
 		if (forumPost is null)
@@ -136,8 +112,7 @@ public class EditModel : BaseForumModel
 			return NotFound();
 		}
 
-		if (!User.Has(PermissionTo.EditForumPosts)
-			&& forumPost.PosterId != User.GetUserId())
+		if (!CanEditPost(forumPost.PosterId))
 		{
 			ModelState.AddModelError("", "Unable to edit post.");
 			return Page();
@@ -145,11 +120,11 @@ public class EditModel : BaseForumModel
 
 		if (!string.IsNullOrWhiteSpace(Post.TopicTitle))
 		{
-			var firstPostId = (await _db.ForumPosts
+			var firstPostId = await db.ForumPosts
 				.ForTopic(forumPost.Topic!.Id)
 				.OldestToNewest()
-				.FirstAsync())
-				.Id;
+				.Select(p => p.Id)
+				.FirstAsync();
 			if (Id == firstPostId)
 			{
 				forumPost.Topic!.Title = Post.TopicTitle;
@@ -159,13 +134,16 @@ public class EditModel : BaseForumModel
 		forumPost.Subject = Post.Subject;
 		forumPost.Text = Post.Text;
 		forumPost.PosterMood = Post.Mood;
+		forumPost.PostEditedTimestamp = DateTime.UtcNow;
 
-		var result = await ConcurrentSave(_db, $"Post {Id} edited", "Unable to edit post");
-		if (result && !MinorEdit)
+		var result = await db.TrySaveChanges();
+		SetMessage(result, $"Post {Id} edited", "Unable to edit post");
+		if (result.IsSuccess())
 		{
-			await _publisher.SendForum(
+			forumService.CacheEditedPostActivity(forumPost.ForumId, forumPost.Topic!.Id, forumPost.Id, (DateTime)forumPost.PostEditedTimestamp);
+			await publisher.SendForum(
 				forumPost.Topic!.Forum!.Restricted,
-				$"Post edited by {User.Name()}",
+				$"[Post]({{0}}) edited by {User.Name()}",
 				$"{forumPost.Topic.Forum.ShortName}: {forumPost.Topic.Title}",
 				$"Forum/Posts/{Id}");
 		}
@@ -175,11 +153,17 @@ public class EditModel : BaseForumModel
 
 	public async Task<IActionResult> OnPostDelete()
 	{
-		var seeRestricted = User.Has(PermissionTo.SeeRestrictedForums);
-		var post = await _db.ForumPosts
-			.Include(p => p.Topic)
-			.Include(p => p.Topic!.Forum)
-			.ExcludeRestricted(seeRestricted)
+		var post = await db.ForumPosts
+			.ExcludeRestricted(UserCanSeeRestricted)
+			.Select(p => new
+			{
+				p.Id,
+				p.TopicId,
+				p.Topic!.Forum!.Restricted,
+				p.Topic!.ForumId,
+				ForumShortName = p.Topic!.Forum!.ShortName,
+				TopicTitle = p.Topic!.Title
+			})
 			.SingleOrDefaultAsync(p => p.Id == Id);
 
 		if (post is null)
@@ -190,7 +174,7 @@ public class EditModel : BaseForumModel
 		if (!User.Has(PermissionTo.DeleteForumPosts))
 		{
 			// Check if last post
-			var lastPost = _db.ForumPosts
+			var lastPost = db.ForumPosts
 				.ForTopic(post.TopicId ?? -1)
 				.ByMostRecent()
 				.First();
@@ -202,33 +186,111 @@ public class EditModel : BaseForumModel
 			}
 		}
 
-		var postCount = await _db.ForumPosts.CountAsync(t => t.TopicId == post.TopicId);
+		var postCount = await db.ForumPosts.CountAsync(t => t.TopicId == post.TopicId);
 
-		_db.ForumPosts.Remove(post);
+		await db.ForumPosts.Where(p => p.Id == Id).ExecuteDeleteAsync();
 
 		bool topicDeleted = false;
 		if (postCount == 1)
 		{
-			var topic = await _db.ForumTopics.SingleAsync(t => t.Id == post.TopicId);
-			_db.ForumTopics.Remove(topic);
+			await db.ForumTopics.Where(t => t.Id == post.TopicId).ExecuteDeleteAsync();
 			topicDeleted = true;
 		}
 
-		var result = await ConcurrentSave(_db, $"Post {Id} deleted", $"Unable to delete post {Id}");
-
-		if (result)
-		{
-			_forumService.ClearLatestPostCache();
-			_forumService.ClearTopicActivityCache();
-			await _publisher.SendForum(
-				post.Topic!.Forum!.Restricted,
-				$"{(topicDeleted ? "Topic" : "Post")} DELETED by {User.Name()}",
-				$"{post.Topic!.Forum!.ShortName}: {post.Topic.Title}",
-				topicDeleted ? "" : $"Forum/Topics/{post.Topic.Id}");
-		}
+		SuccessStatusMessage($"Post {Id} deleted");
+		forumService.ClearLatestPostCache();
+		forumService.ClearTopicActivityCache();
+		await publisher.SendForum(
+			post.Restricted,
+			$"[{(topicDeleted ? "Topic" : "Post")} DELETED]({{0}}) by {User.Name()}",
+			$"{post.ForumShortName}: {post.TopicTitle}",
+			topicDeleted ? "" : $"Forum/Topics/{post.TopicId}");
 
 		return topicDeleted
-			? BasePageRedirect("/Forum/Subforum/Index", new { id = post.Topic!.ForumId })
+			? BasePageRedirect("/Forum/Subforum/Index", new { id = post.ForumId })
 			: BasePageRedirect("/Forum/Topics/Index", new { id = post.TopicId });
+	}
+
+	public async Task<IActionResult> OnPostSpam()
+	{
+		if (!User.Has(PermissionTo.DeleteForumPosts) || !User.Has(PermissionTo.AssignRoles))
+		{
+			return AccessDenied();
+		}
+
+		var post = await db.ForumPosts
+			.Where(p => p.Id == Id)
+			.ExcludeRestricted(seeRestricted: false) // Intentionally not allowing spamming on restricted forums
+			.Select(p => new
+			{
+				p.TopicId,
+				TopicTitle = p.Topic!.Title,
+				p.Topic!.ForumId,
+				ForumShortName = p.Topic!.Forum!.ShortName,
+				p.PosterId,
+				PosterName = p.Poster!.UserName,
+				PosterCannotBeSpammed = p.Poster!.UserRoles.SelectMany(ur => ur.Role!.RolePermission).Any(rp => rp.PermissionId == PermissionTo.AssignRoles)
+			})
+			.SingleOrDefaultAsync();
+
+		if (post is null)
+		{
+			return NotFound();
+		}
+
+		if (post.PosterCannotBeSpammed)
+		{
+			return AccessDenied();
+		}
+
+		var postCount = await db.ForumPosts.CountAsync(p => p.TopicId == post.TopicId);
+
+		await db.ForumPosts.Where(p => p.Id == Id)
+			.ExecuteUpdateAsync(b => b
+				.SetProperty(p => p.TopicId, SiteGlobalConstants.SpamTopicId)
+				.SetProperty(p => p.ForumId, SiteGlobalConstants.SpamForumId));
+
+		bool topicDeleted = false;
+		if (postCount == 1)
+		{
+			await db.ForumTopics.Where(t => t.Id == post.TopicId).ExecuteDeleteAsync();
+			topicDeleted = true;
+		}
+
+		SuccessStatusMessage($"Post {Id} marked as spam");
+		forumService.ClearLatestPostCache();
+		forumService.ClearTopicActivityCache();
+		await userManager.PermaBanUser(post.PosterId);
+		await publisher.SendForum(
+			true,
+			$"[{(topicDeleted ? "Topic" : "Post")} DELETED as SPAM]({{0}}), and user {post.PosterName} banned by {User.Name()}",
+			$"{post.ForumShortName}: {post.TopicTitle}",
+			topicDeleted ? "" : $"Forum/Topics/{post.TopicId}");
+
+		return topicDeleted
+			? BasePageRedirect("/Forum/Subforum/Index", new { id = post.ForumId })
+			: BasePageRedirect("/Forum/Topics/Index", new { id = post.TopicId });
+	}
+
+	private bool CanEditPost(int posterId) => User.Has(PermissionTo.EditUsersForumPosts)
+		|| (User.Has(PermissionTo.EditForumPosts) && posterId == User.GetUserId());
+
+	public class ForumPostEditModel
+	{
+		public int PosterId { get; init; }
+		public string PosterName { get; init; } = "";
+		public DateTime CreateTimestamp { get; init; }
+		public bool EnableBbCode { get; init; }
+		public bool EnableHtml { get; init; }
+		public int TopicId { get; init; }
+
+		[StringLength(500)]
+		public string TopicTitle { get; init; } = "";
+
+		[StringLength(150)]
+		public string? Subject { get; init; }
+		public string Text { get; init; } = "";
+		public string OriginalText => Text;
+		public ForumPostMood Mood { get; init; } = ForumPostMood.Normal;
 	}
 }

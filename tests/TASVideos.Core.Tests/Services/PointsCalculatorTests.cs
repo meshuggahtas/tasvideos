@@ -1,6 +1,4 @@
-﻿using TASVideos.Core.Services;
-
-namespace TASVideos.Core.Tests.Services;
+﻿namespace TASVideos.Core.Tests.Services;
 
 [TestClass]
 public class PointsCalculatorTests
@@ -10,7 +8,7 @@ public class PointsCalculatorTests
 	[TestMethod]
 	public void PlayerPoints_NoPublications()
 	{
-		var actual = PointsCalculator.PlayerPoints(new List<PointsCalculator.Publication>(), 1);
+		var actual = PointsCalculator.PlayerPoints([], 1);
 		Assert.AreEqual(0, actual);
 	}
 
@@ -19,14 +17,7 @@ public class PointsCalculatorTests
 	{
 		var publications = new[]
 		{
-			new PointsCalculator.Publication
-			{
-				Obsolete = false,
-				ClassWeight = 0,
-				RatingCount = 0,
-				AverageRating = 0,
-				AuthorCount = 1
-			}
+			new PointsCalculator.Publication(false, 0, 1, 0, 0)
 		};
 
 		var expected = publications.Length * PlayerPointConstants.MinimumPlayerPointsForPublication;
@@ -39,17 +30,10 @@ public class PointsCalculatorTests
 	{
 		var publications = new[]
 		{
-			new PointsCalculator.Publication
-			{
-				AverageRating = 4.45166667,
-				RatingCount = 6,
-				ClassWeight = 0.75,
-				Obsolete = false,
-				AuthorCount = 1
-			}
+			new PointsCalculator.Publication(false, 6, 1, 0.75, 4.45166667)
 		};
 
-		var roundedExpected = 18.3;
+		const double roundedExpected = 18.3;
 		var actual = PointsCalculator.PlayerPoints(publications, AverageRatingsPerMovie);
 		var roundedActual = Math.Round(actual, 1); // Close enough
 		Assert.AreEqual(roundedExpected, roundedActual);
@@ -60,19 +44,37 @@ public class PointsCalculatorTests
 	{
 		var publications = new[]
 		{
-			new PointsCalculator.Publication
-			{
-				AverageRating = -100,
-				RatingCount = 6,
-				ClassWeight = 0.75,
-				Obsolete = false,
-				AuthorCount = 1
-			}
+			new PointsCalculator.Publication(false, 6, 1, 0.75, -100)
 		};
 
-		var expected = PlayerPointConstants.MinimumPlayerPointsForPublication;
+		const int expected = PlayerPointConstants.MinimumPlayerPointsForPublication;
 		var actual = PointsCalculator.PlayerPoints(publications, AverageRatingsPerMovie);
 		Assert.AreEqual(expected, actual);
+	}
+
+	[TestMethod]
+	public void PlayerPoints_MultipleAuthors_ReducesPoints()
+	{
+		var publications = new[]
+		{
+			new PointsCalculator.Publication(false, 5, 2, 1, 5)
+		};
+
+		var actual = PointsCalculator.PlayerPoints(publications, AverageRatingsPerMovie);
+
+		Assert.AreEqual(19.016, actual, 0.001);
+	}
+
+	[TestMethod]
+	public void PlayerPointsForMovie_WithWeight_UsesWeight()
+	{
+		const double weightMultiplier = 2.0;
+		var publicationWithoutWeight = new PointsCalculator.Publication(false, 1, 1, 1, 5.0);
+		var withoutWeight = PointsCalculator.PlayerPointsForMovie(publicationWithoutWeight, 1);
+
+		var publication = new PointsCalculator.Publication(false, 1, 1, weightMultiplier, 5.0);
+		var actual = PointsCalculator.PlayerPointsForMovie(publication, 1);
+		Assert.AreEqual(withoutWeight * weightMultiplier, actual, 0.001);
 	}
 
 	[TestMethod]

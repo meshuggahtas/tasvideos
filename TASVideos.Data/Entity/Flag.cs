@@ -1,22 +1,21 @@
-﻿namespace TASVideos.Data.Entity;
+﻿using TASVideos.Data.AutoHistory;
 
-public class Flag : BaseEntity
+namespace TASVideos.Data.Entity;
+
+[IncludeInAutoHistory]
+public class Flag
 {
 	public int Id { get; set; }
 
-	[Required]
-	[StringLength(32)]
 	public string Name { get; set; } = "";
 
-	[StringLength(48)]
 	public string? IconPath { get; set; }
 
-	[StringLength(48)]
 	public string? LinkPath { get; set; }
 
-	[Required]
-	[StringLength(24)]
 	public string Token { get; set; } = "";
 
 	public PermissionTo? PermissionRestriction { get; set; }
+
+	public double Weight { get; set; }
 }

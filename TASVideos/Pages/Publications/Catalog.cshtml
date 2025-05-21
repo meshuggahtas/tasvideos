@@ -1,72 +1,80 @@
 ﻿@page "{id}"
 @model CatalogModel
 @{
-	ViewData["Title"] = $"Set Catalogging Information for {Model.Catalog.Title}";
+	ViewData.SetTitle($"Set Cataloging Information for {Model.Catalog.Title}");
 }
 
-<form method="post">
+<form client-side-validation="true" method="post">
 	<row>
-		<div class="col-lg-6">
-			<form-group>
-				<label asp-for="Catalog.SystemId" class="form-control-label"></label>
-				<select asp-for="Catalog.SystemId" asp-items="@Model.AvailableSystems" class="form-control"></select>
-				<span asp-validation-for="Catalog.SystemId" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Catalog.SystemFrameRateId" class="form-control-label"></label>
-				<select asp-for="Catalog.SystemFrameRateId" asp-items="@Model.AvailableSystemFrameRates" class="form-control"></select>
-				<span asp-validation-for="Catalog.SystemFrameRateId" class="text-danger"></span>
-			</form-group>
-		</div>
-		<div class="col-lg-6">
-			<form-group>
+		<column lg="6">
+			<fieldset>
+				<label asp-for="Catalog.System"></label>
+				<select asp-for="Catalog.System" asp-items="@Model.AvailableSystems" data-id="system" data-return-url="@HttpContext.CurrentPathToReturnUrl()"></select>
+				<span asp-validation-for="Catalog.System"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Catalog.SystemFramerate"></label>
+				<select asp-for="Catalog.SystemFramerate" asp-items="@Model.AvailableSystemFrameRates" data-id="system-framerate"></select>
+				<span asp-validation-for="Catalog.SystemFramerate"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Catalog.Emulator"></label>
+				<input asp-for="Catalog.Emulator" />
+				<span asp-validation-for="Catalog.Emulator"></span>
+			</fieldset>
+		</column>
+		<column lg="6">
+			<fieldset>
 				<fullrow>
-					<label asp-for="Catalog.GameId" class="form-control-label"></label>
+					<label asp-for="Catalog.Game"></label>
 				</fullrow>
 				<row>
 					<div class="col-10">
-						<select asp-for="Catalog.GameId" asp-items="@Model.AvailableGames" class="form-control"></select>
-						<span asp-validation-for="Catalog.GameId" class="text-danger"></span>
+						<select asp-for="Catalog.Game" asp-items="@Model.AvailableGames" data-id="game"></select>
+						<span asp-validation-for="Catalog.Game"></span>
 					</div>
 					<div class="col-2">
 						<button id="create-game" type="button" class="btn btn-primary">New</button>
 					</div>
 				</row>
-			</form-group>
-			<form-group>
+			</fieldset>
+			<fieldset>
 				<fullrow>
-					<label asp-for="Catalog.RomId" class="form-control-label"></label>
+					<label asp-for="Catalog.GameVersion"></label>
 				</fullrow>
 				<row>
 					<div class="col-10">
-						<select asp-for="Catalog.RomId" asp-items="@Model.AvailableRoms" class="form-control"></select>
-						<span asp-validation-for="Catalog.RomId" class="text-danger"></span>
+						<select asp-for="Catalog.GameVersion" asp-items="@Model.AvailableVersions" data-id="version"></select>
+						<span asp-validation-for="Catalog.GameVersion"></span>
 					</div>
 					<div class="col-2">
-						<button id="create-rom" type="button" class="btn btn-primary">New</button>
+						<button id="create-version" type="button" class="btn btn-primary">New</button>
 					</div>
 				</row>
-			</form-group>
-		</div>
+			</fieldset>
+			<fieldset>
+				<fullrow>
+					<label asp-for="Catalog.Goal"></label>
+				</fullrow>
+				<row>
+					<div class="col-10">
+						<select asp-for="Catalog.Goal" asp-items="@Model.AvailableGoals" data-id="goal"></select>
+						<span asp-validation-for="Catalog.Goal"></span>
+					</div>
+					<div class="col-2">
+						<button id="create-goal" type="button" class="btn btn-primary">Manage</button>
+					</div>
+				</row>
+			</fieldset>
+		</column>
 	</row>
-	<hr/>
-	<row>
-		<div class="text-center col-12">
-			<button id="submit-btn" type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Update</button>
-			<a class="btn btn-secondary" asp-page="View" asp-route-id="@Model.Id"><i class="fa fa-times"></i> Cancel</a>
-		</div>
-	</row>
+	<form-button-bar>
+		<submit-button></submit-button>
+		<cancel-link asp-page="View" asp-route-id="@Model.Id"></cancel-link>
+		<minor-edit></minor-edit>
+	</form-button-bar>
 </form>
 
 @section Scripts {
-	<partial name="_ValidationScriptsPartial" />
 	<script src="/js/catalog.js"></script>
-	<script>
-		enableCataloging(
-			"@Html.IdFor(m => m.Catalog.SystemId)",
-			"@Html.IdFor(m => m.Catalog.SystemFrameRateId)",
-			"@Html.IdFor(m => m.Catalog.GameId)",
-			"@Html.IdFor(m => m.Catalog.RomId)",
-			"@HttpContext.CurrentPathToReturnUrl()");
-	</script>
 }

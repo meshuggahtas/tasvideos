@@ -1,32 +1,41 @@
 ﻿@page "{userName?}"
 @model TASVideos.Pages.Forum.MoodReportModel
 @{
-	ViewData["Title"] = string.IsNullOrWhiteSpace(Model.UserName)
+	ViewData.SetTitle(string.IsNullOrWhiteSpace(Model.UserName)
 		? "These are all user's mood avatars"
-		: "Mood avatars";
+		: "Mood avatars");
 }
 <p condition="string.IsNullOrWhiteSpace(Model.UserName)">These are peoples mood avatars</p>
 @foreach (var user in Model.MoodyUsers)
 {
-	<card>
-		<cardheader>
+	<card class="mood-card">
+		<card-header>
 			<h4><profile-link username="@user.UserName"></profile-link></h4>
-		</cardheader>
-		<cardbody>
+		</card-header>
+		<card-body class="d-flex flex-wrap">
 			@foreach (var mood in MoodReportModel.Moods)
 			{
 				<div class="mood-box border p-2">
 					<strong>@mood.EnumDisplayName()</strong>
 					<br />
-					<img src="@user.MoodAvatarUrl.Replace("$", ((int)mood).ToString())" onerror="this.src = '/images/empty.png'" loading="lazy" />
+					<object data="@user.MoodAvatarUrl.Replace("$", ((int)mood).ToString())" type="image/png">
+						<img src="/images/empty.png" alt="mood @mood.ToString()">
+					</object>
 				</div>
 			}
-		</cardbody>
+		</card-body>
 	</card>
-	<hr />
 }
 
 <style>
+	.mood-card {
+		margin-bottom: .75rem;
+	}
+
+	.mood-card:last-child {
+		margin-bottom:  0;
+	}
+
 	.mood-box {
 		display: inline-block;
 		min-height: 139px;

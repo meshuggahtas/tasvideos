@@ -1,19 +1,33 @@
 ﻿@page
+@using System.Globalization
+@inject AppSettings Settings
 @model SubmissionsModel
 @{
 	Layout = null;
-	ViewData["BaseUrl"] = Model.BaseUrl;
-	string title = "TASVideos Submissions";
-	string link = "Subs-List";
+	const string title = "TASVideos Submissions";
+	const string link = "Subs-List";
 }
 <?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+<rss>
 	<channel>
 		<partial model="@((title, link))" name="_RssChannel" />
-		<atom:link href="@(Model.BaseUrl)/sublications.rss" rel="self" type="application/rss+xml" xmlns="atom"/>
+		<atom:link rel="self" type="application/rss+xml" href="@(Settings.BaseUrl)/submissions.rss" />
 		@foreach (var sub in Model.Submissions)
 		{
-			<partial model="sub" name="_RssSubmission"/>
+			var subUrl = $"{Settings.BaseUrl}/{sub.Id}S";
+			<item>
+				<title>@sub.Title</title>
+				<rss-link>@subUrl</rss-link>
+				<description>
+					<html-encode>
+						<wiki-markup markup="@sub.Wiki?.Markup" page-data="@sub.Wiki"></wiki-markup>
+					</html-encode>
+				</description>
+				<comments condition="@sub.TopicId.HasValue">@(Settings.BaseUrl)/Forum/Topics/@sub.TopicId</comments>
+				@* <enclosure url="@(subUrl)?handler=Download" length="TODO" type="TODO" /> *@
+				<guid>@subUrl</guid>
+				<pubDate>@sub.CreateTimestamp.ToString("r", CultureInfo.InvariantCulture)</pubDate>
+			</item>
 		}
 	</channel>
 </rss>

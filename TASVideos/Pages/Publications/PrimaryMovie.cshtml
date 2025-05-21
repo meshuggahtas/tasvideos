@@ -1,0 +1,30 @@
+﻿@page "{id}"
+@model PrimaryMoviesModel
+@{
+	ViewData.SetTitle($"Primary Movie File For {Model.PublicationTitle}");
+}
+
+<p>Original File: @Model.OriginalFileName</p>
+<form client-side-validation="true" method="post" enctype="multipart/form-data">
+	<input type="hidden" asp-for="PublicationTitle" />
+	<row>
+		<column lg="6">
+			<fieldset>
+				<label asp-for="Reason"></label>
+				<div>Note: The reason will be used for announcements but not stored in the database</div>
+				<input asp-for="Reason" />
+				<span asp-validation-for="Reason"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="PrimaryMovieFile"></label>
+				<div>Your movie packed in a ZIP file (max size: @SiteGlobalConstants.MaximumMovieSizeHumanReadable)</div>
+				<input asp-for="PrimaryMovieFile" />
+				<span asp-validation-for="PrimaryMovieFile"></span>
+			</fieldset>
+		</column>
+	</row>
+	<form-button-bar>
+		<submit-button></submit-button>
+		<cancel-link asp-page="Edit" asp-route-id="@Model.Id"></cancel-link>
+	</form-button-bar>
+</form>

@@ -1,20 +1,17 @@
 ﻿using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
-using TASVideos.Core.Services;
 using TASVideos.Data.Entity;
 
 namespace TASVideos.Core.Tests.Services;
 
 [TestClass]
-public class IpBanServiceTests
+public class IpBanServiceTests : TestDbBase
 {
-	private readonly TestDbContext _db;
 	private readonly TestCache _cache;
 	private readonly IpBanService _banService;
 
 	public IpBanServiceTests()
 	{
-		_db = TestDbContext.Create();
 		_cache = new TestCache();
 		_banService = new IpBanService(_db, _cache, new NullLogger<IpBanService>());
 	}
@@ -99,7 +96,7 @@ public class IpBanServiceTests
 	{
 		var actual = await _banService.GetAll();
 		Assert.IsNotNull(actual);
-		Assert.AreEqual(0, actual.Count());
+		Assert.AreEqual(0, actual.Count);
 	}
 
 	[TestMethod]
@@ -110,6 +107,6 @@ public class IpBanServiceTests
 
 		var result = await _banService.GetAll();
 		Assert.IsNotNull(result);
-		Assert.AreEqual(1, result.Count());
+		Assert.AreEqual(1, result.Count);
 	}
 }

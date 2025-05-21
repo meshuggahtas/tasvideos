@@ -1,29 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
-
-namespace TASVideos.Pages.Flags;
+﻿namespace TASVideos.Pages.Flags;
 
 [RequirePermission(PermissionTo.TagMaintenance)]
-public class EditModel : BasePageModel
+public class EditModel(IFlagService flagService) : BasePageModel
 {
-	private readonly IFlagService _flagService;
-
-	public ICollection<SelectListItem> AvailablePermissions { get; } = UiDefaults.DefaultEntry.Concat(PermissionUtil
-		.AllPermissions()
-		.Select(p => new SelectListItem
-		{
-			Value = ((int)p).ToString(),
-			Text = p.ToString().SplitCamelCase(),
-		}))
-		.ToList();
-
-	public EditModel(IFlagService flagService)
-	{
-		_flagService = flagService;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
@@ -34,7 +13,7 @@ public class EditModel : BasePageModel
 
 	public async Task<IActionResult> OnGet()
 	{
-		var flag = await _flagService.GetById(Id);
+		var flag = await flagService.GetById(Id);
 
 		if (flag is null)
 		{
@@ -42,7 +21,7 @@ public class EditModel : BasePageModel
 		}
 
 		Flag = flag;
-		InUse = await _flagService.InUse(Id);
+		InUse = await flagService.InUse(Id);
 		return Page();
 	}
 
@@ -53,12 +32,12 @@ public class EditModel : BasePageModel
 			return Page();
 		}
 
-		var result = await _flagService.Edit(Id, Flag);
+		var result = await flagService.Edit(Id, Flag);
 		switch (result)
 		{
 			default:
 			case FlagEditResult.Success:
-				SuccessStatusMessage("Tag successfully updated.");
+				SuccessStatusMessage("Flag successfully updated.");
 				return BasePageRedirect("Index");
 			case FlagEditResult.NotFound:
 				return NotFound();
@@ -67,14 +46,14 @@ public class EditModel : BasePageModel
 				ClearStatusMessage();
 				return Page();
 			case FlagEditResult.Fail:
-				ErrorStatusMessage($"Unable to delete Tag {Id}, the tag may have already been deleted or updated.");
+				ErrorStatusMessage($"Unable to delete Flag {Id}, the tag may have already been deleted or updated.");
 				return Page();
 		}
 	}
 
 	public async Task<IActionResult> OnPostDelete()
 	{
-		var result = await _flagService.Delete(Id);
+		var result = await flagService.Delete(Id);
 		switch (result)
 		{
 			case FlagDeleteResult.InUse:
@@ -91,6 +70,6 @@ public class EditModel : BasePageModel
 				break;
 		}
 
-		return BaseReturnUrlRedirect("Index");
+		return BasePageRedirect("Index");
 	}
 }

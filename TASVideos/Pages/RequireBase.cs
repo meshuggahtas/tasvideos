@@ -1,26 +1,18 @@
 ﻿using System.Net;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
 
 namespace TASVideos.Pages;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, Inherited = false)]
 public class RequireBase : Attribute
 {
-	protected IActionResult ReRouteToLogin(PageHandlerExecutingContext context)
+	protected static IActionResult ReRouteToLogin(PageHandlerExecutingContext context)
 	{
 		var returnUrl = context.HttpContext.Request.Path + context.HttpContext.Request.QueryString;
 		return new RedirectToPageResult("/Account/Login", new { returnUrl });
 	}
 
-	protected IActionResult AccessDenied()
-	{
-		return new RedirectToPageResult("/Account/AccessDenied");
-	}
-
-	protected void Denied(PageHandlerExecutingContext context)
+	protected static void Denied(PageHandlerExecutingContext context)
 	{
 		if (context.HttpContext.Request.IsAjaxRequest())
 		{
@@ -29,11 +21,11 @@ public class RequireBase : Attribute
 		}
 		else
 		{
-			context.Result = AccessDenied();
+			context.Result = new RedirectToPageResult("/Account/AccessDenied");
 		}
 	}
 
-	protected async Task<IEnumerable<PermissionTo>> GetUserPermissions(PageHandlerExecutingContext context)
+	protected static async Task<IReadOnlyCollection<PermissionTo>> GetUserPermissions(PageHandlerExecutingContext context)
 	{
 		// On Post calls, we are potentially changing data, which could be malicious
 		// Let's take the database hit to get the most recent permissions rather than relying
@@ -42,10 +34,21 @@ public class RequireBase : Attribute
 		// for the cookie expiration
 		if (context.HandlerMethod?.HttpMethod == "Post")
 		{
-			var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager>();
+			var userManager = context.HttpContext.RequestServices.GetRequiredService<IUserManager>();
 			return await userManager.GetUserPermissionsById(context.HttpContext.User.GetUserId());
 		}
 
 		return context.HttpContext.User.Permissions();
 	}
+
+	protected static void SetRequiredPermissionsView(PageHandlerExecutingContext context, HashSet<PermissionTo> requiredPermissions, bool matchAny)
+	{
+		context.HttpContext.SetRequiredPermissionsView(new RequirePermissionsView { Permissions = requiredPermissions, MatchAny = matchAny });
+	}
+}
+
+public class RequirePermissionsView
+{
+	public HashSet<PermissionTo> Permissions { get; set; } = [];
+	public bool MatchAny { get; set; }
 }

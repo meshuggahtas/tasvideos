@@ -1,56 +1,47 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Game;
-using TASVideos.Pages.Publications.Models;
+﻿using System.Globalization;
 
 namespace TASVideos.Pages.Publications;
 
 [RequirePermission(PermissionTo.CatalogMovies)]
-public class CatalogModel : BasePageModel
+public class CatalogModel(ApplicationDbContext db, IExternalMediaPublisher publisher) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly ExternalMediaPublisher _publisher;
-
-	public CatalogModel(
-		ApplicationDbContext db,
-		ExternalMediaPublisher publisher)
-	{
-		_db = db;
-		_publisher = publisher;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
+
+	[FromQuery]
+	public int? SystemId { get; set; }
 
 	[FromQuery]
 	public int? GameId { get; set; }
 
 	[FromQuery]
-	public int? RomId { get; set; }
+	public int? GameVersionId { get; set; }
+
+	[FromQuery]
+	public int? GameGoalId { get; set; }
 
 	[BindProperty]
-	public PublicationCatalogModel Catalog { get; set; } = new();
+	public PublicationCatalog Catalog { get; set; } = new();
 
-	public IEnumerable<SelectListItem> AvailableRoms { get; set; } = new List<SelectListItem>();
-	public IEnumerable<SelectListItem> AvailableGames { get; set; } = new List<SelectListItem>();
-	public IEnumerable<SelectListItem> AvailableSystems { get; set; } = new List<SelectListItem>();
-	public IEnumerable<SelectListItem> AvailableSystemFrameRates { get; set; } = new List<SelectListItem>();
+	public List<SelectListItem> AvailableVersions { get; set; } = [];
+	public List<SelectListItem> AvailableGames { get; set; } = [];
+	public List<SelectListItem> AvailableSystems { get; set; } = [];
+	public List<SelectListItem> AvailableSystemFrameRates { get; set; } = [];
+	public List<SelectListItem> AvailableGoals { get; set; } = [];
 
 	public async Task<IActionResult> OnGet()
 	{
-		var catalog = await _db.Publications
+		var catalog = await db.Publications
 				.Where(p => p.Id == Id)
-				.Select(p => new PublicationCatalogModel
+				.Select(p => new PublicationCatalog
 				{
 					Title = p.Title,
-					RomId = p.RomId,
-					GameId = p.GameId,
-					SystemId = p.SystemId,
-					SystemFrameRateId = p.SystemFrameRateId
+					GameVersion = p.GameVersionId,
+					Game = p.GameId,
+					System = p.SystemId,
+					SystemFramerate = p.SystemFrameRateId,
+					Goal = p.GameGoalId!.Value,
+					Emulator = p.EmulatorVersion
 				})
 				.SingleOrDefaultAsync();
 
@@ -60,27 +51,45 @@ public class CatalogModel : BasePageModel
 		}
 
 		Catalog = catalog;
+
+		if (SystemId.HasValue)
+		{
+			var system = await db.GameSystems.FindAsync(SystemId);
+			if (system is not null)
+			{
+				Catalog.System = system.Id;
+			}
+		}
+
 		if (GameId.HasValue)
 		{
-			var game = await _db.Games.SingleOrDefaultAsync(g => g.Id == GameId);
+			var game = await db.Games.FindAsync(GameId);
 			if (game is not null)
 			{
-				Catalog.GameId = game.Id;
+				Catalog.Game = game.Id;
 
-				// We only want to pre-populate the Rom if a valid Game was provided
-				if (RomId.HasValue)
+				// We only want to pre-populate the Game Version if a valid Game was provided
+				if (GameVersionId.HasValue)
 				{
-					var rom = await _db.GameRoms.SingleOrDefaultAsync(r => r.GameId == game.Id && r.Id == RomId && r.SystemId == Catalog.SystemId);
-					if (rom is not null)
+					var gameVersion = await db.GameVersions.SingleOrDefaultAsync(r => r.GameId == game.Id && r.Id == GameVersionId && r.SystemId == Catalog.System);
+					if (gameVersion is not null)
 					{
-						Catalog.RomId = rom.Id;
+						Catalog.GameVersion = gameVersion.Id;
+					}
+				}
+
+				if (GameGoalId.HasValue)
+				{
+					var gameGoal = await db.GameGoals.SingleOrDefaultAsync(gg => gg.GameId == game.Id && gg.Id == GameGoalId);
+					if (gameGoal is not null)
+					{
+						Catalog.Goal = gameGoal.Id;
 					}
 				}
 			}
 		}
 
-		await PopulateCatalogDropDowns(Catalog.GameId, Catalog.SystemId);
-
+		await PopulateCatalogDropDowns(Catalog.Game, Catalog.System);
 		return Page();
 	}
 
@@ -88,17 +97,18 @@ public class CatalogModel : BasePageModel
 	{
 		if (!ModelState.IsValid)
 		{
-			await PopulateCatalogDropDowns(Catalog.GameId, Catalog.SystemId);
+			await PopulateCatalogDropDowns(Catalog.Game, Catalog.System);
 			return Page();
 		}
 
-		var publication = await _db.Publications
+		var publication = await db.Publications
+			.Include(p => p.Authors)
+			.ThenInclude(pa => pa.Author)
 			.Include(p => p.System)
 			.Include(p => p.SystemFrameRate)
 			.Include(p => p.Game)
-			.Include(p => p.Rom)
-			.Include(p => p.Authors)
-			.ThenInclude(pa => pa.Author)
+			.Include(p => p.GameVersion)
+			.Include(p => p.GameGoal)
 			.SingleOrDefaultAsync(s => s.Id == Id);
 		if (publication is null)
 		{
@@ -107,79 +117,96 @@ public class CatalogModel : BasePageModel
 
 		var externalMessages = new List<string>();
 
-		if (publication.SystemId != Catalog.SystemId)
+		if (publication.SystemId != Catalog.System)
 		{
-			var system = await _db.GameSystems.SingleOrDefaultAsync(s => s.Id == Catalog.SystemId);
+			var system = await db.GameSystems.FindAsync(Catalog.System);
 			if (system is null)
 			{
-				ModelState.AddModelError($"{nameof(Catalog)}.{nameof(Catalog.SystemId)}", $"Unknown System Id: {Catalog.SystemId}");
+				ModelState.AddModelError($"{nameof(Catalog)}.{nameof(Catalog.System)}", $"Unknown System Id: {Catalog.System}");
 			}
 			else
 			{
 				externalMessages.Add($"System changed from {publication.System!.Code} to {system.Code}");
-				publication.SystemId = Catalog.SystemId;
+				publication.SystemId = Catalog.System;
 				publication.System = system;
 			}
 		}
 
-		if (publication.SystemFrameRateId != Catalog.SystemFrameRateId)
+		if (publication.SystemFrameRateId != Catalog.SystemFramerate)
 		{
-			var systemFramerate = await _db.GameSystemFrameRates.SingleOrDefaultAsync(s => s.Id == Catalog.SystemFrameRateId);
+			var systemFramerate = await db.GameSystemFrameRates.FindAsync(Catalog.SystemFramerate);
 			if (systemFramerate is null)
 			{
-				ModelState.AddModelError($"{nameof(Catalog)}.{nameof(Catalog.SystemFrameRateId)}", $"Unknown System Id: {Catalog.SystemFrameRateId}");
+				ModelState.AddModelError($"{nameof(Catalog)}.{nameof(Catalog.SystemFramerate)}", $"Unknown System Id: {Catalog.SystemFramerate}");
 			}
-			else if (publication.SystemFrameRateId != Catalog.SystemFrameRateId)
+			else if (publication.SystemFrameRateId != Catalog.SystemFramerate)
 			{
-				externalMessages.Add($"Framerate changed from {publication.SystemFrameRate!.FrameRate} to {systemFramerate.FrameRate}");
-				publication.SystemFrameRateId = Catalog.SystemFrameRateId;
+				externalMessages.Add($"Framerate changed from {publication.SystemFrameRate!.FrameRate.ToString(CultureInfo.InvariantCulture)} to {systemFramerate.FrameRate.ToString(CultureInfo.InvariantCulture)}");
+				publication.SystemFrameRateId = Catalog.SystemFramerate;
 				publication.SystemFrameRate = systemFramerate;
 			}
 		}
 
-		if (publication.GameId != Catalog.GameId)
+		if (publication.GameId != Catalog.Game)
 		{
-			var game = await _db.Games.SingleOrDefaultAsync(s => s.Id == Catalog.GameId);
+			var game = await db.Games.FindAsync(Catalog.Game);
 			if (game is null)
 			{
-				ModelState.AddModelError($"{nameof(Catalog)}.{nameof(Catalog.GameId)}", $"Unknown System Id: {Catalog.GameId}");
+				ModelState.AddModelError($"{nameof(Catalog)}.{nameof(Catalog.Game)}", $"Unknown System Id: {Catalog.Game}");
 			}
 			else
 			{
-				externalMessages.Add($"Game changed from {publication.Game!.DisplayName} to {game.DisplayName}");
-				publication.GameId = Catalog.GameId;
+				externalMessages.Add($"Game changed from \"{publication.Game!.DisplayName}\" to \"{game.DisplayName}\"");
+				publication.GameId = Catalog.Game;
 				publication.Game = game;
 			}
 		}
 
-		if (publication.RomId != Catalog.RomId)
+		if (publication.GameGoalId != Catalog.Goal)
 		{
-			var romHash = await _db.GameRoms.SingleOrDefaultAsync(s => s.Id == Catalog.RomId);
-			if (romHash is null)
+			var gameGoal = await db.GameGoals.FindAsync(Catalog.Goal);
+			if (gameGoal is null)
 			{
-				ModelState.AddModelError($"{nameof(Catalog)}.{nameof(Catalog.RomId)}", $"Unknown System Id: {Catalog.RomId}");
+				ModelState.AddModelError($"{nameof(Catalog)}.{nameof(Catalog.Goal)}", $"Unknown Game Goal Id: {Catalog.Goal}");
 			}
 			else
 			{
-				externalMessages.Add($"Rom Hash changed from {publication.Rom!.Name} to {romHash.Name}");
-				publication.RomId = Catalog.RomId;
-				publication.Rom = romHash;
+				externalMessages.Add($"Game Goal changed from \"{publication.GameGoal!.DisplayName}\" to \"{gameGoal.DisplayName}\"");
+				publication.GameGoalId = Catalog.Goal;
+				publication.GameGoal = gameGoal;
+			}
+		}
+
+		if (publication.GameVersionId != Catalog.GameVersion)
+		{
+			var gameVersion = await db.GameVersions.FindAsync(Catalog.GameVersion);
+			if (gameVersion is null)
+			{
+				ModelState.AddModelError($"{nameof(Catalog)}.{nameof(Catalog.GameVersion)}", $"Unknown System Id: {Catalog.GameVersion}");
+			}
+			else
+			{
+				externalMessages.Add($"Game Version changed from \"{publication.GameVersion!.Name}\" to \"{gameVersion.Name}\"");
+				publication.GameVersionId = Catalog.GameVersion;
+				publication.GameVersion = gameVersion;
 			}
 
 			if (!ModelState.IsValid)
 			{
-				await PopulateCatalogDropDowns(Catalog.GameId, Catalog.SystemId);
+				await PopulateCatalogDropDowns(Catalog.Game, Catalog.System);
 				return Page();
 			}
 		}
 
+		publication.EmulatorVersion = Catalog.Emulator;
 		publication.GenerateTitle();
 
-		var result = await ConcurrentSave(_db, $"{Id}M catalog updated", $"Unable to save {Id}M catalog");
-		if (result)
+		var result = await db.TrySaveChanges();
+		SetMessage(result, $"{Id}M catalog updated", $"Unable to save {Id}M catalog");
+		if (result.IsSuccess())
 		{
-			await _publisher.SendPublicationEdit(
-				$"{Id}M Catalog edited by {User.Name()}",
+			await publisher.SendGameManagement(
+				$"[{Id}M]({{0}}) Catalog edited by {User.Name()}",
 				$"{string.Join(", ", externalMessages)} | {publication.Title}",
 				$"{Id}M");
 		}
@@ -189,39 +216,24 @@ public class CatalogModel : BasePageModel
 
 	private async Task PopulateCatalogDropDowns(int gameId, int systemId)
 	{
-		AvailableRoms = UiDefaults.DefaultEntry.Concat(await _db.GameRoms
-			.ForGame(gameId)
-			.ForSystem(systemId)
-			.OrderBy(r => r.Name)
-			.Select(r => new SelectListItem
-			{
-				Value = r.Id.ToString(),
-				Text = r.Name
-			})
-			.ToListAsync());
+		AvailableVersions = (await db.GameVersions.ToDropDownList(systemId, gameId)).WithDefaultEntry();
+		AvailableGames = await db.Games.ToDropDownList(systemId);
+		AvailableSystems = await db.GameSystems.ToDropDownListWithId();
+		AvailableSystemFrameRates = await db.GameSystemFrameRates.ToDropDownList(systemId);
+		AvailableGoals = await db.GameGoals.ToDropDownList(gameId);
+	}
 
-		AvailableGames = await _db.Games
-			.ForSystem(systemId)
-			.OrderBy(g => g.DisplayName)
-			.Select(g => new SelectListItem
-			{
-				Value = g.Id.ToString(),
-				Text = g.DisplayName
-			})
-			.ToListAsync();
+	public class PublicationCatalog
+	{
+		public string Title { get; init; } = "";
+		public int GameVersion { get; set; }
+		public int Goal { get; set; }
+		public int Game { get; set; }
+		public int System { get; set; }
+		public int SystemFramerate { get; init; }
 
-		AvailableSystems = await _db.GameSystems
-			.OrderBy(s => s.Code)
-			.Select(s => new SelectListItem
-			{
-				Value = s.Id.ToString(),
-				Text = s.Code
-			})
-			.ToListAsync();
-
-		AvailableSystemFrameRates = await _db.GameSystemFrameRates
-			.ForSystem(systemId)
-			.ToDropDown()
-			.ToListAsync();
+		[StringLength(50)]
+		[Required]
+		public string? Emulator { get; init; }
 	}
 }

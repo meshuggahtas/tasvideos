@@ -1,10 +1,10 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TASVideos.Core.HttpClientExtensions;
+using TASVideos.Core.Services.Wiki;
 using TASVideos.Core.Services.Youtube.Dtos;
 using TASVideos.Core.Settings;
-using TASVideos.Data.Entity;
 
 namespace TASVideos.Core.Services.Youtube;
 
@@ -19,31 +19,19 @@ public interface IYoutubeSync
 	Task<IEnumerable<YoutubeVideoResponseItem>> GetPublicInfo(IEnumerable<string> videoIds);
 }
 
-internal class YouTubeSync : IYoutubeSync
+internal class YouTubeSync(
+	IHttpClientFactory httpClientFactory,
+	IGoogleAuthService googleAuthService,
+	IWikiToTextRenderer textRenderer,
+	AppSettings settings,
+	ILogger<YouTubeSync> logger)
+	: IYoutubeSync
 {
 	private const int YoutubeTitleMaxLength = 100;
 	private const int BatchSize = 50;
-	private static readonly string[] BaseTags = { "TAS", "TASVideos", "Tool-Assisted", "Video Game" };
-	private readonly HttpClient _client;
-	private readonly IGoogleAuthService _googleAuthService;
-	private readonly IWikiToTextRenderer _textRenderer;
-	private readonly AppSettings _settings;
-	private readonly ILogger<YouTubeSync> _logger;
-
-	public YouTubeSync(
-		IHttpClientFactory httpClientFactory,
-		IGoogleAuthService googleAuthService,
-		IWikiToTextRenderer textRenderer,
-		AppSettings settings,
-		ILogger<YouTubeSync> logger)
-	{
-		_client = httpClientFactory.CreateClient(HttpClients.Youtube)
-			?? throw new InvalidOperationException($"Unable to initalize {HttpClients.Youtube} client");
-		_googleAuthService = googleAuthService;
-		_textRenderer = textRenderer;
-		_settings = settings;
-		_logger = logger;
-	}
+	private static readonly string[] BaseTags = ["TAS", "TASVideos", "Tool-Assisted", "Video Game"];
+	private readonly HttpClient _client = httpClientFactory.CreateClient(HttpClients.Youtube)
+		?? throw new InvalidOperationException($"Unable to initialize {HttpClients.Youtube} client");
 
 	public async Task SyncYouTubeVideo(YoutubeVideo video)
 	{
@@ -52,7 +40,7 @@ internal class YouTubeSync : IYoutubeSync
 			return;
 		}
 
-		if (!_googleAuthService.IsYoutubeEnabled())
+		if (!googleAuthService.IsYoutubeEnabled())
 		{
 			return;
 		}
@@ -66,22 +54,24 @@ internal class YouTubeSync : IYoutubeSync
 
 		await SetAccessToken();
 
-		var descriptionBase = $"This is a tool-assisted speedrun. For more information, see {_settings.BaseUrl}/{video.Id}M";
+		var descriptionBase = $"This is a tool-assisted speedrun. For more information, see {settings.BaseUrl}/{video.Id}M";
 		if (video.ObsoletedBy.HasValue)
 		{
-			descriptionBase += $"\n\nThis movie has been obsoleted by {_settings.BaseUrl}/{video.ObsoletedBy.Value}M";
+			descriptionBase += $"\n\nThis movie has been obsoleted by {settings.BaseUrl}/{video.ObsoletedBy.Value}M";
 		}
 
 		descriptionBase += $"\nTAS originally published on {video.PublicationDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}\n\n";
-		var renderedDescription = await _textRenderer.RenderWikiForYoutube(video.WikiPage);
+		var renderedDescription = await textRenderer.RenderWikiForYoutube(video.WikiPage);
+
+		const string hashTags = "\n\n#tas #tasvideos #toolassisted #toolassistedspeedrun #speedrun";
 
 		var obsoleteStr = video.ObsoletedBy.HasValue ? "[Obsoleted] " : "";
 		var displayStr = !string.IsNullOrWhiteSpace(video.UrlDisplayName) ? $"[{video.UrlDisplayName}] " : "";
 		string title = $"[TAS] {obsoleteStr}{displayStr}{video.Title}";
-		string description = descriptionBase + renderedDescription;
+		string description = descriptionBase + renderedDescription + hashTags;
 		if (title.Length > YoutubeTitleMaxLength)
 		{
-			description = title + "\n" + descriptionBase + renderedDescription;
+			description = title + "\n" + descriptionBase + renderedDescription + hashTags;
 			title = title.CapAndEllipse(YoutubeTitleMaxLength);
 		}
 
@@ -90,17 +80,17 @@ internal class YouTubeSync : IYoutubeSync
 			VideoId = videoId,
 			Snippet = new()
 			{
-				Title = title,
-				Description = description,
+				Title = title.FormatForYouTube(),
+				Description = description.FormatForYouTube(),
 				CategoryId = videoDetails.CategoryId,
-				Tags = BaseTags.Concat(video.Tags).ToList()
+				Tags = [.. BaseTags, .. video.Tags]
 			}
 		};
 
 		var response = await _client.PutAsync("videos?part=status,snippet", updateRequest.ToStringContent());
 		if (!response.IsSuccessStatusCode)
 		{
-			_logger.LogError(
+			logger.LogError(
 				"[{timestamp}] An error occurred syncing data to Youtube. Request: {request} Response: {response}",
 				DateTime.UtcNow,
 				JsonSerializer.Serialize(updateRequest),
@@ -110,27 +100,26 @@ internal class YouTubeSync : IYoutubeSync
 
 	public async Task<IEnumerable<YoutubeVideoResponseItem>> GetPublicInfo(IEnumerable<string> videoIds)
 	{
-
-		if (!_googleAuthService.IsYoutubeEnabled())
+		if (!googleAuthService.IsYoutubeEnabled())
 		{
-			return Enumerable.Empty<YoutubeVideoResponseItem>();
+			return [];
 		}
 
 		await SetAccessToken();
 
 		var items = new List<YoutubeVideoResponseItem>();
 
-		var batches = videoIds.Batch(BatchSize);
+		var batches = videoIds.Chunk(BatchSize);
 		foreach (var batch in batches)
 		{
-			var newItems = await GetBatchPublicInfo(batch.ToList());
+			var newItems = await GetBatchPublicInfo([.. batch]);
 			items.AddRange(newItems);
 		}
 
 		return items;
 	}
 
-	private async Task<IEnumerable<YoutubeVideoResponseItem>> GetBatchPublicInfo(ICollection<string> videoIds)
+	private async Task<IEnumerable<YoutubeVideoResponseItem>> GetBatchPublicInfo(IReadOnlyCollection<string> videoIds)
 	{
 		if (videoIds.Count > BatchSize)
 		{
@@ -140,7 +129,7 @@ internal class YouTubeSync : IYoutubeSync
 		var response = await _client.GetAsync($"videos?id={string.Join(",", videoIds)}&part=snippet");
 		if (!response.IsSuccessStatusCode)
 		{
-			return Enumerable.Empty<YoutubeVideoResponseItem>();
+			return [];
 		}
 
 		var data = await response.ReadAsync<YoutubeVideoResponse>();
@@ -154,7 +143,7 @@ internal class YouTubeSync : IYoutubeSync
 			return;
 		}
 
-		if (!_googleAuthService.IsYoutubeEnabled())
+		if (!googleAuthService.IsYoutubeEnabled())
 		{
 			return;
 		}
@@ -180,7 +169,7 @@ internal class YouTubeSync : IYoutubeSync
 
 		if (!response.IsSuccessStatusCode)
 		{
-			_logger.LogError(
+			logger.LogError(
 				"{timestamp} An error occurred sending a request to YouTube. Request: {request} Response: {response}",
 				DateTime.UtcNow,
 				JsonSerializer.Serialize(unlistRequest),
@@ -243,7 +232,7 @@ internal class YouTubeSync : IYoutubeSync
 
 	private async Task SetAccessToken()
 	{
-		var accessToken = await _googleAuthService.GetYoutubeAccessToken();
+		var accessToken = await googleAuthService.GetYoutubeAccessToken();
 		_client.SetBearerToken(accessToken);
 	}
 
@@ -256,7 +245,7 @@ internal class YouTubeSync : IYoutubeSync
 		var result = await _client.GetAsync($"videos?id={videoId}&part=snippet,fileDetails");
 		if (!result.IsSuccessStatusCode)
 		{
-			_logger.LogError(
+			logger.LogError(
 				"{timestamp} Unable to request data for video {videoId} from YouTube. Response: {response}",
 				DateTime.UtcNow,
 				videoId,
@@ -275,26 +264,14 @@ public record YoutubeVideo(
 	string Url,
 	string? UrlDisplayName,
 	string Title,
-	WikiPage WikiPage,
+	IWikiPage WikiPage,
 	string SystemCode,
 	IEnumerable<string> Authors,
-	string? SearchKey,
 	int? ObsoletedBy)
 {
-	public IEnumerable<string> Tags
-	{
-		get
-		{
-			var tags = new[] { SystemCode }
-				.Concat(Authors);
-
-			if (!string.IsNullOrWhiteSpace(SearchKey))
-			{
-				tags = tags.Concat(SearchKey.SplitWithEmpty("-"));
-			}
-
-			tags = tags.Select(t => t.ToLower()).Distinct();
-			return tags;
-		}
-	}
+	public IEnumerable<string> Tags =>
+		new[] { SystemCode }
+			.Concat(Authors)
+			.Select(t => t.ToLower())
+			.Distinct();
 }

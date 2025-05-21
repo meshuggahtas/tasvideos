@@ -14,6 +14,10 @@ function scrollToTop() {
 }
 
 function clearDropdown(elemId) {
+	if (!elemId) {
+		return;
+	}
+
 	Array.from(document.querySelectorAll(`#${elemId} option`))
 		.forEach(element => {
 			if (element.value) {
@@ -46,3 +50,11 @@ if (location.hash) {
 		}
 	}
 }
+
+Array.from(document.querySelectorAll('[data-id="permission-modal-button"]')).forEach(popupBtn => {
+	popupBtn.addEventListener('click', () => {
+		let modal = new bootstrap.Modal('#permission-modal')
+		modal.show();
+		return false;
+	})
+});

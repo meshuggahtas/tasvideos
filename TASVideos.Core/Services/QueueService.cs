@@ -1,9 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using TASVideos.Core.Services.Wiki;
 using TASVideos.Core.Services.Youtube;
 using TASVideos.Core.Settings;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Game;
 using TASVideos.MovieParsers.Result;
 using static TASVideos.Data.Entity.SubmissionStatus;
 
@@ -15,7 +12,8 @@ public interface IQueueService
 	/// Returns a list of all available statuses a submission could be set to
 	/// Based on the user's permissions, submission status and date, and authors.
 	/// </summary>
-	IEnumerable<SubmissionStatus> AvailableStatuses(SubmissionStatus currentStatus,
+	ICollection<SubmissionStatus> AvailableStatuses(
+		SubmissionStatus currentStatus,
 		IEnumerable<PermissionTo> userPermissions,
 		DateTime submitDate,
 		bool isAuthorOrSubmitter,
@@ -25,7 +23,7 @@ public interface IQueueService
 	int HoursRemainingForJudging(ISubmissionDisplay submission);
 
 	/// <summary>
-	/// Returns whether or not a submission can be delete, does not affect the submission
+	/// Returns whether a submission can be deleted, does not affect the submission
 	/// </summary>
 	Task<DeleteSubmissionResult> CanDeleteSubmission(int submissionId);
 
@@ -35,7 +33,7 @@ public interface IQueueService
 	Task<DeleteSubmissionResult> DeleteSubmission(int submissionId);
 
 	/// <summary>
-	/// Returns whether or not a publication can be unpublished, does not affect the publication
+	/// Returns whether a publication can be unpublished, does not affect the publication
 	/// </summary>
 	Task<UnpublishResult> CanUnpublish(int publicationId);
 
@@ -52,56 +50,55 @@ public interface IQueueService
 
 	/// <summary>
 	/// Obsoletes a publication with the existing publication.
-	/// In addition, it marks and syncs the obsoleted youtube videos
+	/// In addition, it marks and syncs the obsoleted YouTube videos
 	/// </summary>
 	/// <param name="publicationToObsolete">The movie to obsolete</param>
 	/// <param name="obsoletingPublicationId">The movie that obsoletes it</param>
 	/// <returns>False if publications is not found</returns>
 	Task<bool> ObsoleteWith(int publicationToObsolete, int obsoletingPublicationId);
+
+	/// <summary>
+	/// Returns whether the user has exceeded the submission limit
+	/// </summary>
+	/// <returns>Next time the user can submit, if limit has been exceeded, else null</returns>
+	Task<DateTime?> ExceededSubmissionLimit(int userId);
+
+	/// <summary>
+	/// Returns the total numbers of submissions the given user has submitted
+	/// </summary>
+	Task<int> GetSubmissionCount(int userId);
 }
 
-internal class QueueService : IQueueService
+internal class QueueService(
+	AppSettings settings,
+	ApplicationDbContext db,
+	IYoutubeSync youtubeSync,
+	ITASVideoAgent tva,
+	IWikiPages wikiPages)
+	: IQueueService
 {
-	private readonly int _minimumHoursBeforeJudgment;
-	private readonly ApplicationDbContext _db;
-	private readonly IYoutubeSync _youtubeSync;
-	private readonly ITASVideoAgent _tva;
-	private readonly IWikiPages _wikiPages;
+	private readonly int _minimumHoursBeforeJudgment = settings.MinimumHoursBeforeJudgment;
 
-	public QueueService(
-		AppSettings settings,
-		ApplicationDbContext db,
-		IYoutubeSync youtubeSync,
-		ITASVideoAgent tva,
-		IWikiPages wikiPages)
-	{
-		_minimumHoursBeforeJudgment = settings.MinimumHoursBeforeJudgment;
-		_db = db;
-		_youtubeSync = youtubeSync;
-		_tva = tva;
-		_wikiPages = wikiPages;
-	}
-
-	public IEnumerable<SubmissionStatus> AvailableStatuses(SubmissionStatus currentStatus,
+	public ICollection<SubmissionStatus> AvailableStatuses(
+		SubmissionStatus currentStatus,
 		IEnumerable<PermissionTo> userPermissions,
 		DateTime submitDate,
 		bool isAuthorOrSubmitter,
 		bool isJudge,
 		bool isPublisher)
 	{
-
 		// Published submissions can not be changed
 		if (currentStatus == Published)
 		{
-			return new List<SubmissionStatus> { Published };
+			return [Published];
 		}
 
 		var perms = userPermissions.ToList();
-		if (perms.Contains(PermissionTo.OverrideSubmissionStatus))
+		if (perms.Contains(PermissionTo.OverrideSubmissionConstraints))
 		{
-			return Enum.GetValues(typeof(SubmissionStatus))
-				.Cast<SubmissionStatus>()
-				.Except(new[] { Published }); // Published status must only be set when being published
+			return Enum.GetValues<SubmissionStatus>()
+				.Except([Published]) // Published status must only be set when being published
+				.ToList();
 		}
 
 		var list = new HashSet<SubmissionStatus>
@@ -151,7 +148,7 @@ internal class QueueService : IQueueService
 			list.Add(Accepted);
 			list.Add(Rejected);
 		}
-		else if ((currentStatus == Accepted || currentStatus == PublicationUnderway)
+		else if (currentStatus is Accepted or PublicationUnderway
 			&& isJudge
 			&& isAfterJudgmentWindow)
 		{
@@ -189,18 +186,18 @@ internal class QueueService : IQueueService
 
 	public int HoursRemainingForJudging(ISubmissionDisplay submission)
 	{
-		if (submission.Status.CanBeJudged())
+		if (!submission.Status.CanBeJudged())
 		{
-			var diff = (DateTime.UtcNow - submission.Submitted).TotalHours;
-			return _minimumHoursBeforeJudgment - (int)diff;
+			return 0;
 		}
 
-		return 0;
+		var diff = (DateTime.UtcNow - submission.Date).TotalHours;
+		return _minimumHoursBeforeJudgment - (int)diff;
 	}
 
 	public async Task<DeleteSubmissionResult> CanDeleteSubmission(int submissionId)
 	{
-		var sub = await _db.Submissions
+		var sub = await db.Submissions
 			.Where(s => s.Id == submissionId)
 			.Select(s => new
 			{
@@ -224,10 +221,9 @@ internal class QueueService : IQueueService
 
 	public async Task<DeleteSubmissionResult> DeleteSubmission(int submissionId)
 	{
-		var submission = await _db.Submissions
+		var submission = await db.Submissions
 			.Include(s => s.SubmissionAuthors)
 			.Include(s => s.History)
-			.Include(s => s.WikiContent)
 			.SingleOrDefaultAsync(s => s.Id == submissionId);
 
 		if (submission is null)
@@ -242,39 +238,36 @@ internal class QueueService : IQueueService
 
 		submission.SubmissionAuthors.Clear();
 		submission.History.Clear();
-		_db.Submissions.Remove(submission);
+		db.Submissions.Remove(submission);
 		if (submission.TopicId.HasValue)
 		{
-			var topic = await _db.ForumTopics
+			var topic = await db.ForumTopics
 				.Include(t => t.ForumPosts)
 				.Include(t => t.Poll)
 				.ThenInclude(p => p!.PollOptions)
 				.ThenInclude(o => o.Votes)
 				.SingleAsync(t => t.Id == submission.TopicId);
 
-			_db.ForumPosts.RemoveRange(topic.ForumPosts);
+			db.ForumPosts.RemoveRange(topic.ForumPosts);
 			if (topic.Poll is not null)
 			{
-				_db.ForumPollOptionVotes.RemoveRange(topic.Poll.PollOptions.SelectMany(po => po.Votes));
-				_db.ForumPollOptions.RemoveRange(topic.Poll.PollOptions);
-				_db.ForumPolls.Remove(topic.Poll);
+				db.ForumPollOptionVotes.RemoveRange(topic.Poll.PollOptions.SelectMany(po => po.Votes));
+				db.ForumPollOptions.RemoveRange(topic.Poll.PollOptions);
+				db.ForumPolls.Remove(topic.Poll);
 			}
 
-			_db.ForumTopics.Remove(topic);
+			db.ForumTopics.Remove(topic);
 		}
 
-		await _db.SaveChangesAsync();
-		if (submission.WikiContentId.HasValue)
-		{
-			await _wikiPages.Delete(submission.WikiContent!.PageName);
-		}
+		await db.SaveChangesAsync();
+		await wikiPages.Delete(WikiHelper.ToSubmissionWikiPageName(submissionId));
 
 		return DeleteSubmissionResult.Success(submission.Title);
 	}
 
 	public async Task<UnpublishResult> CanUnpublish(int publicationId)
 	{
-		var pub = await _db.Publications
+		var pub = await db.Publications
 			.Where(p => p.Id == publicationId)
 			.Select(p => new
 			{
@@ -298,7 +291,7 @@ internal class QueueService : IQueueService
 
 	public async Task<UnpublishResult> Unpublish(int publicationId)
 	{
-		var publication = await _db.Publications
+		var publication = await db.Publications
 			.Include(p => p.PublicationAwards)
 			.Include(p => p.Authors)
 			.Include(p => p.Files)
@@ -324,11 +317,11 @@ internal class QueueService : IQueueService
 		var youtubeUrls = publication.PublicationUrls
 			.ThatAreStreaming()
 			.Select(pu => pu.Url)
-			.Where(url => _youtubeSync.IsYoutubeUrl(url))
+			.Where(youtubeSync.IsYoutubeUrl)
 			.ToList();
 
 		var obsoletedPubsWithYoutube = publication.ObsoletedMovies
-			.Where(p => p.PublicationUrls.Any(u => _youtubeSync.IsYoutubeUrl(u.Url)))
+			.Where(p => p.PublicationUrls.Any(u => youtubeSync.IsYoutubeUrl(u.Url)))
 			.ToList();
 
 		publication.Authors.Clear();
@@ -337,46 +330,51 @@ internal class QueueService : IQueueService
 		publication.PublicationRatings.Clear();
 		publication.PublicationTags.Clear();
 		publication.PublicationUrls.Clear();
+		var logs = await db.PublicationMaintenanceLogs
+			.Where(l => l.PublicationId == publicationId)
+			.ToListAsync();
+		db.RemoveRange(logs);
 
 		// Note: Cascading deletes will ensure obsoleted publications are no longer obsoleted
-		_db.Publications.Remove(publication);
-		_db.SubmissionStatusHistory.Add(publication.SubmissionId, publication.Submission!.Status);
+		db.Publications.Remove(publication);
+		db.SubmissionStatusHistory.Add(publication.SubmissionId, publication.Submission!.Status);
 		publication.Submission.Status = PublicationUnderway;
 
-		await _tva.PostSubmissionUnpublished(publication.SubmissionId);
-		await _db.SaveChangesAsync();
+		await tva.PostSubmissionUnpublished(publication.SubmissionId);
+		await db.SaveChangesAsync();
+		await wikiPages.Delete(WikiHelper.ToPublicationWikiPageName(publicationId));
 
 		foreach (var url in youtubeUrls)
 		{
-			await _youtubeSync.UnlistVideo(url!);
+			await youtubeSync.UnlistVideo(url!);
 		}
 
 		foreach (var obsoletedPub in obsoletedPubsWithYoutube)
 		{
-			// Re-query to get all of the includes
+			// Re-query to get all the includes
 			// We can afford these extra trips, compared to the massive query it would be
 			// for a single trip
-			var queriedPub = await _db.Publications
+			var queriedPub = await db.Publications
 				.Include(p => p.PublicationUrls)
-				.Include(p => p.WikiContent)
 				.Include(p => p.System)
 				.Include(p => p.Game)
 				.Include(p => p.Authors)
 				.ThenInclude(pa => pa.Author)
 				.SingleAsync(p => p.Id == obsoletedPub.Id);
 
-			foreach (var url in obsoletedPub.PublicationUrls.Where(u => _youtubeSync.IsYoutubeUrl(u.Url)))
+			var obsoletedWiki = await wikiPages.PublicationPage(queriedPub.Id);
+
+			foreach (var url in obsoletedPub.PublicationUrls.Where(u => youtubeSync.IsYoutubeUrl(u.Url)))
 			{
-				await _youtubeSync.SyncYouTubeVideo(new YoutubeVideo(
+				await youtubeSync.SyncYouTubeVideo(new YoutubeVideo(
 					queriedPub.Id,
 					queriedPub.CreateTimestamp,
 					url.Url!,
 					url.DisplayName,
 					queriedPub.Title,
-					queriedPub.WikiContent!,
+					obsoletedWiki!,
 					queriedPub.System!.Code,
 					queriedPub.Authors.OrderBy(pa => pa.Ordinal).Select(a => a.Author!.UserName),
-					queriedPub.Game!.SearchKey,
 					queriedPub.ObsoletedById));
 			}
 		}
@@ -391,7 +389,7 @@ internal class QueueService : IQueueService
 			throw new InvalidOperationException("Cannot mapped failed parse result.");
 		}
 
-		var system = await _db.GameSystems
+		var system = await db.GameSystems
 			.ForCode(parseResult.SystemCode)
 			.SingleOrDefaultAsync();
 
@@ -405,11 +403,19 @@ internal class QueueService : IQueueService
 		submission.RerecordCount = parseResult.RerecordCount;
 		submission.MovieExtension = parseResult.FileExtension;
 		submission.System = system;
+		submission.CycleCount = parseResult.CycleCount;
+		submission.Annotations = parseResult.Annotations.CapAndEllipse(3500);
+		var warnings = parseResult.Warnings.ToList();
+		submission.Warnings = null;
+		if (warnings.Any())
+		{
+			submission.Warnings = string.Join(",", warnings).Cap(500);
+		}
 
 		if (parseResult.FrameRateOverride.HasValue)
 		{
 			// ReSharper disable CompareOfFloatsByEqualityOperator
-			var frameRate = await _db.GameSystemFrameRates
+			var frameRate = await db.GameSystemFrameRates
 				.ForSystem(submission.System.Id)
 				.FirstOrDefaultAsync(sf => sf.FrameRate == parseResult.FrameRateOverride.Value);
 
@@ -421,8 +427,8 @@ internal class QueueService : IQueueService
 					FrameRate = parseResult.FrameRateOverride.Value,
 					RegionCode = parseResult.Region.ToString().ToUpper()
 				};
-				_db.GameSystemFrameRates.Add(frameRate);
-				await _db.SaveChangesAsync();
+				db.GameSystemFrameRates.Add(frameRate);
+				await db.SaveChangesAsync();
 			}
 
 			submission.SystemFrameRate = frameRate;
@@ -431,7 +437,7 @@ internal class QueueService : IQueueService
 		{
 			// SingleOrDefault should work here because the only time there could be more than one for a system and region are formats that return a framerate override
 			// Those systems should never hit this code block.  But just in case.
-			submission.SystemFrameRate = await _db.GameSystemFrameRates
+			submission.SystemFrameRate = await db.GameSystemFrameRates
 				.ForSystem(submission.System.Id)
 				.ForRegion(parseResult.Region.ToString().ToUpper())
 				.FirstOrDefaultAsync();
@@ -442,9 +448,8 @@ internal class QueueService : IQueueService
 
 	public async Task<bool> ObsoleteWith(int publicationToObsolete, int obsoletingPublicationId)
 	{
-		var toObsolete = await _db.Publications
+		var toObsolete = await db.Publications
 			.Include(p => p.PublicationUrls)
-			.Include(p => p.WikiContent)
 			.Include(p => p.System)
 			.Include(p => p.Game)
 			.Include(p => p.Authors)
@@ -456,12 +461,15 @@ internal class QueueService : IQueueService
 			return false;
 		}
 
+		var pageName = WikiHelper.ToPublicationWikiPageName(toObsolete.Id);
+		var wikiPage = await wikiPages.Page(pageName);
+
 		toObsolete.ObsoletedById = obsoletingPublicationId;
-		await _db.SaveChangesAsync();
+		await db.SaveChangesAsync();
 
 		foreach (var url in toObsolete.PublicationUrls
 					.ThatAreStreaming()
-					.Where(pu => _youtubeSync.IsYoutubeUrl(pu.Url)))
+					.Where(pu => youtubeSync.IsYoutubeUrl(pu.Url)))
 		{
 			var obsoleteVideo = new YoutubeVideo(
 				toObsolete.Id,
@@ -469,17 +477,79 @@ internal class QueueService : IQueueService
 				url.Url ?? "",
 				url.DisplayName,
 				toObsolete.Title,
-				toObsolete.WikiContent!,
+				wikiPage!,
 				toObsolete.System!.Code,
 				toObsolete.Authors
 					.OrderBy(pa => pa.Ordinal)
 					.Select(pa => pa.Author!.UserName),
-				toObsolete.Game!.SearchKey,
 				obsoletingPublicationId);
 
-			await _youtubeSync.SyncYouTubeVideo(obsoleteVideo);
+			await youtubeSync.SyncYouTubeVideo(obsoleteVideo);
 		}
 
 		return true;
 	}
+
+	public async Task<DateTime?> ExceededSubmissionLimit(int userId)
+	{
+		var subs = await db.Submissions
+			.Where(s => s.SubmitterId == userId
+				&& s.CreateTimestamp > DateTime.UtcNow.AddDays(-settings.SubmissionRate.Days))
+			.Select(s => s.CreateTimestamp)
+			.ToListAsync();
+
+		if (subs.Count >= settings.SubmissionRate.Submissions)
+		{
+			return subs.Min().AddDays(settings.SubmissionRate.Days);
+		}
+
+		return null;
+	}
+
+	public async Task<int> GetSubmissionCount(int userId)
+		=> await db.Submissions.CountAsync(s => s.SubmitterId == userId);
+}
+
+public interface ISubmissionDisplay
+{
+	SubmissionStatus Status { get; }
+	DateTime Date { get; }
+}
+
+public record DeleteSubmissionResult(
+	DeleteSubmissionResult.DeleteStatus Status,
+	string SubmissionTitle,
+	string ErrorMessage)
+{
+	public enum DeleteStatus { Success, NotFound, NotAllowed }
+
+	public bool True => Status == DeleteStatus.Success;
+
+	internal static DeleteSubmissionResult NotFound() => new(DeleteStatus.NotFound, "", "");
+
+	internal static DeleteSubmissionResult IsPublished(string submissionTitle) => new(
+		DeleteStatus.NotAllowed,
+		submissionTitle,
+		"Cannot delete a submission that is published");
+
+	internal static DeleteSubmissionResult Success(string submissionTitle)
+		=> new(DeleteStatus.Success, submissionTitle, "");
+}
+
+public record UnpublishResult(
+	UnpublishResult.UnpublishStatus Status,
+	string PublicationTitle,
+	string ErrorMessage)
+{
+	public enum UnpublishStatus { Success, NotFound, NotAllowed }
+
+	internal static UnpublishResult NotFound() => new(UnpublishStatus.NotFound, "", "");
+
+	internal static UnpublishResult HasAwards(string publicationTitle) => new(
+		UnpublishStatus.NotAllowed,
+		publicationTitle,
+		"Cannot unpublish a publication that has awards");
+
+	internal static UnpublishResult Success(string publicationTitle)
+		=> new(UnpublishStatus.Success, publicationTitle, "");
 }

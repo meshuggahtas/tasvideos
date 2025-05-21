@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc.Filters;
-using TASVideos.Data.Entity;
 
 namespace TASVideos.Pages;
 
@@ -7,7 +6,7 @@ public class RequirePermissionAttribute : RequireBase, IAsyncPageFilter
 {
 	public RequirePermissionAttribute(PermissionTo requiredPermission)
 	{
-		RequiredPermissions = new HashSet<PermissionTo> { requiredPermission };
+		RequiredPermissions = [requiredPermission];
 	}
 
 	public RequirePermissionAttribute(bool matchAny, params PermissionTo[] requiredPermissions)
@@ -39,6 +38,7 @@ public class RequirePermissionAttribute : RequireBase, IAsyncPageFilter
 		if ((MatchAny && RequiredPermissions.Any(r => userPerms.Contains(r)))
 			|| RequiredPermissions.IsSubsetOf(userPerms))
 		{
+			SetRequiredPermissionsView(context, RequiredPermissions, MatchAny);
 			await next.Invoke();
 		}
 		else

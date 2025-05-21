@@ -1,5 +1,4 @@
 ﻿using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 
 namespace TASVideos.Extensions;
@@ -30,14 +29,14 @@ public static class ReflectionExtensions
 
 		if (displayAttribute is not null)
 		{
-			return displayAttribute.Description ?? string.Empty;
+			return displayAttribute.Description ?? "";
 		}
 
-		return string.Empty;
+		return "";
 	}
 
 	/// <summary>
-	/// Returns the DisplayAttribute value of a Enum if exists
+	/// Returns the DisplayAttribute value of an Enum if exists
 	/// Else it will return the name of the enum
 	/// If the value is null, an empty string will be returned
 	/// </summary>
@@ -45,7 +44,7 @@ public static class ReflectionExtensions
 	{
 		if (enumValue is null)
 		{
-			return string.Empty;
+			return "";
 		}
 
 		var displayName = enumValue

@@ -1,37 +1,37 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Profile.Models;
-
-namespace TASVideos.Pages.Profile;
+﻿namespace TASVideos.Pages.Profile;
 
 [RequirePermission(PermissionTo.RateMovies)]
-public class UnratedModel : PageModel
+public class UnratedModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
+	[FromQuery]
+	public UnratedRequest Search { get; set; } = new();
 
-	public UnratedModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
+	public PageOf<UnratedMovie, UnratedRequest> UnratedMovies { get; set; } = new([], new());
 
-	public IEnumerable<UnratedMovieModel> UnratedMovies { get; set; } = new List<UnratedMovieModel>();
-
-	public async Task<IActionResult> OnGet()
+	public async Task OnGet()
 	{
 		var userId = User.GetUserId();
-		UnratedMovies = await _db.Publications
+		UnratedMovies = await db.Publications
 			.ThatAreCurrent()
 			.Where(p => p.PublicationRatings.All(pr => pr.UserId != userId))
-			.Select(p => new UnratedMovieModel
-			{
-				Id = p.Id,
-				Title = p.Title,
-			})
-			.ToListAsync();
-
-		return Page();
+			.Select(p => new UnratedMovie { Id = p.Id, Title = p.Title, SystemCode = p.System!.Code, Date = p.CreateTimestamp })
+			.SortedPageOf(Search);
 	}
+
+	public class UnratedMovie
+	{
+		public int Id { get; init; }
+
+		[Sortable]
+		public string SystemCode { get; init; } = "";
+
+		[Sortable]
+		public string Title { get; init; } = "";
+
+		[Sortable]
+		public DateTime Date { get; init; }
+	}
+
+	[PagingDefaults(PageSize = 50, Sort = "Date")]
+	public class UnratedRequest : PagingModel;
 }

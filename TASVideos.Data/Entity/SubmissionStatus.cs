@@ -30,16 +30,30 @@ public enum SubmissionStatus
 	Cancelled,
 
 	[Display(Name = "Playground")]
-	Playground,
+	Playground
 }
 
 public static class SubmissionStatusExtensions
 {
 	public static bool CanBeJudged(this SubmissionStatus status)
-	{
-		return status == SubmissionStatus.New
-			|| status == SubmissionStatus.Delayed
-			|| status == SubmissionStatus.NeedsMoreInfo
-			|| status == SubmissionStatus.JudgingUnderWay;
-	}
+		=> status is SubmissionStatus.New
+			or SubmissionStatus.Delayed
+			or SubmissionStatus.NeedsMoreInfo
+			or SubmissionStatus.JudgingUnderWay;
+
+	public static bool IsWorkInProgress(this SubmissionStatus status)
+		=> status is SubmissionStatus.New
+			or SubmissionStatus.Delayed
+			or SubmissionStatus.NeedsMoreInfo
+			or SubmissionStatus.JudgingUnderWay
+			or SubmissionStatus.Accepted
+			or SubmissionStatus.PublicationUnderway;
+
+	public static bool IsJudgeDecision(this SubmissionStatus status)
+		=> status is SubmissionStatus.Accepted
+			or SubmissionStatus.Rejected
+			or SubmissionStatus.Cancelled
+			or SubmissionStatus.Delayed
+			or SubmissionStatus.NeedsMoreInfo
+			or SubmissionStatus.Playground;
 }

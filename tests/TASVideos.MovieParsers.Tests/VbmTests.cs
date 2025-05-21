@@ -4,14 +4,9 @@
 [TestCategory("VbmParsers")]
 public class VbmTests : BaseParserTests
 {
-	private readonly Vbm _vbmParser;
+	private readonly Vbm _vbmParser = new();
 
-	public override string ResourcesPath { get; } = "TASVideos.MovieParsers.Tests.VbmSampleFiles.";
-
-	public VbmTests()
-	{
-		_vbmParser = new Vbm();
-	}
+	protected override string ResourcesPath => "TASVideos.MovieParsers.Tests.VbmSampleFiles.";
 
 	[TestMethod]
 	public async Task InvalidHeader()
@@ -19,7 +14,6 @@ public class VbmTests : BaseParserTests
 		var result = await _vbmParser.Parse(Embedded("wrongheader.vbm"), EmbeddedLength("wrongheader.vbm"));
 		Assert.IsFalse(result.Success);
 		AssertNoWarnings(result);
-		Assert.IsNotNull(result.Errors);
 		Assert.AreEqual(1, result.Errors.Count());
 	}
 

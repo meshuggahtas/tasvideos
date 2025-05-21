@@ -1,0 +1,31 @@
+﻿@page "{id}"
+@model CatalogModel
+@{
+	ViewData.SetTitle($"Set Cataloging Information for Topic {Model.Title}");
+}
+
+<form client-side-validation="true" method="post">
+	<input asp-for="Title" type="hidden" />
+	<row>
+		<column md="6">
+			<fieldset>
+				<label asp-for="SystemId">System</label>
+				<select asp-for="SystemId" asp-items="@Model.AvailableSystems" data-id="system" data-return-url="@HttpContext.CurrentPathToReturnUrl()"></select>
+				<span asp-validation-for="SystemId"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="GameId">Game</label>
+				<select asp-for="GameId" asp-items="@Model.AvailableGames" data-id="game"></select>
+				<span asp-validation-for="GameId"></span>
+			</fieldset>
+		</column>
+	</row>
+	<form-button-bar>
+		<submit-button></submit-button>
+		<cancel-link asp-page="Index" asp-route-id="@Model.Id"></cancel-link>
+	</form-button-bar>
+</form>
+
+@section Scripts {
+	<script src="/js/catalog.js"></script>
+}

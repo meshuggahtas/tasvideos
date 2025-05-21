@@ -1,35 +1,55 @@
 ﻿@page "{id}/{handler?}"
 @model EditModel
 @{
-	ViewData["Title"] = $"Editing System: {Model.System.Id} {Model.System.Code}";
+	ViewData.SetTitle($"Editing System: {Model.System.Id} {Model.System.Code}");
 }
-<div class="text-end">
+<top-button-bar>
 	<delete-button condition="!Model.InUse"
 					asp-href="/Systems/Edit/@(Model.System.Id)/Delete"
-					warning-message="Are you sure you want to remove this system?">
-		Delete
-	</delete-button>
+					warning-message="Are you sure you want to remove this system?"></delete-button>
 	<span condition="Model.InUse">System in Use</span>
-</div>
-<form method="post">
+</top-button-bar>
+<form client-side-validation="true" method="post">
 	<row>
 		<column lg="6">
-			<label asp-for="System.Code"></label>
-			<input type="text" asp-for="System.Code" class="form-control" />
-			<span asp-validation-for="System.Code" class="text-danger"></span>
+			<fieldset>
+				<label asp-for="System.Code"></label>
+				<input asp-for="System.Code"/>
+				<span asp-validation-for="System.Code"></span>
+			</fieldset>
 		</column>
-		<column lg="6" class="mt-lg-0 mt-3">
-			<label asp-for="System.DisplayName"></label>
-			<input type="text" asp-for="System.DisplayName" class="form-control" />
-			<span asp-validation-for="System.DisplayName" class="text-danger"></span>
+		<column lg="6">
+			<fieldset>
+				<label asp-for="System.DisplayName"></label>
+				<input asp-for="System.DisplayName" />
+				<span asp-validation-for="System.DisplayName"></span>
+			</fieldset>
 		</column>
 	</row>
-	<div class="text-center mt-3">
-		<submit-button class="btn btn-primary"><i class="fa fa-save"></i> Save</submit-button>
-		<a class="btn btn-secondary" asp-page="Index"><i class="fa fa-times"></i> Cancel</a>
-	</div>
+	<form-button-bar>
+		<submit-button></submit-button>
+		<cancel-link asp-page="Index"></cancel-link>
+	</form-button-bar>
 </form>
 
-@section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-}
+<top-button-bar>
+	<h4 class="heading">System Framerates</h4>
+	<add-link asp-page="CreateFramerate" asp-route-systemId="@Model.Id"></add-link>
+</top-button-bar>
+<standard-table>
+	<table-head columns="Framerate,Region,Preliminary,Obsolete,Actions"></table-head>
+	@foreach (var rate in Model.System.SystemFrameRates
+		.OrderBy(r => r.Obsolete)
+		.ThenBy(r => r.FrameRate))
+	{
+		<tr class="@(rate.Obsolete ? "table-info" : "")">
+			<td>@rate.FrameRate</td>
+			<td>@rate.RegionCode</td>
+			<td>@rate.Preliminary</td>
+			<td>@rate.Obsolete</td>
+			<td-action-column>
+				<edit-link class="btn-sm" asp-page="EditFrameRate" asp-route-id="@rate.Id"></edit-link>
+			</td-action-column>
+		</tr>
+	}
+</standard-table>

@@ -1,5 +1,4 @@
-﻿using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc.TagHelpers;
+﻿using Microsoft.AspNetCore.Mvc.TagHelpers;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
 using TASVideos.Data.Helpers;
@@ -71,15 +70,9 @@ public class WikiLinkTagHelper : TagHelper
 	}
 }
 
-[HtmlTargetElement("profile-link")]
-public class ProfileLinkTagHelper : AnchorTagHelper
+public class ProfileLinkTagHelper(IHtmlGenerator htmlGenerator) : AnchorTagHelper(htmlGenerator)
 {
-	public ProfileLinkTagHelper(IHtmlGenerator htmlGenerator)
-		: base(htmlGenerator)
-	{
-	}
-
-	public string Username { get; set; } = "";
+	public string? Username { get; set; }
 
 	public override async Task ProcessAsync(TagHelperContext context, TagHelperOutput output)
 	{
@@ -87,7 +80,7 @@ public class ProfileLinkTagHelper : AnchorTagHelper
 		if (innerContent.IsEmptyOrWhiteSpace)
 		{
 			output.Content.Clear();
-			output.Content.Append(Username);
+			output.Content.Append(Username ?? "");
 		}
 
 		output.TagName = "a";

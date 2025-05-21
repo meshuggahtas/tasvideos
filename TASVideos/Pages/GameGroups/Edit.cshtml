@@ -1,36 +1,48 @@
-﻿@page "{id?}"
+@page "{id?}"
 @model EditModel
 @{
-	ViewData["Title"] = Model.Id.HasValue
-		? $"Editing Game Group #{Model.Id} TODO"
-		: "Create a new Game Group entry";
-	string saveBtnName = Model.Id.HasValue ? "Save" : "Create";
+	ViewData.SetTitle(Model.Id.HasValue
+		? $"Editing Game Group #{Model.Id} {Model.Name}"
+		: "Create a new Game Group entry");
 }
-<form-group>
-	<delete-button condition="@Model.CanDelete" asp-href="/GameGroups/Edit/@(Model.Id ?? 0)?handler=Delete" class="float-end">Delete</delete-button>
-</form-group>
-<form method="post">
+<top-button-bar>
+	<delete-button condition="@Model.CanDelete" asp-href="/GameGroups/Edit/@(Model.Id ?? 0)?handler=Delete"></delete-button>
+</top-button-bar>
+<form client-side-validation="true" method="post">
 	<row>
 		<column md="6">
-			<form-group>
-				<label asp-for="GameGroup.Name"></label>
-				<input type="text" asp-for="GameGroup.Name" class="form-control" />
-				<span asp-validation-for="GameGroup.Name" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="GameGroup.SearchKey"></label>
-				<input type="text" asp-for="GameGroup.SearchKey" class="form-control" />
-				<span asp-validation-for="GameGroup.SearchKey" class="text-danger"></span>
-			</form-group>
+			<fieldset>
+				<label asp-for="Name"></label>
+				<input asp-for="Name" />
+				<span asp-validation-for="Name"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Abbreviation"></label>
+				<div class="input-group">
+					<input asp-for="Abbreviation" />
+					<a asp-page="/Wiki/Referrers"
+					   asp-route-path="GameGroups/@Model.Abbreviation"
+					   asp-route-returnurl="@HttpContext.CurrentPathToReturnUrl()"
+					   class="btn btn-primary">
+						Referrers
+					</a>
+				</div>
+				<span asp-validation-for="Abbreviation"></span>
+			</fieldset>
+			<fieldset>
+				<wiki-edit-helper></wiki-edit-helper>
+				<label asp-for="Description"></label>
+				<wiki-textarea asp-for="Description" rows="4"></wiki-textarea>
+				<span asp-validation-for="Description"></span>
+				@await Html.RenderWiki(SystemWiki.WikiEditHelp)
+			</fieldset>
 		</column>
 	</row>
 	<form-button-bar>
-		<button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> @saveBtnName</button>
-		<a condition="@(!Model.Id.HasValue)" asp-page="List" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-		<a condition="Model.Id.HasValue" asp-page="Index" asp-route-id="@Model.Id ?? 0" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
+		<preview-button></preview-button>
+		<submit-button edit="@Model.Id.HasValue"></submit-button>
+		<cancel-link asp-page="@(Model.Id.HasValue ? "Index" : "List")" asp-route-id="@Model.Id"></cancel-link>
+		<minor-edit></minor-edit>
 	</form-button-bar>
 </form>
-
-@section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-}
+<wiki-preview></wiki-preview>

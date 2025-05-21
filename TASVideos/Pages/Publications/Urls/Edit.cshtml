@@ -1,0 +1,49 @@
+﻿@page "/Publications/{publicationId}/Urls/Edit/{urlId?}/{handler?}"
+@model EditUrlsModel
+@{
+	string saveBtnName;
+	string iconClass;
+	if (Model.UrlId.HasValue)
+	{
+		ViewData.SetTitle($"Editing URL #{Model.UrlId} for {Model.Title}");
+		saveBtnName = "Save";
+		iconClass = "fa fa-save";
+	}
+	else
+	{
+		ViewData.SetTitle("Add A New URL");
+		saveBtnName = "Add";
+		iconClass = "fa fa-plus";
+	}
+}
+
+<form client-side-validation="true" method="post">
+	<input type="hidden" asp-for="Title" />
+	<row>
+		<column lg="6">
+			<fieldset>
+				<label asp-for="Type"></label>
+				<select asp-for="Type" asp-items="EditUrlsModel.AvailableTypes" data-id="url-types"></select>
+				<span asp-validation-for="Type"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="CurrentUrl">URL</label>
+				<input asp-for="CurrentUrl" data-id="url" />
+				<span asp-validation-for="CurrentUrl"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="AltTitle"></label>
+				<input asp-for="AltTitle" />
+				<span asp-validation-for="AltTitle"></span>
+			</fieldset>
+			<form-button-bar>
+				<submit-button><span class="@iconClass"></span> @saveBtnName</submit-button>
+				<cancel-link asp-page="List" asp-route-PublicationId="@Model.PublicationId"></cancel-link>
+			</form-button-bar>
+		</column>
+	</row>
+</form>
+
+@section Scripts {
+	<script src="/js/publication-url-edit.js"></script>
+}

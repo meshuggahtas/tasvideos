@@ -1,9 +1,8 @@
 ﻿@page
 @{
-	ViewData["Title"] = "Access denied";
+	ViewData.SetTitle("Access denied");
 }
 
-<header class="text-danger">
-	<h2>@ViewData["Title"]</h2>
-	<p>You do not have access to this resource.</p>
-</header>
+<danger-alert class="text-danger">
+	<h4>You do not have access to this resource.</h4>
+</danger-alert>

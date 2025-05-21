@@ -4,14 +4,9 @@
 [TestCategory("MarParsers")]
 public class MarTests : BaseParserTests
 {
-	private readonly Mar _marParser;
+	private readonly Mar _marParser = new();
 
-	public override string ResourcesPath { get; } = "TASVideos.MovieParsers.Tests.MarSampleFiles.";
-
-	public MarTests()
-	{
-		_marParser = new Mar();
-	}
+	protected override string ResourcesPath => "TASVideos.MovieParsers.Tests.MarSampleFiles.";
 
 	[TestMethod]
 	public async Task InvalidHeader()
@@ -19,7 +14,6 @@ public class MarTests : BaseParserTests
 		var result = await _marParser.Parse(Embedded("wrongheader.mar"), EmbeddedLength("wrongheader.mar"));
 		Assert.IsFalse(result.Success);
 		AssertNoWarnings(result);
-		Assert.IsNotNull(result.Errors);
 		Assert.AreEqual(1, result.Errors.Count());
 	}
 

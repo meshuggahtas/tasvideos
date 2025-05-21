@@ -3,18 +3,13 @@
 /// <summary>
 /// An implementation of <seealso cref="IParseResult"/> that can be used when an error occurs.
 /// </summary>
-internal class ErrorResult : IParseResult
+internal class ErrorResult(string errorMsg) : IParseResult
 {
-	public ErrorResult(string errorMsg)
-	{
-		Errors = new[] { errorMsg };
-	}
-
 	public bool Success => false;
-	public IEnumerable<string> Errors { get; internal set; }
+	public IEnumerable<string> Errors { get; } = [errorMsg];
 
-	public IEnumerable<ParseWarnings> Warnings => new List<ParseWarnings>();
-	public string FileExtension { get; internal set; } = "";
+	public IEnumerable<ParseWarnings> Warnings => [];
+	public string FileExtension { get; internal init; } = "";
 	public RegionType Region => RegionType.Unknown;
 	public int Frames => 0;
 	public string SystemCode => "";
@@ -22,4 +17,6 @@ internal class ErrorResult : IParseResult
 	public MovieStartType StartType => MovieStartType.PowerOn;
 	public double? FrameRateOverride => null;
 	public long? CycleCount => null;
+	public string? Annotations => null;
+	public Dictionary<HashType, string> Hashes => [];
 }

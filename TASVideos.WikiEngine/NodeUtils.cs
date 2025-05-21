@@ -2,15 +2,10 @@
 
 namespace TASVideos.WikiEngine.AST;
 
-public class InternalLinkInfo
+public class InternalLinkInfo(string link, string excerpt)
 {
-	public string Link { get; set; }
-	public string Excerpt { get; set; }
-	public InternalLinkInfo(string link, string excerpt)
-	{
-		Link = link;
-		Excerpt = excerpt;
-	}
+	public string Link { get; set; } = link;
+	public string Excerpt { get; set; } = excerpt;
 }
 
 public static class NodeUtils
@@ -31,7 +26,7 @@ public static class NodeUtils
 		}
 	}
 
-	public static IEnumerable<INode> Find(IEnumerable<INode> input, Func<INode, bool> predicate)
+	public static IEnumerable<INode> Find(IEnumerable<INode> input, Func<INode, bool> predicate, Func<INodeWithChildren, bool>? exceptWhenAncestor = null)
 	{
 		foreach (var n in input)
 		{
@@ -42,9 +37,12 @@ public static class NodeUtils
 
 			if (n is INodeWithChildren cc)
 			{
-				foreach (var c in Find(cc.Children, predicate))
+				if (exceptWhenAncestor is null || !exceptWhenAncestor(cc))
 				{
-					yield return c;
+					foreach (var c in Find(cc.Children, predicate, exceptWhenAncestor))
+					{
+						yield return c;
+					}
 				}
 			}
 		}

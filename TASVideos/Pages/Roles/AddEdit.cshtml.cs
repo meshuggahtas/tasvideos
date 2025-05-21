@@ -1,74 +1,28 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Roles.Models;
-
-namespace TASVideos.Pages.Roles;
+﻿namespace TASVideos.Pages.Roles;
 
 [RequirePermission(PermissionTo.EditRoles)]
-public class AddEditModel : BasePageModel
+public class AddEditModel(ApplicationDbContext db, IRoleService roleService, IExternalMediaPublisher publisher) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly ExternalMediaPublisher _publisher;
-
-	public AddEditModel(
-		ApplicationDbContext db,
-		ExternalMediaPublisher publisher)
-	{
-		_db = db;
-		_publisher = publisher;
-	}
-
 	[FromRoute]
 	public int? Id { get; set; }
 
+	[FromQuery]
+	public int? CopyFrom { get; set; }
+
+	public bool IsInUse { get; set; }
+
 	[BindProperty]
-	public RoleEditModel Role { get; set; } = new();
+	public RoleEdit Role { get; set; } = new();
 
-	[Display(Name = "Available Permissions")]
-	public IEnumerable<SelectListItem> AvailablePermissions => PermissionsSelectList;
-
-	[Display(Name = "Available Assignable Permissions")]
-	public IEnumerable<SelectListItem> AvailableAssignablePermissions { get; set; } = new List<SelectListItem>();
-
-	private static IEnumerable<SelectListItem> PermissionsSelectList =>
-		Enum.GetValues(typeof(PermissionTo))
-			.Cast<PermissionTo>()
-			.Select(p => new SelectListItem
-			{
-				Value = ((int)p).ToString(),
-				Text = p.EnumDisplayName()
-			})
-			.ToList();
+	public List<SelectListItem> AvailableAssignablePermissions { get; set; } = [];
 
 	public async Task<IActionResult> OnGet()
 	{
 		if (Id.HasValue)
 		{
-			var role = await _db.Roles
+			var role = await db.Roles
 				.Where(r => r.Id == Id.Value)
-				.Select(r => new RoleEditModel
-				{
-					Name = r.Name,
-					IsDefault = r.IsDefault,
-					Description = r.Description,
-					AutoAssignPostCount = r.AutoAssignPostCount,
-					AutoAssignPublications = r.AutoAssignPublications,
-					Links = r.RoleLinks
-						.Select(rl => rl.Link)
-						.ToList(),
-					SelectedPermissions = r.RolePermission
-						.Select(rp => (int)rp.PermissionId)
-						.ToList(),
-					SelectedAssignablePermissions = r.RolePermission
-						.Where(rp => rp.CanAssign)
-						.Select(rp => (int)rp.PermissionId)
-						.ToList()
-				})
+				.ToRoleEditModel()
 				.SingleOrDefaultAsync();
 
 			if (role is null)
@@ -77,12 +31,25 @@ public class AddEditModel : BasePageModel
 			}
 
 			Role = role;
-			ViewData["IsInUse"] = !await IsInUse(Id.Value);
+			IsInUse = !await roleService.IsInUse(Id.Value);
 			SetAvailableAssignablePermissions();
 		}
 		else
 		{
-			ViewData["IsInUse"] = false;
+			if (CopyFrom.HasValue)
+			{
+				var role = await db.Roles
+					.Where(r => r.Id == CopyFrom.Value)
+					.ToRoleEditModel()
+					.SingleOrDefaultAsync();
+				if (role is not null)
+				{
+					role.Name += " (Copied From)";
+					Role = role;
+				}
+			}
+
+			IsInUse = false;
 		}
 
 		return Page();
@@ -96,20 +63,19 @@ public class AddEditModel : BasePageModel
 			return Page();
 		}
 
-		Role.Links = Role.Links.Where(l => !string.IsNullOrWhiteSpace(l));
+		Role.RelatedLinks = Role.RelatedLinks.Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
 		if (!ModelState.IsValid)
 		{
 			AvailableAssignablePermissions = Role.SelectedPermissions
-			.Select(sp => new SelectListItem
-			{
-				Text = ((PermissionTo)sp).ToString(),
-				Value = sp.ToString()
-			});
+				.Cast<PermissionTo>()
+				.ToDropDown()
+				.ToList();
+
 			return Page();
 		}
 
 		await AddUpdateRole(Role);
-		await ConcurrentSave(_db, $"Role {Id} updated", $"Unable to update Role {Id}");
+		SetMessage(await db.TrySaveChanges(), $"Role {Id} updated", $"Unable to update Role {Id}");
 
 		return BasePageRedirect("List");
 	}
@@ -126,21 +92,18 @@ public class AddEditModel : BasePageModel
 			return AccessDenied();
 		}
 
-		if (await IsInUse(Id.Value))
+		if (await roleService.IsInUse(Id.Value))
 		{
 			ErrorStatusMessage($"Role {Id} cannot be deleted because it is in use by at least 1 user");
 			return BasePageRedirect("List");
 		}
 
-		_db.Roles.Attach(new Role { Id = Id.Value }).State = EntityState.Deleted;
-
-		var result = await ConcurrentSave(_db, $"Role {Id} deleted", $"Unable to delete Role {Id}");
-		if (result)
+		db.Roles.Attach(new Role { Id = Id.Value }).State = EntityState.Deleted;
+		var result = await db.TrySaveChanges();
+		SetMessage(result, $"Role {Id} deleted", $"Unable to delete Role {Id}");
+		if (result.IsSuccess())
 		{
-			await _publisher.SendUserManagement(
-				$"Role {Id} deleted by {User.Name()}",
-				"",
-				"Roles/List");
+			await publisher.SendAdminMessage(PostGroups.UserManagement, $"Role {Id} deleted by {User.Name()}");
 		}
 
 		return BasePageRedirect("List");
@@ -148,47 +111,38 @@ public class AddEditModel : BasePageModel
 
 	public async Task<IActionResult> OnGetRolesThatCanBeAssignedBy(int[] ids)
 	{
-		var result = await _db.Roles
-			.ThatCanBeAssignedBy(ids.Select(p => (PermissionTo)p))
-			.Select(r => r.Name)
-			.ToListAsync();
-
-		return new JsonResult(result);
+		var result = await roleService.GetRolesThatCanBeAssignedBy(ids.Select(p => (PermissionTo)p));
+		return Json(result);
 	}
 
 	private void SetAvailableAssignablePermissions()
 	{
-		AvailableAssignablePermissions = Role.SelectedPermissions
-			.Select(sp => new SelectListItem
-			{
-				Text = ((PermissionTo)sp).ToString(),
-				Value = sp.ToString()
-			});
+		AvailableAssignablePermissions = [.. Role.SelectedPermissions
+			.Cast<PermissionTo>()
+			.ToDropDown()
+			.OrderBy(sp => sp.Text)
+		];
 	}
 
-	private async Task AddUpdateRole(RoleEditModel model)
+	private async Task AddUpdateRole(RoleEdit model)
 	{
+		var edit = false;
 		Role role;
 		if (Id.HasValue)
 		{
-			role = await _db.Roles.SingleAsync(r => r.Id == Id);
-			_db.RolePermission.RemoveRange(_db.RolePermission.Where(rp => rp.RoleId == Id));
-			_db.RoleLinks.RemoveRange(_db.RoleLinks.Where(rp => rp.Role!.Id == Id));
-			await _db.SaveChangesAsync();
-
-			await _publisher.SendUserManagement(
-				$"Role {model.Name} updated by {User.Name()}",
-				"",
-				$"Roles/{model.Name}");
+			edit = true;
+			role = await db.Roles
+				.Include(r => r.RolePermission)
+				.Include(r => r.RoleLinks)
+				.SingleAsync(r => r.Id == Id);
+			db.RolePermission.RemoveRange(db.RolePermission.Where(rp => rp.RoleId == Id));
+			db.RoleLinks.RemoveRange(db.RoleLinks.Where(rp => rp.Role!.Id == Id));
+			await db.SaveChangesAsync();
 		}
 		else
 		{
 			role = new Role();
-			_db.Roles.Attach(role);
-			await _publisher.SendUserManagement(
-				$"New Role {model.Name} added by {User.Name()}",
-				"",
-				$"Roles/{model.Name}");
+			db.Roles.Attach(role);
 		}
 
 		role.Name = model.Name;
@@ -197,7 +151,7 @@ public class AddEditModel : BasePageModel
 		role.AutoAssignPostCount = model.AutoAssignPostCount;
 		role.AutoAssignPublications = model.AutoAssignPublications;
 
-		await _db.RolePermission.AddRangeAsync(model.SelectedPermissions
+		role.RolePermission.AddRange(model.SelectedPermissions
 			.Select(p => new RolePermission
 			{
 				RoleId = role.Id,
@@ -205,15 +159,32 @@ public class AddEditModel : BasePageModel
 				CanAssign = model.SelectedAssignablePermissions.Contains(p)
 			}));
 
-		await _db.RoleLinks.AddRangeAsync(model.Links.Select(rl => new RoleLink
+		role.RoleLinks.AddRange(model.RelatedLinks.Select(rl => new RoleLink
 		{
 			Link = rl,
 			Role = role
 		}));
+
+		var action = edit ? "updated" : "added";
+		await publisher.SendRoleManagement($"Role [{model.Name}]({{0}}) {action} by {User.Name()}", model.Name);
 	}
 
-	private async Task<bool> IsInUse(int roleId)
+	public class RoleEdit
 	{
-		return await _db.Users.AnyAsync(u => u.UserRoles.Any(ur => ur.RoleId == roleId));
+		[StringLength(50)]
+		public string Name { get; set; } = "";
+		public bool IsDefault { get; init; }
+
+		[StringLength(300)]
+		public string Description { get; init; } = "";
+
+		[Range(1, 9999)]
+		public int? AutoAssignPostCount { get; init; }
+		public bool AutoAssignPublications { get; init; }
+
+		[MinLength(1)]
+		public List<int> SelectedPermissions { get; init; } = [];
+		public List<int> SelectedAssignablePermissions { get; init; } = [];
+		public List<string> RelatedLinks { get; set; } = [];
 	}
 }

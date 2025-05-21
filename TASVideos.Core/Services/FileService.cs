@@ -1,19 +1,25 @@
 ﻿using System.IO.Compression;
-using TASVideos.Data.Entity;
+using SharpZipArchive = SharpCompress.Archives.Zip.ZipArchive;
 
 namespace TASVideos.Core.Services;
 
 public interface IFileService
 {
 	Task<CompressedFile> Compress(byte[] contents);
+	Task<string> DecompressGzipToString(byte[] contents);
 
 	/// <summary>
 	/// Unzips the file, and re-zips it while renaming the contained file
 	/// </summary>
 	Task<byte[]> CopyZip(byte[] zipBytes, string fileName);
+	Task<byte[]> ZipFile(byte[] fileBytes, string fileName);
+
+	Task<ZippedFile?> GetSubmissionFile(int id);
+	Task<ZippedFile?> GetPublicationFile(int id);
+	Task<ZippedFile?> GetAdditionalPublicationFile(int publicationId, int fileId);
 }
 
-internal class FileService : IFileService
+internal class FileService(ApplicationDbContext db) : IFileService
 {
 	public async Task<CompressedFile> Compress(byte[] contents)
 	{
@@ -45,28 +51,73 @@ internal class FileService : IFileService
 			contents);
 	}
 
+	public async Task<string> DecompressGzipToString(byte[] contents)
+	{
+		await using var ms = new MemoryStream(contents);
+		await using var gz = new SharpCompress.Compressors.Deflate.GZipStream(ms, SharpCompress.Compressors.CompressionMode.Decompress);
+		using var unzip = new StreamReader(gz);
+		return await unzip.ReadToEndAsync();
+	}
+
 	public async Task<byte[]> CopyZip(byte[] zipBytes, string fileName)
 	{
 		await using var submissionFileStream = new MemoryStream(zipBytes);
-		using var submissionZipArchive = new ZipArchive(submissionFileStream, ZipArchiveMode.Read);
+		using var submissionZipArchive = SharpZipArchive.Open(submissionFileStream);
 		var entries = submissionZipArchive.Entries.ToList();
 		var single = entries.First();
 
 		await using var singleStream = new MemoryStream();
-		await using var stream = single.Open();
+		await using var stream = single.OpenEntryStream();
 		await stream.CopyToAsync(singleStream);
 		var fileBytes = singleStream.ToArray();
 
+		return await ZipFile(fileBytes, fileName);
+	}
+
+	public async Task<byte[]> ZipFile(byte[] fileBytes, string fileName)
+	{
 		await using var outStream = new MemoryStream();
-		using (var archive = new ZipArchive(outStream, ZipArchiveMode.Create, true))
+		using (var archive = SharpZipArchive.Create())
 		{
-			var fileInArchive = archive.CreateEntry(fileName, CompressionLevel.Optimal);
-			await using var entryStream = fileInArchive.Open();
-			await using var fileToCompressStream = new MemoryStream(fileBytes);
-			await fileToCompressStream.CopyToAsync(entryStream);
+			await using var inStream = new MemoryStream(fileBytes, writable: false);
+			archive.AddEntry(fileName, inStream, inStream.Length);
+			archive.SaveTo(outStream);
 		}
 
 		return outStream.ToArray();
+	}
+
+	public async Task<ZippedFile?> GetSubmissionFile(int id)
+	{
+		var data = await db.Submissions
+			.Where(s => s.Id == id)
+			.Select(s => s.MovieFile)
+			.SingleOrDefaultAsync();
+
+		return data is not null
+			? new ZippedFile(data, $"submission{id}")
+			: null;
+	}
+
+	public async Task<ZippedFile?> GetPublicationFile(int id)
+	{
+		return await db.Publications
+			.Where(p => p.Id == id)
+			.Select(p => new ZippedFile(p.MovieFile, p.MovieFileName))
+			.SingleOrDefaultAsync();
+	}
+
+	public async Task<ZippedFile?> GetAdditionalPublicationFile(int publicationId, int fileId)
+	{
+		var result = await db.PublicationFiles
+			.Where(pf => pf.PublicationId == publicationId)
+			.Where(pf => pf.Id == fileId)
+			.Select(pf => new { pf.FileData, pf.Path })
+			.SingleOrDefaultAsync();
+
+		return result?.FileData is not null
+			? new ZippedFile(result.FileData, result.Path)
+			: null;
 	}
 }
 
@@ -75,3 +126,5 @@ public record CompressedFile(
 	int CompressedSize,
 	Compression Type,
 	byte[] Data);
+
+public record ZippedFile(byte[] Data, string Path);

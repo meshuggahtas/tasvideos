@@ -1,56 +1,38 @@
 ﻿using System.Reflection;
-using Microsoft.AspNetCore.Authorization;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Wiki.Models;
 
 namespace TASVideos.Pages.Wiki;
 
 [RequirePermission(PermissionTo.EditWikiPages)]
-public class SiteMapModel : BasePageModel
+public class SiteMapModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly IWikiPages _wikiPages;
-
 	private static readonly List<SiteMapEntry> CorePages = Assembly
 		.GetAssembly(typeof(SiteMapModel))
 		!.GetTypes()
 		.Where(type => typeof(BasePageModel).IsAssignableFrom(type))
 		.Where(type => type != typeof(BasePageModel))
-		.Select(t => new SiteMapEntry
-		{
-			PageName = t.Namespace
+		.Select(t => new SiteMapEntry(
+			t.Namespace
 				?.Replace("TASVideos.Pages.", "")
 				.Replace(".", "/") + "/"
 				+ t.Name.Replace("Model", ""),
-			IsWiki = false,
-			AccessRestriction = AccessRestriction(t)
-		})
+			false,
+			AccessRestriction(t)))
 		.ToList();
 
-	public SiteMapModel(IWikiPages wikiPages)
-	{
-		_wikiPages = wikiPages;
-	}
-
-	public List<SiteMapEntry> Map { get; set; } = new();
+	public List<SiteMapEntry> Map { get; set; } = [];
 
 	public void OnGet()
 	{
-		Map = CorePages.ToList();
-		var wikiPages = _wikiPages.Query
+		var wikiPages = db.WikiPages
 			.ThatAreSubpagesOf("")
 			.Where(w => !w.PageName.StartsWith("InternalSystem"))
 			.Select(w => w.PageName)
 			.ToList();
 
-		Map.AddRange(wikiPages
+		Map = CorePages.Concat(wikiPages
 			.Distinct()
-			.Select(p => new SiteMapEntry
-			{
-				PageName = p,
-				IsWiki = true,
-				AccessRestriction = "Anonymous"
-			}));
+			.Select(p => new SiteMapEntry(p, true, "Anonymous")))
+			.ToList();
 	}
 
 	private static string AccessRestriction(MemberInfo type)
@@ -81,4 +63,6 @@ public class SiteMapModel : BasePageModel
 
 		return "Unknown";
 	}
+
+	public record SiteMapEntry(string PageName, bool IsWiki, string AccessRestriction);
 }

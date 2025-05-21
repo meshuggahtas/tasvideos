@@ -1,18 +1,13 @@
-﻿using TASVideos.MovieParsers.Result;
-
-namespace TASVideos.MovieParsers.Parsers;
+﻿namespace TASVideos.MovieParsers.Parsers;
 
 [FileExtension("wtf")]
-internal class Wtf : ParserBase, IParser
+internal class Wtf : Parser, IParser
 {
-	public override string FileExtension => "wtf";
-
 	public async Task<IParseResult> Parse(Stream file, long length)
 	{
-		var result = new ParseResult
+		var result = new SuccessResult(FileExtension)
 		{
 			Region = RegionType.Ntsc,
-			FileExtension = FileExtension,
 			SystemCode = SystemCodes.Windows,
 			Frames = (int)((length - 1024) / 8)
 		};
@@ -21,16 +16,16 @@ internal class Wtf : ParserBase, IParser
 		var signature = br.ReadInt32(); // 0x66 0x54 0x77 0x02
 		if (signature != 41374822)
 		{
-			return new ErrorResult("Invalid file format, does not seem to be a .wtf");
+			return InvalidFormat();
 		}
 
 		br.ReadInt32(); // input frames
 		result.RerecordCount = br.ReadInt32();
 		br.ReadBytes(8); // keyboard type
 		var fps = br.ReadUInt32();
-		if (fps > 0)
+		if (fps > 1)
 		{
-			result.FrameRateOverride = fps;
+			result.FrameRateOverride = fps - 1;
 		}
 
 		return await Task.FromResult(result);

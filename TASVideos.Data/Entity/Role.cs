@@ -1,16 +1,22 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using TASVideos.Data.AutoHistory;
 
 namespace TASVideos.Data.Entity;
 
+[IncludeInAutoHistory]
 public class Role : IdentityRole<int>, ITrackable
 {
+	public new string Name
+	{
+		get => base.Name!;
+		set => base.Name = value;
+	}
+
 	/// <summary>
-	/// Gets or sets a value indicating whether or not the role is automatically assigned to new users.
+	/// Gets or sets a value indicating whether the role is automatically assigned to new users.
 	/// </summary>
 	public bool IsDefault { get; set; }
 
-	[Required]
-	[StringLength(300)]
 	public string Description { get; set; } = "";
 
 	/// <summary>
@@ -21,33 +27,25 @@ public class Role : IdentityRole<int>, ITrackable
 	public int? AutoAssignPostCount { get; set; }
 
 	/// <summary>
-	/// Gets or sets a value indicating whether or not the role should be auto-assigned
+	/// Gets or sets a value indicating whether the role should be auto-assigned
 	/// when an author gets a publication.
 	/// </summary>
 	public bool AutoAssignPublications { get; set; }
 
 	public DateTime CreateTimestamp { get; set; }
-	public string? CreateUserName { get; set; }
 
 	public DateTime LastUpdateTimestamp { get; set; }
-	public string? LastUpdateUserName { get; set; }
 
-	public virtual ICollection<RolePermission> RolePermission { get; set; } = new HashSet<RolePermission>();
-	public virtual ICollection<UserRole> UserRole { get; set; } = new HashSet<UserRole>();
-	public virtual ICollection<RoleLink> RoleLinks { get; set; } = new HashSet<RoleLink>();
+	public ICollection<RolePermission> RolePermission { get; init; } = [];
+	public ICollection<UserRole> UserRole { get; init; } = [];
+	public ICollection<RoleLink> RoleLinks { get; init; } = [];
 }
 
 public static class RoleExtensions
 {
 	public static IQueryable<Role> ThatCanBeAssignedBy(this IQueryable<Role> query, IEnumerable<PermissionTo> permissions)
-	{
-		return query
-			.Where(r => r.RolePermission
+		=> query.Where(r => r.RolePermission
 				.All(rp => permissions.Contains(rp.PermissionId)));
-	}
 
-	public static IQueryable<Role> ThatAreDefault(this IQueryable<Role> query)
-	{
-		return query.Where(r => r.IsDefault);
-	}
+	public static IQueryable<Role> ThatAreDefault(this IQueryable<Role> query) => query.Where(r => r.IsDefault);
 }

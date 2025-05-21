@@ -4,14 +4,9 @@
 [TestCategory("LsmvParsers")]
 public class LsmvTests : BaseParserTests
 {
-	private readonly Lsmv _lsmvParser;
+	private readonly Lsmv _lsmvParser = new();
 
-	public override string ResourcesPath { get; } = "TASVideos.MovieParsers.Tests.LsmvSampleFiles.";
-
-	public LsmvTests()
-	{
-		_lsmvParser = new Lsmv();
-	}
+	protected override string ResourcesPath => "TASVideos.MovieParsers.Tests.LsmvSampleFiles.";
 
 	[TestMethod]
 	public async Task Errors()
@@ -19,7 +14,6 @@ public class LsmvTests : BaseParserTests
 		var result = await _lsmvParser.Parse(Embedded("noinputlog.lsmv"), EmbeddedLength("noinputlog.lsmv"));
 		Assert.IsFalse(result.Success);
 		AssertNoWarnings(result);
-		Assert.IsNotNull(result.Errors);
 		Assert.AreEqual(1, result.Errors.Count());
 	}
 
@@ -29,7 +23,6 @@ public class LsmvTests : BaseParserTests
 		var result = await _lsmvParser.Parse(Embedded("savestate.lsmv"), EmbeddedLength("savestate.lsmv"));
 		Assert.IsFalse(result.Success);
 		AssertNoWarnings(result);
-		Assert.IsNotNull(result.Errors);
 		Assert.AreEqual(1, result.Errors.Count());
 	}
 
@@ -57,7 +50,6 @@ public class LsmvTests : BaseParserTests
 		var result = await _lsmvParser.Parse(Embedded("norerecordentry.lsmv"), EmbeddedLength("norerecordentry.lsmv"));
 		Assert.IsTrue(result.Success);
 		AssertNoErrors(result);
-		Assert.IsNotNull(result.Warnings);
 		Assert.AreEqual(1, result.Warnings.Count());
 	}
 
@@ -67,7 +59,6 @@ public class LsmvTests : BaseParserTests
 		var result = await _lsmvParser.Parse(Embedded("emptyrerecordentry.lsmv"), EmbeddedLength("emptyrerecordentry.lsmv"));
 		Assert.IsTrue(result.Success);
 		AssertNoErrors(result);
-		Assert.IsNotNull(result.Warnings);
 		Assert.AreEqual(1, result.Warnings.Count());
 	}
 
@@ -77,7 +68,6 @@ public class LsmvTests : BaseParserTests
 		var result = await _lsmvParser.Parse(Embedded("invalidrerecordentry.lsmv"), EmbeddedLength("invalidrerecordentry.lsmv"));
 		Assert.IsTrue(result.Success);
 		AssertNoErrors(result);
-		Assert.IsNotNull(result.Warnings);
 		Assert.AreEqual(1, result.Warnings.Count());
 	}
 
@@ -96,7 +86,6 @@ public class LsmvTests : BaseParserTests
 		var result = await _lsmvParser.Parse(Embedded("gametype-missing.lsmv"), EmbeddedLength("gametype-missing.lsmv"));
 		Assert.IsFalse(result.Success);
 		AssertNoWarnings(result);
-		Assert.IsNotNull(result.Errors);
 		Assert.AreEqual(1, result.Errors.Count());
 	}
 
@@ -107,7 +96,6 @@ public class LsmvTests : BaseParserTests
 		Assert.IsTrue(result.Success);
 		Assert.AreEqual(SystemCodes.Snes, result.SystemCode);
 		Assert.AreEqual(RegionType.Ntsc, result.Region);
-		Assert.IsNotNull(result.Warnings);
 		Assert.AreEqual(2, result.Warnings.Count());
 		AssertNoErrors(result);
 	}

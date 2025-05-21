@@ -2,6 +2,4 @@
 
 namespace TASVideos.Data.Entity;
 
-public class UserLogin : IdentityUserLogin<int>
-{
-}
+public class UserLogin : IdentityUserLogin<int>;

@@ -1,30 +1,11 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.Email;
+﻿using TASVideos.Core.Services.Email;
 
 namespace TASVideos.Pages.Profile;
 
 [Authorize]
-public class ChangeEmailModel : BasePageModel
+public class ChangeEmailModel(IUserManager userManager, ICacheService cache, IEmailService emailService) : BasePageModel
 {
-	private readonly UserManager _userManager;
-	private readonly ICacheService _cache;
-	private readonly IEmailService _emailService;
-
-	public ChangeEmailModel(
-		UserManager userManager,
-		ICacheService cache,
-		IEmailService emailService)
-	{
-		_userManager = userManager;
-		_cache = cache;
-		_emailService = emailService;
-	}
-
 	[BindProperty]
-	[Display(Name = "Current Email")]
 	public string CurrentEmail { get; set; } = "";
 
 	[BindProperty]
@@ -33,21 +14,13 @@ public class ChangeEmailModel : BasePageModel
 	[Required]
 	[EmailAddress]
 	[BindProperty]
-	[Display(Name = "New Email")]
-	public string? NewEmail { get; set; }
+	public string NewEmail { get; set; } = "";
 
-	public async Task<IActionResult> OnGet()
+	public async Task OnGet()
 	{
-		var user = await _userManager.GetUserAsync(User);
-		if (user is null)
-		{
-			return AccessDenied();
-		}
-
+		var user = await userManager.GetRequiredUser(User);
 		CurrentEmail = user.Email;
 		IsEmailConfirmed = user.EmailConfirmed;
-
-		return Page();
 	}
 
 	public async Task<IActionResult> OnPost()
@@ -57,23 +30,17 @@ public class ChangeEmailModel : BasePageModel
 			return Page();
 		}
 
-		var user = await _userManager.GetUserAsync(User);
-		if (user is null)
-		{
-			return AccessDenied();
-		}
-
-		var token = await _userManager.GenerateChangeEmailTokenAsync(user, NewEmail);
+		var token = await userManager.GenerateChangeEmailToken(User, NewEmail);
 
 		if (string.IsNullOrWhiteSpace(token))
 		{
 			return BadRequest("Error generating change email token");
 		}
 
-		_cache.Set(token, NewEmail);
+		cache.Set(token, NewEmail);
 
-		var callbackUrl = Url.EmailChangeConfirmationLink(token, Request.Scheme);
-		await _emailService.EmailConfirmation(NewEmail!, callbackUrl);
+		var callbackUrl = Url.EmailChangeConfirmationLink(token);
+		await emailService.EmailConfirmation(NewEmail, callbackUrl);
 
 		return RedirectToPage("EmailConfirmationSent");
 	}

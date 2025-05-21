@@ -1,4 +1,12 @@
-﻿function searchUsers(searchBoxElemId) {
+﻿document.addEventListener("DOMContentLoaded", wireUpUserSearchBoxes);
+function wireUpUserSearchBoxes() {
+	const userSearches = Array.from(document.querySelectorAll('[data-user-search="true"]'));
+	userSearches.forEach(search => {
+		searchUsers(search.id);
+	})
+}
+
+function searchUsers(searchBoxElemId) {
 	const searchBoxElem = document.getElementById(searchBoxElemId);
 	const formElem = searchBoxElem.closest("form");
 	const submitBtnElem = formElem.querySelector("button[type='Submit']");
@@ -9,11 +17,22 @@
 
 	const validNames = new Set;
 	const nameLists = new Map;
-	const getCurrentValue = () => searchBoxElem.value.trim();
+	const getCurrentValue = () => searchBoxElem.value;
 
 	function maybeEnableSubmit() {
 		if (submitBtnElem) {
-			submitBtnElem.disabled = !validNames.has(getCurrentValue());
+			const valid = validNames.has(getCurrentValue().toUpperCase()) && getCurrentValue().length > 0;
+			if (valid) {
+				submitBtnElem.removeAttribute('disabled');
+				submitBtnElem.removeAttribute('tabIndex');
+				submitBtnElem.removeAttribute('aria-disabled');
+				submitBtnElem.classList.remove('disabled');
+			} else {
+				submitBtnElem.setAttribute('disabled', 'disabled');
+				submitBtnElem.setAttribute('tabIndex', '-1');
+				submitBtnElem.setAttribute('aria-disabled', 'disabled');
+				submitBtnElem.classList.add('disabled');
+			}
 		}
 	}
 	function updateDataList(names) {
@@ -44,7 +63,7 @@
 
 		nameLists.set(value, data);
 		for (const userName of data) {
-			validNames.add(userName);
+			validNames.add(userName.toUpperCase());
 		}
 		updateDataList(data);
 		maybeEnableSubmit();

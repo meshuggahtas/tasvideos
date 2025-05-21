@@ -1,6 +1,27 @@
 <Project>
+	<PropertyGroup Condition=" '$(SolutionDir)' == '' ">
+		<!-- needed when building individual projects, which you probably don't want to do, but VS Code was doing it regardless -->
+		<SolutionDir>$(MSBuildThisFileDirectory)</SolutionDir>
+	</PropertyGroup>
 	<PropertyGroup>
 		<Nullable>enable</Nullable>
+		<AnalysisLevel>6</AnalysisLevel>
+		<CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+		<CodeAnalysisRuleSet>$(SolutionDir)Common.ruleset</CodeAnalysisRuleSet>
+		<EnableNETAnalyzers>true</EnableNETAnalyzers>
+		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+		<Features>strict</Features>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<LangVersion>12.0</LangVersion>
+		<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+		<RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
 	</PropertyGroup>
+	<ItemGroup>
+		<AdditionalFiles Include="$(SolutionDir).stylecop.json" />
+		<PackageReference Include="StyleCop.Analyzers" />
+	</ItemGroup>
+	<ItemGroup Condition=" !$(MSBuildProjectDirectory.StartsWith('$(SolutionDir)analyzers')) ">
+		<ProjectReference Include="$(SolutionDir)analyzers/TASVideos.Analyzers.Style/TASVideos.Analyzers.Style.csproj"
+			OutputItemType="Analyzer" PrivateAssets="all" ReferenceOutputAssembly="false" />
+	</ItemGroup>
 </Project>

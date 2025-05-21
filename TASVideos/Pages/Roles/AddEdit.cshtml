@@ -1,188 +1,82 @@
 ﻿@page "{id?}/{handler?}"
 @model AddEditModel
 @{
-	ViewData["Title"] = Model.Id.HasValue ? "Modifying Role: " + Model.Role.Name : "Create a New Role";
+	bool canDelete = Model.Id.HasValue && User.Has(PermissionTo.DeleteRoles) && Model.IsInUse;
+	ViewData.SetTitle(Model.Id.HasValue ? "Modifying Role: " + Model.Role.Name : "Create a New Role");
 }
-<delete-button
-	condition="@(Model.Id.HasValue && ViewData.UserHas(PermissionTo.DeleteRoles) && ViewData["IsInUse"] is true)"
-	asp-href="@($"/Roles/AddEdit/{Model.Id}/Delete")"
-	warning-message="Are you sure you want to delete this Role? This action cannot be undone!"
-	class="float-end text-center">
-	Delete
-</delete-button>
-<h4>@ViewData["Title"]</h4>
-<hr />
-<form asp-route="Edit">
+<top-button-bar>
+	<delete-button condition="canDelete"
+	               asp-href="@($"/Roles/AddEdit/{Model.Id}/Delete")"
+	               warning-message="Are you sure you want to delete this Role? This action cannot be undone!"></delete-button>
+</top-button-bar>
+<form client-side-validation="true" asp-route="Edit">
+	<input type="hidden" asp-for="Id" />
 	<row>
-		<column lg="5">
-			<form-group>
-				<label asp-for="Role.Name" class="form-control-label"></label>
-				<input asp-for="Role.Name" class="form-control" maxlength="50" />
-				<span asp-validation-for="Role.Name" class="text-danger"></span>
-			</form-group>
-			<form-group>
+		<column lg="6">
+			<fieldset>
+				<label asp-for="Role.Name"></label>
+				<input asp-for="Role.Name" maxlength="50" />
+				<span asp-validation-for="Role.Name"></span>
+			</fieldset>
+			<fieldset>
 				<div class="form-check">
 					<input type="checkbox" class="form-check-input" asp-for="Role.IsDefault" />
-					<label asp-for="Role.IsDefault" class="form-check-label"></label>
+					<label asp-for="Role.IsDefault" class="form-check-label">Default</label>
 					<div>
-						<small>(@Html.DescriptionFor(m => m.Role.IsDefault))</small>
+						<small>(Default roles are given to all new users when they register)</small>
 					</div>
 				</div>
-			</form-group>
+			</fieldset>
 		</column>
-		<column lg="5" class="offset-lg-2">
-			<form-group>
-				<label asp-for="Role.Description" class="form-control-label"></label>
-				<textarea asp-for="Role.Description" class="form-control" rows="4" maxlength="200"></textarea>
-				<span asp-validation-for="Role.Description" class="text-danger"></span>
-			</form-group>
-			<form-group>
-				<label asp-for="Role.AutoAssignPostCount" class="form-control-label"></label>
+		<column lg="6">
+			<fieldset>
+				<label asp-for="Role.Description"></label>
+				<textarea asp-for="Role.Description" rows="4" maxlength="200"></textarea>
+				<span asp-validation-for="Role.Description"></span>
+			</fieldset>
+			<fieldset>
+				<label asp-for="Role.AutoAssignPostCount">Auto-assign on Post Count</label>
 				<div>
-					<small>(@Html.DescriptionFor(m => m.Role.AutoAssignPostCount))</small>
+					<small>(If set, the user will automatically be assigned this role when they reach this post count.)</small>
 				</div>
-				<span asp-validation-for="Role.AutoAssignPostCount" class="text-danger"></span>
-				<input type="number" class="form-control" asp-for="Role.AutoAssignPostCount" min="1" />
-			</form-group>
-			<form-group>
+				<span asp-validation-for="Role.AutoAssignPostCount"></span>
+				<input asp-for="Role.AutoAssignPostCount" min="1" />
+			</fieldset>
+			<fieldset>
 				<div class="form-check">
 					<input type="checkbox" class="form-check-input" asp-for="Role.AutoAssignPublications" />
-					<label asp-for="Role.AutoAssignPublications" class="form-check-label"></label>
+					<label asp-for="Role.AutoAssignPublications" class="form-check-label">Auto-assign on Publication</label>
 					<div>
-						<small>(@Html.DescriptionFor(m => m.Role.AutoAssignPublications))</small>
+						<small>(If set, the user will automatically be assigned this role when they have a movie published.)</small>
 					</div>
 				</div>
-			</form-group>
+			</fieldset>
 		</column>
 	</row>
 	<row>
-		<column class="col-lg-5">
-			<label asp-for="Role.Links" class="form-control-label"></label>
-			<string-list asp-for="Role.Links" />
+		<column lg="6">
+			<label asp-for="Role.RelatedLinks"></label>
+			<string-list asp-for="Role.RelatedLinks" />
 		</column>
 	</row>
-	<form-group>
-		<two-column-select id-list="Role.SelectedPermissions" available-list="AvailablePermissions" />
-	</form-group>
-	<form-group class="d-none" id="assignable-permissions-section">
-		<two-column-select id-list="Role.SelectedAssignablePermissions" available-list="AvailableAssignablePermissions" />
-		<row class="mt-3">
-			<column sm="5" class="offset-sm-7">
-				<label class="form-control-label">Roles that can be assigned:</label>
-				<div id="assignable-roles">None</div>
-			</column>
-		</row>
-	</form-group>
-	<div class="text-center mt-3">
-		<submit-button class="btn btn-primary"><i class="fa fa-save"></i> @(Model.Id.HasValue ? "Update" : "Save")</submit-button>
-		<a asp-page="List" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</div>
+	<fieldset>
+		<label asp-for="Role.SelectedPermissions"></label>
+		<select asp-for="Role.SelectedPermissions" multiselect="true" asp-items="Model.AvailablePermissions"></select>
+		<span asp-validation-for="Role.SelectedPermissions"></span>
+	</fieldset>
+	<fieldset class="d-none" id="assignable-permissions-section">
+		<label asp-for="Role.SelectedAssignablePermissions"></label>
+		<select asp-for="Role.SelectedAssignablePermissions" multiselect="true" asp-items="Model.AvailableAssignablePermissions"></select>
+		<label>Roles that can be assigned:</label>
+		<div id="assignable-roles">None</div>
+	</fieldset>
+	<form-button-bar>
+		<submit-button edit="@Model.Id.HasValue"></submit-button>
+		<cancel-link asp-page="List"></cancel-link>
+	</form-button-bar>
 </form>
 
 @section Scripts {
-	<partial name="_ValidationScriptsPartial" />
-	<script>
-		{
-			let emptyAssignableRoles = "None";
-			let selectedAssignablePermissionsModelId = '@Html.NameFor(m => m.Role.SelectedAssignablePermissions)';
-			let selectedPermissionsListId = 'Selected@(Html.IdFor(m => m.Role.SelectedPermissions))';
-			let availableAssignableListId = '@Html.NameFor(m => m.AvailableAssignablePermissions)';
-			let selectedAssignableListId = 'Selected@(Html.IdFor(m => m.Role.SelectedAssignablePermissions))';
-			
-			function shouldShowAssignRoles() {
-				const hasAssign = Array.from(document.querySelectorAll("[name='@Html.NameFor(m => m.Role.SelectedPermissions)']"))
-					.length > 0;
-
-				const hasAtLastOneOtherPerm = Array.from(document.querySelectorAll("[name='@Html.NameFor(m => m.Role.SelectedPermissions)']"))
-					.length > 0;
-
-				return hasAssign && hasAtLastOneOtherPerm;
-			}
-
-			function syncAssignablePerms() {
-				const selectedPerms = Array.from(document.querySelectorAll(`#${selectedPermissionsListId} option`));
-
-				const aggregatedAssignablePerms = Array.from(document.querySelectorAll(`#${availableAssignableListId} option`))
-					.concat(Array.from(document.querySelectorAll(`#${selectedAssignableListId} option`)));
-
-				const addedPerms = selectedPerms.filter(element =>
-					!(aggregatedAssignablePerms.map(e => e.value).includes(element.value))
-				);
-
-				const removedPerms = aggregatedAssignablePerms.filter(element =>
-					!(selectedPerms.map(e => e.value).includes(element.value))
-				);
-
-				const availAssignableElem = document.getElementById(availableAssignableListId);
-				const selectedAssignableElem = document.getElementById(selectedAssignableListId);
-
-				addedPerms.forEach(element =>
-					availAssignableElem.appendChild(element.cloneNode(true))
-				);
-
-				removedPerms.forEach(function(elem) {
-					const id = document.querySelector(`[name="${selectedAssignablePermissionsModelId}"][v="${elem.value}"]`);
-					if (id) {
-						id.remove();
-					}
-
-
-					if (Array.from(availAssignableElem.childNodes).includes(elem)) {
-						availAssignableElem.removeChild(elem);
-					} else if (Array.from(selectedAssignableElem.childNodes).includes(elem)) {
-						selectedAssignableElem.removeChild(elem);
-					}
-				});
-
-				showRolesCurrentlyAssignable();
-			}
-
-			function showRolesCurrentlyAssignable() {
-				const selector = `[name="${selectedAssignablePermissionsModelId}"]`;
-				const permissions = Array.from(document.querySelectorAll(selector)).map(element => element.value);
-
-				if (permissions.length > 0) {
-					let getStr = '';
-					for (const i in permissions) {
-						if (permissions.hasOwnProperty(i)) {
-							getStr += `ids=${permissions[i]}&`;
-						}
-					}
-
-					getStr = getStr.slice(0, -1);
-					getStr = `/Roles/AddEdit/@(Model.Id)?handler=RolesThatCanBeAssignedBy&${getStr}`;
-					fetch(`/Roles/AddEdit/@(Model.Id)?handler=RolesThatCanBeAssignedBy&${getStr}`)
-						.then(handleFetchErrors)
-						.then(r => r.json())
-						.then(json => {
-							if (json) {
-								document.getElementById("assignable-roles").textContent = json.join(', ');
-							} else {
-								document.getElementById("assignable-roles").textContent = emptyAssignableRoles;
-							}
-						});
-				} else {
-					document.getElementById("assignable-roles").textContent = emptyAssignableRoles;
-				}
-			}
-
-			function onSelectedPermissionsChange() {
-				if (shouldShowAssignRoles()) {
-					document.getElementById('assignable-permissions-section').classList.remove('d-none');
-					syncAssignablePerms();
-				} else {
-					document.getElementById('assignable-permissions-section').classList.add('d-none');
-				}
-			}
-
-			document.getElementById('@(Html.IdFor(m => m.Role.SelectedPermissions))-two-column-select')
-				.addEventListener('@Html.NameFor(m => m.Role.SelectedPermissions)Changed', onSelectedPermissionsChange);
-
-			document.addEventListener("DOMContentLoaded", onSelectedPermissionsChange);
-
-			document.getElementById('@(Html.IdFor(m => m.Role.SelectedAssignablePermissions))-two-column-select')
-				.addEventListener('@Html.NameFor(m => m.Role.SelectedAssignablePermissions)Changed', showRolesCurrentlyAssignable);
-		}
-	</script>
+	<script src="/js/roles-addedit.js"></script>
 }
 

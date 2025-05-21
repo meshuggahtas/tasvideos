@@ -1,0 +1,14 @@
+﻿@model UnmirroredMovies
+
+Total count: @Model.Entries.Count
+<standard-table>
+	<table-head columns="Movie"></table-head>
+	<tbody>
+		@foreach (var entry in Model.Entries)
+		{
+			<tr>
+				<td><pub-link id="@entry.Id">@entry.Title</pub-link></td>
+			</tr>
+		}
+	</tbody>
+</standard-table>

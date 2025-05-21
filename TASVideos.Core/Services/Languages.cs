@@ -1,21 +1,73 @@
-﻿namespace TASVideos.Core.Services;
+﻿using TASVideos.Core.Services.Wiki;
+
+namespace TASVideos.Core.Services;
 
 public interface ILanguages
 {
-	Task<bool> IsLanguagePage(string? pageName);
-	Task<IEnumerable<LanguagePage>> GetTranslations(string pageName);
+	Task<ICollection<LanguagePage>> GetTranslations(string pageName);
 }
 
-internal class Languages : ILanguages
+internal class Languages(ApplicationDbContext db, IWikiPages wikiPages, ICacheService cache) : ILanguages
 {
-	private readonly IWikiPages _wikiPages;
+	internal const string TranslationsCacheKey = "Translations-";
 
-	public Languages(IWikiPages wikiPages)
+	public async Task<ICollection<LanguagePage>> GetTranslations(string pageName)
 	{
-		_wikiPages = wikiPages;
+		var key = TranslationsCacheKey + pageName;
+		if (cache.TryGetValue(key, out ICollection<LanguagePage> languages))
+		{
+			return languages;
+		}
+
+		languages = await GetTranslationsInternal(pageName);
+		cache.Set(key, languages, Durations.FiveMinutes);
+		return languages;
 	}
 
-	public async Task<bool> IsLanguagePage(string? pageName)
+	private async Task<ICollection<LanguagePage>> GetTranslationsInternal(string pageName)
+	{
+		string subPage = pageName;
+		var languages = new List<LanguagePage>();
+		bool isTranslation = await IsLanguagePage(pageName);
+		if (isTranslation)
+		{
+			if (!pageName.Contains('/'))
+			{
+				return [];
+			}
+
+			subPage = string.Join("/", pageName.Split('/').Skip(1));
+
+			// Translations should also include the original link to the English version
+			languages.Add(new LanguagePage("EN", "English", subPage));
+		}
+
+		languages.AddRange((await AvailableLanguages())
+			.Select(l => new LanguagePage(l.Code, l.DisplayName, l.Code + "/" + subPage))
+			.ToList());
+
+		if (!languages.Any())
+		{
+			return [];
+		}
+
+		var existingLanguagePages = languages
+			.Where(l => !pageName.StartsWith(l.Code + "/"))
+			.Select(l => l.Path)
+			.ToList();
+		var existingPages = await db.WikiPages
+			.ThatAreCurrent()
+			.ThatAreNotDeleted()
+			.Where(wp => existingLanguagePages.Contains(wp.PageName))
+			.Select(wp => wp.PageName)
+			.ToListAsync();
+
+		return languages
+			.Where(l => existingPages.Contains(l.Path))
+			.ToList();
+	}
+
+	internal async Task<bool> IsLanguagePage(string? pageName)
 	{
 		if (string.IsNullOrWhiteSpace(pageName))
 		{
@@ -35,56 +87,13 @@ internal class Languages : ILanguages
 			|| l.Code == trimmed);
 	}
 
-	public async Task<IEnumerable<LanguagePage>> GetTranslations(string pageName)
-	{
-		string subPage = pageName;
-		var languages = new List<LanguagePage>();
-		bool isTranslation = await IsLanguagePage(pageName);
-		if (isTranslation)
-		{
-			if (!pageName.Contains('/'))
-			{
-				return Enumerable.Empty<LanguagePage>();
-			}
-
-			subPage = string.Join("/", pageName.Split('/').Skip(1));
-
-			// Translations should also include the original link to the English version
-			languages.Add(new LanguagePage("EN", "English", subPage));
-
-		}
-
-		languages.AddRange((await AvailableLanguages())
-			.Select(l => new LanguagePage(l.Code, l.DisplayName, l.Code + "/" + subPage))
-			.ToList());
-
-		if (!languages.Any())
-		{
-			return Enumerable.Empty<LanguagePage>();
-		}
-
-		var existingLanguages = new List<LanguagePage>();
-		foreach (var lang in languages)
-		{
-			if (await _wikiPages.Exists(lang.Path)
-				&& !pageName.StartsWith(lang.Code + "/"))
-			{
-				existingLanguages.Add(lang);
-			}
-		}
-
-		return existingLanguages;
-	}
-
 	internal async Task<IEnumerable<Language>> AvailableLanguages()
 	{
-		var languagesMarkup = (await _wikiPages
-				.SystemPage("Languages"))
-			?.Markup;
+		var languagesMarkup = (await wikiPages.SystemPage("Languages"))?.Markup;
 
 		if (string.IsNullOrWhiteSpace(languagesMarkup))
 		{
-			return Enumerable.Empty<Language>();
+			return [];
 		}
 
 		var languages = new List<Language>();

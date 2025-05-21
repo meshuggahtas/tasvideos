@@ -1,42 +1,25 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Users.Models;
-
-namespace TASVideos.Pages.Users;
+﻿namespace TASVideos.Pages.Users;
 
 [RequirePermission(PermissionTo.EditDisallows)]
-public class DisallowModel : BasePageModel
+public class DisallowModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public DisallowModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
-	public IEnumerable<DisallowEntry> Disallows { get; set; } = new List<DisallowEntry>();
+	public List<DisallowEntry> Disallows { get; set; } = [];
 
 	[BindProperty]
-	[Required]
-	[Display(Name = "Add New Regex Pattern")]
-	public string? RegexPattern { get; set; }
+	public string AddNewRegexPattern { get; set; } = "";
 
-	public async Task<IActionResult> OnGet()
+	public async Task OnGet()
 	{
 		await PopulateDisallows();
-		return Page();
 	}
 
 	public async Task<IActionResult> OnPost()
 	{
 		await PopulateDisallows();
 
-		if (Disallows.Any(d => d.RegexPattern == RegexPattern))
+		if (Disallows.Any(d => d.RegexPattern == AddNewRegexPattern))
 		{
-			ModelState.AddModelError(nameof(RegexPattern), "The provided regex pattern already exists.");
+			ModelState.AddModelError(nameof(AddNewRegexPattern), "The provided regex pattern already exists.");
 		}
 
 		if (!ModelState.IsValid)
@@ -44,19 +27,19 @@ public class DisallowModel : BasePageModel
 			return Page();
 		}
 
-		_db.UserDisallows.Add(new UserDisallow { RegexPattern = RegexPattern! });
-		await _db.SaveChangesAsync();
+		db.UserDisallows.Add(new UserDisallow { RegexPattern = AddNewRegexPattern });
+		await db.SaveChangesAsync();
 
 		return BasePageRedirect("/Users/Disallow");
 	}
 
 	public async Task<IActionResult> OnPostDelete(int disallowId)
 	{
-		var disallow = await _db.UserDisallows.SingleOrDefaultAsync(d => d.Id == disallowId);
+		var disallow = await db.UserDisallows.FindAsync(disallowId);
 		if (disallow is not null)
 		{
-			_db.UserDisallows.Remove(disallow);
-			await _db.SaveChangesAsync();
+			db.UserDisallows.Remove(disallow);
+			await db.SaveChangesAsync();
 		}
 
 		return BasePageRedirect("/Users/Disallow");
@@ -64,13 +47,11 @@ public class DisallowModel : BasePageModel
 
 	private async Task PopulateDisallows()
 	{
-		Disallows = await _db.UserDisallows
+		Disallows = await db.UserDisallows
 			.OrderBy(d => d.Id)
-			.Select(d => new DisallowEntry
-			{
-				Id = d.Id,
-				RegexPattern = d.RegexPattern
-			})
+			.Select(d => new DisallowEntry(d.Id, d.RegexPattern))
 			.ToListAsync();
 	}
+
+	public record DisallowEntry(int Id, string? RegexPattern);
 }

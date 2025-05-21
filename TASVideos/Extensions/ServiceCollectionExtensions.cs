@@ -1,29 +1,50 @@
 ﻿using System.Globalization;
 using System.IO.Compression;
-using System.Reflection;
-using System.Text;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Localization;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.ResponseCompression;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
+using OpenTelemetry.Metrics;
 using TASVideos.Core.Settings;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Models;
-using TASVideos.MovieParsers;
-using TASVideos.Pages;
-using TASVideos.Services;
+using TASVideos.TagHelpers;
 
 namespace TASVideos.Extensions;
 
 public static class ServiceCollectionExtensions
 {
+	// TODO: move these to a more appropriate place
+	public static readonly List<KeyValuePair<string, string>> Aliases =
+	[
+		new("/Games/Index", "{id:int}G"),
+		new("/Submissions/Index", "Subs-{query}"),
+		new("/Submissions/Index", "Subs-List"),
+		new("/Submissions/View", "{id:int}S"),
+		new("/Publications/Index", "Movies-{query}"),
+		new("/Publications/View", "{id:int}M"),
+		new("/RssFeeds/Publications", "/publications.rss"),
+		new("/RssFeeds/Submissions", "/submissions.rss"),
+		new("/RssFeeds/Wiki", "/wiki.rss"),
+		new("/RssFeeds/News", "/news.rss")
+	];
+
+	public static readonly List<KeyValuePair<string, string>> LegacyRedirects =
+	[
+		new("/Forum/Legacy/Topic", "forum/viewtopic.php"),
+		new("/Forum/Legacy/Topic", "forum/t/{id:int}"),
+		new("/Forum/Legacy/Post", "forum/p/{id:int}"),
+		new("/Forum/Legacy/Forum", "forum/viewforum.php"),
+		new("/Forum/Legacy/Forum", "forum/f/{id:int}"),
+		new("/Submissions/LegacyQueue", "queue.cgi"),
+		new("/Publications/LegacyMovies", "movies.cgi"),
+		new("/Forum/Legacy/MoodReport", "forum/moodreport.php"),
+		new("/Wiki/Legacy/Privileges", "Privileges"),
+		new("/Wiki/Legacy/SubmitMovie", "SubmitMovie")
+	];
+
 	public static IServiceCollection AddAppSettings(this IServiceCollection services, IConfiguration configuration)
 	{
 		services.Configure<AppSettings>(configuration);
-		var settings = configuration.Get<AppSettings>();
+		var settings = configuration.Get<AppSettings>()!;
 		return services.AddSingleton(settings);
 	}
 
@@ -60,12 +81,7 @@ public static class ServiceCollectionExtensions
 		return services;
 	}
 
-	public static IServiceCollection AddMovieParser(this IServiceCollection services)
-	{
-		return services.AddSingleton<IMovieParser, MovieParser>();
-	}
-
-	public static IServiceCollection AddMvcWithOptions(this IServiceCollection services, IHostEnvironment env)
+	public static IServiceCollection AddRazorPages(this IServiceCollection services, IHostEnvironment env)
 	{
 		if (env.IsDevelopment())
 		{
@@ -73,65 +89,57 @@ public static class ServiceCollectionExtensions
 		}
 
 		services.AddResponseCaching();
-		services
+		var pagesResult = services
 			.AddRazorPages(options =>
 			{
 				options.Conventions.AddPageRoute("/Wiki/Render", "{*url}");
-				options.Conventions.AddFolderApplicationModelConvention(
-					"/",
-					model => model.Filters.Add(new SetPageViewBagAttribute()));
-				options.Conventions.AddFolderApplicationModelConvention(
-					"/",
-					model => model.Filters.Add(new Debouncer()));
-				options.Conventions.AddPageRoute("/Games/Index", "{id:int}G");
-				options.Conventions.AddPageRoute("/Submissions/Index", "Subs-{query}");
-				options.Conventions.AddPageRoute("/Submissions/Index", "Subs-List");
-				options.Conventions.AddPageRoute("/Submissions/View", "{id:int}S");
-				options.Conventions.AddPageRoute("/Publications/Index", "Movies-{query}");
-				options.Conventions.AddPageRoute("/Publications/View", "{id:int}M");
-				options.Conventions.AddPageRoute("/Publications/Authors", "Players-List");
-				options.Conventions.AddPageRoute("/Forum/Posts/Index", "forum/p/{id:int}");
-				options.Conventions.AddPageRoute("/Submissions/Submit", "SubmitMovie");
-				options.Conventions.AddPageRoute("/Permissions/Index", "/Privileges");
 
-				// Backwards compatibility with legacy links
-				options.Conventions.AddPageRoute("/Forum/Legacy/Topic", "forum/viewtopic.php");
-				options.Conventions.AddPageRoute("/Forum/Legacy/Topic", "forum/t/{id:int}");
-				options.Conventions.AddPageRoute("/Forum/Legacy/Forum", "forum/viewforum.php");
-				options.Conventions.AddPageRoute("/Forum/Legacy/Forum", "forum/f/{id:int}");
-				options.Conventions.AddPageRoute("/Submissions/LegacyQueue", "queue.cgi");
-				options.Conventions.AddPageRoute("/Publications/LegacyMovies", "movies.cgi");
-				options.Conventions.AddPageRoute("/RamAddresses/LegacyList", "AddressesUp");
-				options.Conventions.AddPageRoute("/Forum/Legacy/MoodReport", "forum/moodreport.php");
+				foreach (var alias in Aliases)
+				{
+					options.Conventions.AddPageRoute(alias.Key, alias.Value);
+				}
 
-				options.Conventions.AddPageRoute("/RamAddresses/List", "Addresses-List");
-				options.Conventions.AddPageRoute("/RamAddresses/Index", "Addresses-{id:int}");
+				foreach (var redirect in LegacyRedirects)
+				{
+					options.Conventions.AddPageRoute(redirect.Key, redirect.Value);
+				}
+			});
 
-				options.Conventions.AddPageRoute("/RssFeeds/Publications", "/publications.rss");
-				options.Conventions.AddPageRoute("/RssFeeds/Submissions", "/submissions.rss");
-				options.Conventions.AddPageRoute("/RssFeeds/Wiki", "/wiki.rss");
-				options.Conventions.AddPageRoute("/RssFeeds/News", "/news.rss");
-			})
-			.AddRazorRuntimeCompilation();
+		if (!env.IsProduction())
+		{
+			pagesResult.AddRazorRuntimeCompilation();
+		}
+
+		services.AddAntiforgery(options =>
+		{
+			options.Cookie.SameSite = SameSiteMode.Lax;
+		});
 
 		services.AddHttpContext();
-		services.AddMvc(options => options.ValueProviderFactories.AddDelimitedValueProviderFactory('|'));
+		services.AddMvc(options =>
+		{
+			options.ValueProviderFactories.AddDelimitedValueProviderFactory('|');
+			options.ModelBinderProviders.Insert(0, new TrimStringModelBinderProvider());
+		});
 
+		services.AddSingleton<IHtmlGenerator, OverrideHtmlGenerator>();
 		return services;
 	}
 
-	public static IServiceCollection AddTextModules(this IServiceCollection services)
+	public static IServiceCollection AddServices(this IServiceCollection services)
 	{
 		foreach (var component in ModuleParamHelpers.TextComponents.Values)
 		{
 			services.AddScoped(component);
 		}
 
-		return services;
+		return services.AddTransient<IExternalMediaPublisher, ExternalMediaPublisher>();
 	}
 
 	public static IServiceCollection AddIdentity(this IServiceCollection services, IHostEnvironment env)
 	{
+		services.Configure<PasswordHasherOptions>(options => options.IterationCount = 720_000);
+		services.AddScoped<IUserClaimsPrincipalFactory<User>, UserClaimsPrincipalFactory<User>>(); // the default would use UserClaimsPrincipalFactory<User, Role>, but like this we prevent it putting roles in the principal and thus in the identity cookie
 		services.AddIdentity<User, Role>(config =>
 			{
 				config.SignIn.RequireConfirmedEmail = env.IsProduction() || env.IsStaging();
@@ -141,64 +149,65 @@ public static class ServiceCollectionExtensions
 				config.Password.RequireNonAlphanumeric = false;
 				config.Password.RequiredUniqueChars = 4;
 				config.User.RequireUniqueEmail = true;
-				config.User.AllowedUserNameCharacters += "āâãáéëöú£ "; // The space is intentional
-				})
+				config.User.AllowedUserNameCharacters += "āàâãáäéèëêíîïóôöúüûý£ŉçÑñ";
+			})
 			.AddEntityFrameworkStores<ApplicationDbContext>()
 			.AddDefaultTokenProviders();
 
 		return services;
 	}
 
-	public static IServiceCollection AddAutoMapperWithProjections(this IServiceCollection services)
-	{
-		return services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
-	}
-
-	public static IServiceCollection AddSwagger(this IServiceCollection services, AppSettings settings)
-	{
-		services.AddAuthentication(x =>
-		{
-			x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-			x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-		}).AddJwtBearer(x =>
-		{
-			x.RequireHttpsMetadata = true;
-			x.SaveToken = true;
-			x.TokenValidationParameters = new TokenValidationParameters
-			{
-				ValidateIssuerSigningKey = true,
-				IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(settings.Jwt.SecretKey)),
-				ValidateIssuer = false,
-				ValidateAudience = false
-			};
-		});
-
-		var version = Assembly.GetExecutingAssembly().GetName().Version ?? new Version();
-
-		return services.AddSwaggerGen(c =>
-		{
-			c.SwaggerDoc(
-				"v1",
-				new OpenApiInfo
-				{
-					Title = "TASVideos API",
-					Version = $"v{version.Major}.{version.Minor}.{version.Revision}",
-					Description = "API For tasvideos.org content"
-				});
-			c.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
-			{
-				Name = "Authorization"
-			});
-			var basePath = AppContext.BaseDirectory;
-			var xmlPath = Path.Combine(basePath, "TASVideos.Api.xml");
-			c.IncludeXmlComments(xmlPath);
-		});
-	}
-
 	private static IServiceCollection AddHttpContext(this IServiceCollection services)
 	{
-		services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
-		return services.AddTransient(
-			provider => provider.GetRequiredService<IHttpContextAccessor>().HttpContext!.User);
+		return services
+			.AddSingleton<IHttpContextAccessor, HttpContextAccessor>()
+			.AddTransient(provider => provider.GetRequiredService<IHttpContextAccessor>().HttpContext!.User);
+	}
+
+	public static IServiceCollection AddMetrics(this IServiceCollection services, AppSettings settings)
+	{
+		if (settings.EnableMetrics)
+		{
+			services
+				.AddOpenTelemetry()
+				.WithMetrics(builder =>
+				{
+					builder.AddMeter("Microsoft.AspNetCore.Hosting")
+						.AddView("http.server.request.duration", new ExplicitBucketHistogramConfiguration
+						{
+							Boundaries = [] // disable duration histograms of endpoints, which is a LOT of data, but keep total counts
+						});
+
+					builder.AddMeter(
+						"Microsoft.AspNetCore.Server.Kestrel",
+						"Microsoft.AspNetCore.Routing",
+						"Microsoft.AspNetCore.Diagnostics");
+
+					builder.AddMeter("Npgsql")
+						.AddView("db.client.commands.duration", new ExplicitBucketHistogramConfiguration
+						{
+							Boundaries = [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10]
+						})
+						.AddView("db.client.connections.create_time", new ExplicitBucketHistogramConfiguration
+						{
+							Boundaries = [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10]
+						});
+
+					builder.AddMeter("TASVideos");
+
+					builder.AddPrometheusExporter(options =>
+					{
+						options.ScrapeEndpointPath = "/Metrics";
+					});
+				});
+
+			services.AddSingleton<ITASVideosMetrics, TASVideosMetrics>();
+		}
+		else
+		{
+			services.AddSingleton<ITASVideosMetrics, NullMetrics>();
+		}
+
+		return services;
 	}
 }

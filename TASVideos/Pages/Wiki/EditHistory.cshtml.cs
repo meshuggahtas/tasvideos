@@ -1,41 +1,26 @@
-﻿using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Data.Entity;
-using TASVideos.Pages.Wiki.Models;
-
-namespace TASVideos.Pages.Wiki;
+﻿namespace TASVideos.Pages.Wiki;
 
 [AllowAnonymous]
-public class EditHistoryModel : BasePageModel
+public class EditHistoryModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly IWikiPages _wikiPages;
-	private readonly IMapper _mapper;
-
-	public EditHistoryModel(IWikiPages wikiPages, IMapper mapper)
-	{
-		_wikiPages = wikiPages;
-		_mapper = mapper;
-	}
+	[FromQuery]
+	public PagingModel Paging { get; set; } = new();
 
 	[FromRoute]
 	public string UserName { get; set; } = "";
 
-	public UserWikiEditHistoryModel History { get; set; } = new();
+	public PageOf<HistoryEntry> History { get; set; } = new([], new());
 
 	public async Task OnGet()
 	{
-		History = new UserWikiEditHistoryModel
-		{
-			UserName = UserName,
-			Edits = await _mapper.ProjectTo<UserWikiEditHistoryModel.EditEntry>(
-				_wikiPages.Query
-					.ThatAreNotDeleted()
-					.CreatedBy(UserName)
-					.ByMostRecent())
-				.ToListAsync()
-		};
+		History = await db.WikiPages
+			.ThatAreNotDeleted()
+			.CreatedBy(UserName)
+			.ByMostRecent()
+			.Select(wp => new HistoryEntry(
+				wp.Revision, wp.CreateTimestamp, wp.PageName, wp.MinorEdit, wp.RevisionMessage))
+			.PageOf(Paging);
 	}
+
+	public record HistoryEntry(int Revision, DateTime CreateTimestamp, string PageName, bool MinorEdit, string? RevisionMessage);
 }

@@ -1,0 +1,45 @@
+﻿@page "{id}"
+@model CatalogModel
+@{
+	ViewData.SetTitle($"Set Cataloging for Userfile {Model.Id}");
+}
+
+<ul>
+	<li>
+		UserFile: <a asp-page="Info" asp-route-id="@Model.Id">@Model.UserFile.Filename</a>
+	</li>
+	<li>
+		Author: <profile-link username="@Model.UserFile.AuthorName"></profile-link>
+	</li>
+</ul>
+<form client-side-validation="true" method="post">
+	<input type="hidden" asp-for="UserFile.Filename" />
+	<row>
+		<column lg="6">
+			<fieldset>
+				<label asp-for="UserFile.System"></label>
+				<select asp-for="UserFile.System" asp-items="Model.AvailableSystems" data-id="system" data-return-url="@HttpContext.CurrentPathToReturnUrl()"></select>
+			</fieldset>
+			<fieldset>
+				<fullrow>
+					<label asp-for="UserFile.Game"></label>
+				</fullrow>
+				<row>
+					<div class="col-10">
+						<select asp-for="UserFile.Game" asp-items="Model.AvailableGames" data-id="game"></select>
+					</div>
+					<div class="col-2">
+						<button id="create-game" type="button" class="btn btn-primary">New</button>
+					</div>
+				</row>
+			</fieldset>
+		</column>
+	</row>
+	<form-button-bar>
+		<submit-button></submit-button>
+		<cancel-link asp-page="Info" asp-route-id="@Model.Id"></cancel-link>
+	</form-button-bar>
+</form>
+@section Scripts {
+	<script src="/js/catalog.js"></script>
+}

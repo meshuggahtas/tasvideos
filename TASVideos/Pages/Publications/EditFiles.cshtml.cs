@@ -1,45 +1,24 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Core.Services;
-using TASVideos.Core.Services.ExternalMediaPublisher;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-
-namespace TASVideos.Pages.Publications;
+﻿namespace TASVideos.Pages.Publications;
 
 [RequirePermission(PermissionTo.EditPublicationFiles)]
-public class EditFilesModel : BasePageModel
+public class EditFilesModel(
+	ApplicationDbContext db,
+	IExternalMediaPublisher publisher,
+	IMediaFileUploader uploader,
+	IPublicationMaintenanceLogger publicationMaintenanceLogger)
+	: BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-	private readonly ExternalMediaPublisher _publisher;
-	private readonly IMediaFileUploader _uploader;
-	private readonly IPublicationMaintenanceLogger _publicationMaintenanceLogger;
-
-	public EditFilesModel(
-		ApplicationDbContext db,
-		ExternalMediaPublisher publisher,
-		IMediaFileUploader uploader,
-		IPublicationMaintenanceLogger publicationMaintenanceLogger)
-	{
-		_db = db;
-		_publisher = publisher;
-		_uploader = uploader;
-		_publicationMaintenanceLogger = publicationMaintenanceLogger;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
 	[BindProperty]
 	public string Title { get; set; } = "";
 
-	public ICollection<PublicationFile> Files { get; set; } = new List<PublicationFile>();
+	public List<PublicationFile> Files { get; set; } = [];
 
 	[Required]
 	[BindProperty]
-	[Display(Name = "New Screenshot")]
-	public IFormFile? NewFile { get; set; }
+	public IFormFile? NewScreenshot { get; set; }
 
 	[BindProperty]
 	[StringLength(250)]
@@ -47,7 +26,7 @@ public class EditFilesModel : BasePageModel
 
 	public async Task<IActionResult> OnGet()
 	{
-		var title = await _db.Publications
+		var title = await db.Publications
 			.Where(p => p.Id == Id)
 			.Select(p => p.Title)
 			.SingleOrDefaultAsync();
@@ -58,7 +37,7 @@ public class EditFilesModel : BasePageModel
 		}
 
 		Title = title;
-		Files = await _db.PublicationFiles
+		Files = await db.PublicationFiles
 			.ForPublication(Id)
 			.ToListAsync();
 
@@ -69,41 +48,34 @@ public class EditFilesModel : BasePageModel
 	{
 		if (!ModelState.IsValid)
 		{
-			Files = await _db.PublicationFiles
+			Files = await db.PublicationFiles
 				.ForPublication(Id)
 				.ToListAsync();
 
 			return Page();
 		}
 
-		var path = await _uploader.UploadScreenshot(Id, NewFile!, Description);
-
-		string log = $"Added Screenshot file {path}";
-		SuccessStatusMessage(log);
-		await _publicationMaintenanceLogger.Log(Id, User.GetUserId(), log);
-		await _publisher.SendPublicationEdit(
-			$"{Id}M edited by {User.Name()}",
-			$"{log} | {Title}",
-			$"{Id}M");
-
+		var path = await uploader.UploadScreenshot(Id, NewScreenshot!, Description);
+		await Log($"Added Screenshot file {path}");
 		return RedirectToPage("EditFiles", new { Id });
 	}
 
 	public async Task<IActionResult> OnPostDelete(int publicationFileId)
 	{
-		var file = await _uploader.DeleteFile(publicationFileId);
+		var file = await uploader.DeleteFile(publicationFileId);
 
 		if (file is not null)
 		{
-			string log = $"Deleted {file.Type} file {file.Path}";
-			SuccessStatusMessage(log);
-			await _publicationMaintenanceLogger.Log(Id, User.GetUserId(), log);
-			await _publisher.SendPublicationEdit(
-				$"{Id}M edited by {User.Name()}",
-				$"{log}",
-				$"{Id}M");
+			await Log($"Deleted {file.Type} file {file.Path}");
 		}
 
 		return RedirectToPage("EditFiles", new { Id });
+	}
+
+	private async Task Log(string log)
+	{
+		SuccessStatusMessage(log);
+		await publicationMaintenanceLogger.Log(Id, User.GetUserId(), log);
+		await publisher.SendPublicationEdit(User.Name(), Id, $"{log} | {Title}");
 	}
 }

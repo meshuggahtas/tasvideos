@@ -1,8 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-
-namespace TASVideos.Core.Services;
+﻿namespace TASVideos.Core.Services;
 
 public enum FlagEditResult { Success, Fail, NotFound, DuplicateCode }
 public enum FlagDeleteResult { Success, Fail, NotFound, InUse }
@@ -18,27 +14,19 @@ public interface IFlagService
 	Task<FlagDeleteResult> Delete(int id);
 }
 
-internal class FlagService : IFlagService
+internal class FlagService(ApplicationDbContext db, ICacheService cache) : IFlagService
 {
 	internal const string FlagsKey = "AllFlags";
-	private readonly ApplicationDbContext _db;
-	private readonly ICacheService _cache;
-
-	public FlagService(ApplicationDbContext db, ICacheService cache)
-	{
-		_db = db;
-		_cache = cache;
-	}
 
 	public async Task<ICollection<Flag>> GetAll()
 	{
-		if (_cache.TryGetValue(FlagsKey, out List<Flag> flags))
+		if (cache.TryGetValue(FlagsKey, out List<Flag> flags))
 		{
 			return flags;
 		}
 
-		flags = await _db.Flags.ToListAsync();
-		_cache.Set(FlagsKey, flags);
+		flags = await db.Flags.ToListAsync();
+		cache.Set(FlagsKey, flags);
 		return flags;
 	}
 
@@ -64,30 +52,24 @@ internal class FlagService : IFlagService
 		return new ListDiff(currentFlags, newFlags);
 	}
 
-	public async Task<bool> InUse(int id)
-	{
-		return await _db.PublicationFlags.AnyAsync(pt => pt.FlagId == id);
-	}
+	public async Task<bool> InUse(int id) => await db.PublicationFlags.AnyAsync(pt => pt.FlagId == id);
 
 	public async Task<FlagEditResult> Add(Flag flag)
 	{
-		// No auto-increment, due to legacy importing, need to re-add this
-		var newId = (await _db.Flags.Select(f => f.Id).MaxAsync()) + 1;
-
-		_db.Flags.Add(new Flag
+		db.Flags.Add(new Flag
 		{
-			Id = newId,
 			Name = flag.Name,
 			IconPath = flag.IconPath,
 			LinkPath = flag.LinkPath,
 			Token = flag.Token,
-			PermissionRestriction = flag.PermissionRestriction
+			PermissionRestriction = flag.PermissionRestriction,
+			Weight = flag.Weight
 		});
 
 		try
 		{
-			await _db.SaveChangesAsync();
-			_cache.Remove(FlagsKey);
+			await db.SaveChangesAsync();
+			cache.Remove(FlagsKey);
 			return FlagEditResult.Success;
 		}
 		catch (DbUpdateConcurrencyException)
@@ -107,7 +89,7 @@ internal class FlagService : IFlagService
 
 	public async Task<FlagEditResult> Edit(int id, Flag flag)
 	{
-		var existingFlag = await _db.Flags.SingleOrDefaultAsync(t => t.Id == id);
+		var existingFlag = await db.Flags.SingleOrDefaultAsync(t => t.Id == id);
 		if (existingFlag is null)
 		{
 			return FlagEditResult.NotFound;
@@ -118,11 +100,12 @@ internal class FlagService : IFlagService
 		existingFlag.LinkPath = flag.LinkPath;
 		existingFlag.Token = flag.Token;
 		existingFlag.PermissionRestriction = flag.PermissionRestriction;
+		existingFlag.Weight = flag.Weight;
 
 		try
 		{
-			await _db.SaveChangesAsync();
-			_cache.Remove(FlagsKey);
+			await db.SaveChangesAsync();
+			cache.Remove(FlagsKey);
 			return FlagEditResult.Success;
 		}
 		catch (DbUpdateConcurrencyException)
@@ -149,15 +132,15 @@ internal class FlagService : IFlagService
 
 		try
 		{
-			var flag = await _db.Flags.SingleOrDefaultAsync(t => t.Id == id);
+			var flag = await db.Flags.FindAsync(id);
 			if (flag is null)
 			{
 				return FlagDeleteResult.NotFound;
 			}
 
-			_db.Flags.Remove(flag);
-			await _db.SaveChangesAsync();
-			_cache.Remove(FlagsKey);
+			db.Flags.Remove(flag);
+			await db.SaveChangesAsync();
+			cache.Remove(FlagsKey);
 		}
 		catch (DbUpdateConcurrencyException)
 		{

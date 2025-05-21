@@ -22,13 +22,15 @@ public interface INode
 	/// </summary>
 	Task WriteTextAsync(TextWriter writer, WriterContext ctx);
 
+	Task WriteMetaDescriptionAsync(StringBuilder sb, WriterContext ctx);
+
 	/// <summary>
 	/// Get the combined text content of this Node.  May not return useful values for foreign components (Modules).
 	/// </summary>
 	string InnerText(IWriterHelper h);
 
 	/// <summary>
-	/// Debugging output of all of the data in this node.
+	/// Debugging output of all the data in this node.
 	/// </summary>
 	void DumpContentDescriptive(TextWriter w, string padding);
 

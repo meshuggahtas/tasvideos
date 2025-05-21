@@ -1,67 +1,70 @@
 ﻿@page "{id}"
-@using TASVideos.Data.Helpers
+@using TASVideos.Core.Services.Forum
 @model IndexModel
+@inject IForumToMetaDescriptionRenderer forumToMetaDescriptionRenderer
 @{
-	ViewData["Title"] = $"{Model.Topic.Title} - Topic {Model.Topic.Id}";
-}
-
-@if (Model.HighlightedPost is not null)
-{
+	ViewData.SetTitle($"{Model.Topic.Title} - Topic {Model.Topic.Id}");
 	var description = $"{Model.Topic.ForumName} → {Model.Topic.Title}";
-	if (!string.IsNullOrWhiteSpace(Model.HighlightedPost.Subject) && Model.Topic.Title != Model.HighlightedPost.Subject)
+	if (Model.HighlightedPost is not null)
 	{
-		description += $"\nSubject: {Model.HighlightedPost.Subject}";
-	}
-	@section Header {
-		<meta property="og:type" content="website" />
-		<meta property="og:site_name" content="TASVideos" />
-		<meta property="og:title" content="@($"Post by {Model.HighlightedPost.PosterName}")" />
-		<meta property="og:description" content="@description" />
-		<meta property="og:url" content="@($"{HttpContext.Request.ToBaseUrl()}/Forum/Posts/{Model.HighlightedPost.Id}")" />
-		<meta property="og:image" content="@Model.HighlightedPost.GetCurrentAvatar()" />
-	}
-} else
-{
-	@section Header {
-		@{
-			var firstPost = @Model.Topic.Posts.FirstOrDefault();
-			var ogTitle = firstPost is not null ? $"Topic by {firstPost.PosterName}" : "Forum Topic";
-			var ogImage = firstPost is not null ? firstPost.GetCurrentAvatar() : $"{HttpContext.Request.ToBaseUrl()}/images/logo-embed.png";
+		if (!string.IsNullOrWhiteSpace(Model.HighlightedPost.Subject) && Model.Topic.Title != Model.HighlightedPost.Subject)
+		{
+			description += $"\nSubject: {Model.HighlightedPost.Subject}";
 		}
-		<meta property="og:type" content="website" />
-		<meta property="og:site_name" content="TASVideos" />
-		<meta property="og:title" content="@ogTitle" />
-		<meta property="og:description" content="@($"{Model.Topic.ForumName} → {Model.Topic.Title}")" />
-		<meta property="og:url" content="@HttpContext.Request.ToUrl()" />
-		<meta property="og:image" content="@ogImage" />
+		description += "\n\n" + await forumToMetaDescriptionRenderer.RenderForumForMetaDescription(Model.HighlightedPost.Text, Model.HighlightedPost.EnableBbCode, Model.HighlightedPost.EnableHtml);
+
+		ViewData.SetMetaTags(new MetaTag
+		{
+			Title = $"Post by {Model.HighlightedPost.PosterName}",
+			Description = description,
+			RelativeUrl = $"/Forum/Posts/{Model.HighlightedPost.Id}",
+			Image = Model.HighlightedPost.GetCurrentAvatar()
+		});
+	}
+	else
+	{
+		description += "\n\n" + await forumToMetaDescriptionRenderer.RenderForumForMetaDescription(Model.Topic.TopicCreator!.Text, Model.Topic.TopicCreator!.EnableBbCode, Model.Topic.TopicCreator!.EnableHtml);
+		ViewData.SetMetaTags(new MetaTag
+		{
+			Title = $"Topic by {Model.Topic.TopicCreator!.PosterName}",
+			Description = description,
+			Image = Model.Topic.TopicCreator!.GetCurrentAvatar()
+		});
 	}
 }
 
 @section PageTitle {
-	<div class="container mb-2">
-		<nav aria-label="breadcrumb" class="card card-header d-block">
-			<ol class="breadcrumb m-0">
-				<li class="breadcrumb-item"><a asp-page="/Forum/Index">Forum</a></li>
-				<li class="breadcrumb-item"><a asp-page="/Forum/Subforum/Index" asp-route-id="@Model.Topic.ForumId">@Model.Topic.ForumName</a></li>
-				<li class="breadcrumb-item active" aria-current="page">
-					<h1>@(Model.Topic.Title)</h1>
-				</li>
-			</ol>
-		</nav>
-		<h6 condition="@Model.Topic.IsLocked" class="alert alert-danger py-2 m-0"><i class="fa fa-lock"></i> Locked</h6>
-	</div>
+	<nav aria-label="breadcrumb">
+		<ol class="breadcrumb m-0">
+			<li class="breadcrumb-item"><a asp-page="/Forum/Index">Forum</a></li>
+			<li class="breadcrumb-item"><a asp-page="/Forum/Subforum/Index" asp-route-id="@Model.Topic.ForumId">@Model.Topic.ForumName</a></li>
+			<li class="breadcrumb-item active" aria-current="page">
+				<h1>
+					@(Model.Topic.Title)
+					<span
+						condition="Model.Topic.GameId.HasValue"
+						class="float-end">
+						Game:
+						<a asp-page="/Games/Index" asp-route-id="@Model.Topic.GameId">
+							@Model.Topic.GameName
+						</a>
+					</span>
+				</h1>
+			</li>
+		</ol>
+	</nav>
 }
 
 <partial Name="_ForumHeader" />
 <div class="row mb-2">
 	<div class="col-12">
-		<partial name="_TopicActionBar" model="Model.Topic" />
-		<a condition="ViewData.UserHas(PermissionTo.PostInLockedTopics)
-			|| (!Model.Topic.IsLocked && ViewData.UserHas(PermissionTo.CreateForumPosts))"
-		   asp-page="/Forum/Posts/Create"
-		   asp-route-topicId="@Model.Id"
-		   class="btn btn-primary btn-sm float-end">
-			<span class="fa fa-plus"></span> Post
+		<p condition="@Model.Topic.IsLocked" class="alert alert-danger py-2"><i class="fa fa-lock"></i> Locked</p>
+		<partial name="_TopicActionBar" model="Model.Topic"/>
+		<a condition="User.Has(PermissionTo.PostInLockedTopics) || (!Model.Topic.IsLocked && User.Has(PermissionTo.CreateForumPosts))"
+			asp-page="/Forum/Posts/Create"
+			asp-route-topicId="@Model.Id"
+			class="btn btn-primary btn-sm float-end">
+			<span class="fa fa-plus"></span> New Post
 		</a>
 	</div>
 </div>
@@ -71,78 +74,48 @@
 	<partial name="_Poll" model="Model.Topic.Poll" />
 }
 
-@*TODO: WikiPage is generic but the html assumes it will be a submission*@
-@if (Model.WikiPage is not null)
+@if (Model.WikiPage is not null && Model.Topic.SubmissionId.HasValue)
 {
 	<div condition="@(!string.IsNullOrWhiteSpace(Model.EncodeEmbedLink))" class="d-flex justify-content-center">
+		@{ bool isNicoEmbed = Model.EncodeEmbedLink!.Contains("nicovideo"); }
 		<div class="col-12 col-lg-6">
-			@*Boilerplate bootstrap stuff *@
-			<div class="ratio ratio-16x9">
-				<div id="ytplayer"></div>
-			</div>
-			<script>
-				const youtubeScriptId = 'youtube-api';
-				let youtubeScript = document.getElementById(youtubeScriptId);
-				let player;
-				@*Loads the scripts which run the Youtube Player API asynchronously*@
-				if (youtubeScript === null) {
-					let tag = document.createElement('script');
-					let firstScript = document.getElementsByTagName('script')[0];
-
-					tag.src = 'https://www.youtube.com/iframe_api';
-					tag.id = youtubeScriptId;
-					firstScript.parentNode.insertBefore(tag, firstScript);
-				}
-				@*Populates the youtube player after the API script is ready*@
-				if (!player) {
-					window.onYouTubeIframeAPIReady = () => {
-						player = new YT.Player('ytplayer', {
-							videoId: "@Model.EncodeEmbedLink!.Split('/').Last()"
-						});
-					}
-				}
-			</script>
-			<a href="@Model.EncodeEmbedLink">(Link to video)</a>
+			<partial condition="!isNicoEmbed" name="_YoutubeEmbed" model="Model.EncodeEmbedLink" />
+			<partial condition="isNicoEmbed" name="_NicoEmbed" model="Model.EncodeEmbedLink" />
 		</div>
 	</div>
 	<card class="mt-2 mb-2">
-		<cardheader>
+		<card-header>
 			<row class="align-items-center row">
 				<span class="col-auto fs-5">Submission Text</span>
-				<sub-link class="col-auto btn btn-secondary btn-sm" id="@SubmissionHelper.SubmissionId(Model.WikiPage.PageName)"><i class="fa fa-info-circle"></i> Full Submission Page</sub-link>
+				<sub-link class="col-auto btn btn-secondary btn-sm" id="@Model.Topic.SubmissionId.Value"><i class="fa fa-info-circle"></i> Full Submission Page</sub-link>
+				<pub-link condition="@Model.PublicationId.HasValue" class="ms-1 col-auto btn btn-secondary btn-sm" id="@(Model.PublicationId ?? 0)">Publication Page</pub-link>
 			</row>
-		</cardheader>
+		</card-header>
 		<show-more max-height="38rem">
-			<cardbody>
+			<card-body>
 				<wiki-markup markup="@Model.WikiPage.Markup" page-data="Model.WikiPage"></wiki-markup>
-			</cardbody>
+			</card-body>
 		</show-more>
 	</card>
 }
 
 <hr class="my-0" />
-<fullrow>
-	<partial name="_Pager" model="Model.Topic.Posts" />
-</fullrow>
-
+<hr class="my-0" />
+<partial name="_Pager" model="Model.Topic.Posts" />
 @foreach (var post in Model.Topic.Posts.OrderBy(p => p.CreateTimestamp).ToList())
 {
 	<partial name="_TopicPost" model="post" />
 }
-
-<fullrow class="mt-2">
-	<partial name="_Pager" model="Model.Topic.Posts" />
-</fullrow>
+<partial name="_Pager" model="Model.Topic.Posts" />
 <hr class="mb-1"/>
-
 <fullrow class="mt-2">
-	<partial name="_TopicActionBar" model="Model.Topic" />
-	<a condition="ViewData.UserHas(PermissionTo.PostInLockedTopics)
-		|| (!Model.Topic.IsLocked && ViewData.UserHas(PermissionTo.CreateForumPosts))"
-	   asp-page="/Forum/Posts/Create"
-	   asp-route-topicId="@Model.Id"
-	   class="btn btn-primary btn-sm float-end">
-		<span class="fa fa-plus"></span> Post
+	<p condition="@Model.Topic.IsLocked" class="alert alert-danger py-2"><i class="fa fa-lock"></i> Locked</p>
+	<partial name="_TopicActionBar" model="Model.Topic"/>
+	<a condition="User.Has(PermissionTo.PostInLockedTopics) || (!Model.Topic.IsLocked && User.Has(PermissionTo.CreateForumPosts))"
+		asp-page="/Forum/Posts/Create"
+		asp-route-topicId="@Model.Id"
+		class="btn btn-primary btn-sm float-end">
+		<span class="fa fa-plus"></span> New Post
 	</a>
 	<nav aria-label="breadcrumb" class="card card-header d-block mt-2">
 		<ol class="breadcrumb m-0">
@@ -153,21 +126,10 @@
 			</li>
 		</ol>
 	</nav>
-	<p condition="@Model.Topic.IsLocked" class="alert alert-danger py-2 m-0"><i class="fa fa-lock"></i> Locked</p>
 </fullrow>
+
+<span condition="@(Model.SaveActivity)" id="serverUnixTime" class="d-none">@DateTime.UtcNow.UnixTimestamp()</span>
 @section Scripts {
-	<script condition="@(Model.SaveActivity)">
-		{
-			let topicId = '@Model.Id';
-			let currentTime = Math.floor(Date.now() / 1000);
-			let visitedTopics = localStorage.getItem('VisitedTopics');
-			if (visitedTopics !== null){
-				visitedTopics = JSON.parse(visitedTopics);
-				visitedTopics[topicId] = currentTime;
-			}else{
-				visitedTopics = {[topicId]: currentTime};
-			}
-			localStorage.setItem('VisitedTopics', JSON.stringify(visitedTopics));
-		}
-	</script>
+	<script condition="@Model.SaveActivity" src="/js/forum-topic.js"></script>
+	<script src="/js/forum-poll.js"></script>
 }

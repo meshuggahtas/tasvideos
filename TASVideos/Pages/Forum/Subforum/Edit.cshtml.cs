@@ -1,45 +1,32 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
-using TASVideos.Data;
-using TASVideos.Data.Entity;
-using TASVideos.Data.Entity.Forum;
-using TASVideos.Pages.Forum.Subforum.Models;
+﻿using TASVideos.Data.Entity.Forum;
 
 namespace TASVideos.Pages.Forum.Subforum;
 
 [RequirePermission(PermissionTo.EditForums)]
-public class EditModel : BasePageModel
+public class EditModel(ApplicationDbContext db) : BasePageModel
 {
-	private readonly ApplicationDbContext _db;
-
-	public EditModel(ApplicationDbContext db)
-	{
-		_db = db;
-	}
-
 	[FromRoute]
 	public int Id { get; set; }
 
 	[BindProperty]
-	public ForumEditModel Forum { get; set; } = new();
+	public ForumEdit Forum { get; set; } = new();
 
 	public bool CanDelete { get; set; }
 
-	public IEnumerable<SelectListItem> AvailableCategories { get; set; } = new List<SelectListItem>();
+	public List<SelectListItem> AvailableCategories { get; set; } = [];
 
 	public async Task<IActionResult> OnGet()
 	{
-		var forum = await _db.Forums
+		var forum = await db.Forums
 			.ExcludeRestricted(User.Has(PermissionTo.SeeRestrictedForums))
 			.Where(f => f.Id == Id)
-			.Select(f => new ForumEditModel
+			.Select(f => new ForumEdit
 			{
 				Name = f.Name,
 				Description = f.Description,
 				ShortName = f.ShortName,
-				CategoryId = f.CategoryId,
-				Restricted = f.Restricted
+				Category = f.CategoryId,
+				RestrictedAccess = f.Restricted
 			})
 			.SingleOrDefaultAsync();
 
@@ -61,7 +48,7 @@ public class EditModel : BasePageModel
 			return Page();
 		}
 
-		var forum = await _db.Forums
+		var forum = await db.Forums
 			.ExcludeRestricted(User.Has(PermissionTo.SeeRestrictedForums))
 			.SingleOrDefaultAsync(f => f.Id == Id);
 
@@ -73,11 +60,11 @@ public class EditModel : BasePageModel
 		forum.Name = Forum.Name;
 		forum.ShortName = Forum.ShortName;
 		forum.Description = Forum.Description;
-		forum.CategoryId = Forum.CategoryId;
-		forum.Restricted = Forum.Restricted;
+		forum.CategoryId = Forum.Category;
+		forum.Restricted = Forum.RestrictedAccess;
 
-		await ConcurrentSave(_db, $"Forum {forum.Name} updated.", $"Unable to edit {forum.Name}");
-		return RedirectToPage("Index", new { id = Id });
+		SetMessage(await db.TrySaveChanges(), $"Forum {forum.Name} updated.", $"Unable to edit {forum.Name}");
+		return RedirectToPage("Index", new { Id });
 	}
 
 	public async Task<IActionResult> OnPostDelete()
@@ -87,15 +74,14 @@ public class EditModel : BasePageModel
 			return BadRequest("Cannot delete subforum that contains topics");
 		}
 
-		var subForum = await _db.Forums.SingleOrDefaultAsync(f => f.Id == Id);
+		var subForum = await db.Forums.SingleOrDefaultAsync(f => f.Id == Id);
 		if (subForum is null)
 		{
 			return NotFound();
 		}
 
-		_db.Forums.Remove(subForum);
-
-		await ConcurrentSave(_db, $"Forum {Id} deleted successfully", $"Unable to delete Forum {Id}");
+		db.Forums.Remove(subForum);
+		SetMessage(await db.TrySaveChanges(), $"Forum {Id} deleted successfully", $"Unable to delete Forum {Id}");
 
 		return RedirectToPage("/Forum/Index");
 	}
@@ -103,13 +89,22 @@ public class EditModel : BasePageModel
 	private async Task Initialize()
 	{
 		CanDelete = await CanBeDeleted();
-		AvailableCategories = await _db.ForumCategories
-			.ToDropdown()
-			.ToListAsync();
+		AvailableCategories = await db.ForumCategories.ToDropdownList();
 	}
 
-	private async Task<bool> CanBeDeleted()
+	private async Task<bool> CanBeDeleted() => !await db.ForumTopics.AnyAsync(t => t.ForumId == Id);
+
+	public class ForumEdit
 	{
-		return !await _db.ForumTopics.AnyAsync(t => t.ForumId == Id);
+		[StringLength(50)]
+		public string Name { get; init; } = "";
+
+		[StringLength(10)]
+		public string ShortName { get; init; } = "";
+
+		[StringLength(1000)]
+		public string? Description { get; init; }
+		public int Category { get; init; }
+		public bool RestrictedAccess { get; init; }
 	}
 }

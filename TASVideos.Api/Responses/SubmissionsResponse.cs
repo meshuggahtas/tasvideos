@@ -1,40 +1,45 @@
-﻿using TASVideos.Core;
+﻿namespace TASVideos.Api.Responses;
 
-#pragma warning disable 1591
-
-namespace TASVideos.Api.Responses;
-
-public class SubmissionsResponse
+internal class SubmissionsResponse
 {
 	[Sortable]
 	public int Id { get; init; }
 
 	[Sortable]
+	public int? PublicationId { get; init; }
+
+	[Sortable]
 	public string Title { get; init; } = "";
 
 	[Sortable]
-	public string IntendedClass { get; init; } = "";
+	public string? IntendedClass { get; init; }
 
 	[Sortable]
-	public string Judge { get; init; } = "";
+	public string? Judge { get; init; }
 
 	[Sortable]
-	public string Publisher { get; init; } = "";
+	public string? Publisher { get; init; }
 
 	[Sortable]
 	public string Status { get; init; } = "";
 
 	[Sortable]
-	public string MovieExtension { get; init; } = "";
+	public string? MovieExtension { get; init; }
 
 	[Sortable]
 	public int? GameId { get; init; }
 
 	[Sortable]
-	public int? RomId { get; init; }
+	public string? GameName { get; init; }
 
 	[Sortable]
-	public string SystemCode { get; init; } = "";
+	public int? GameVersionId { get; init; }
+
+	[Sortable]
+	public string? GameVersion { get; init; }
+
+	[Sortable]
+	public string? SystemCode { get; init; }
 
 	[Sortable]
 	public double? SystemFrameRate { get; init; }
@@ -46,25 +51,32 @@ public class SubmissionsResponse
 	public int RerecordCount { get; init; }
 
 	[Sortable]
-	public string EncodeEmbedLink { get; init; } = "";
+	public string? EncodeEmbedLink { get; init; }
 
 	[Sortable]
-	public string GameVersion { get; init; } = "";
+	public string? Branch { get; init; }
+	public string? Goal { get; init; }
 
 	[Sortable]
-	public string GameName { get; init; } = "";
+	public string? RomName { get; init; }
 
 	[Sortable]
-	public string Branch { get; init; } = "";
-
-	[Sortable]
-	public string RomName { get; init; } = "";
-
-	[Sortable]
-	public string EmulatorVersion { get; init; } = "";
+	public string? EmulatorVersion { get; init; }
 
 	[Sortable]
 	public int? MovieStartType { get; init; }
 
-	public IEnumerable<string> Authors { get; init; } = new List<string>();
+	[Sortable]
+	public string? AdditionalAuthors { get; init; }
+
+	public IEnumerable<string> Authors { get; init; } = [];
+
+	[Sortable]
+	public DateTime CreateTimestamp { get; init; }
+
+	[Sortable]
+	public DateTime? SyncedOn { get; init; }
+
+	[Sortable]
+	public string? SyncedByUser { get; init; }
 }

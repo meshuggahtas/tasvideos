@@ -1,29 +1,26 @@
 ﻿@page "{id}"
 @model MoveModel
 @{
-	ViewData["Title"] = $"Moving Topic: {Model.Topic.TopicTitle}";
+	ViewData.SetTitle($"Moving Topic: {Model.Topic.Topic}");
 }
-<partial Name="_ForumHeader" />
-<h4>
-	Moving Topic:
-	<a asp-page="/Forum/Subforum/Index" asp-route-id="@Model.Topic.ForumId">@Model.Topic.ForumName</a> →
-	<a asp-page="/Forum/Topics/Index" asp-route-id="@Model.Id">@Model.Topic.TopicTitle</a>
-</h4>
-<hr />
-<form method="post">
-	<input type="hidden" asp-for="Topic.TopicTitle" />
-	<input type="hidden" asp-for="Topic.ForumName" />
-	<form-group class="col-lg-6">
-		<label asp-for="Topic.ForumId" class="form-control-label"></label>
-		<select asp-for="Topic.ForumId" asp-items="Model.AvailableForums.OrderBy(f => f.Text)" class="form-control"></select>
-		<span asp-validation-for="Topic.ForumId" class="text-danger"></span>
-	</form-group>
-	<div class="text-center">
-		<button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Move</button>
-		<a asp-page="Index" asp-route-id="@Model.Id" class="btn btn-secondary"><i class="fa fa-times"></i> Cancel</a>
-	</div>
-</form>
 
-@section Scripts {
-	<partial name="_ValidationScriptsPartial" />
+@section PageTitle {
+	Moving Topic:
+	<a asp-page="/Forum/Subforum/Index" asp-route-id="@Model.Topic.NewForum">@Model.Topic.CurrentForum</a> →
+	<a asp-page="/Forum/Topics/Index" asp-route-id="@Model.Id">@Model.Topic.Topic</a>
 }
+
+<partial Name="_ForumHeader" />
+<form client-side-validation="true" method="post">
+	<input type="hidden" asp-for="Topic.Topic" />
+	<input type="hidden" asp-for="Topic.CurrentForum" />
+	<fieldset class="col-lg-6">
+		<label asp-for="Topic.NewForum"></label>
+		<select asp-for="Topic.NewForum" asp-items="Model.AvailableForums.OrderBy(f => f.Text)"></select>
+		<span asp-validation-for="Topic.NewForum"></span>
+	</fieldset>
+	<form-button-bar>
+		<submit-button><i class="fa fa-save"></i> Move</submit-button>
+		<cancel-link asp-page="Index" asp-route-id="@Model.Id"></cancel-link>
+	</form-button-bar>
+</form>
